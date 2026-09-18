@@ -78,6 +78,7 @@ export const TASKFOLD_DIAGNOSTIC_KINDS = [
   "repeated_failures",
   "missing_proof",
   "orphaned_session",
+  "archived_but_active",
 ] as const;
 export const TASKFOLD_DIAGNOSTIC_SEVERITIES = ["warning", "error", "critical"] as const;
 export const TASKFOLD_NOTIFICATION_KINDS = ["completed", "failed", "stale"] as const;

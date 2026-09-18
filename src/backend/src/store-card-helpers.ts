@@ -15,7 +15,7 @@ import {
   type TaskfoldStatus,
 } from "../../contract/index.js";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
-import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import { truncateUtf16Safe } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
   BLOCKED_TOO_LONG_MS,
   TASKFOLD_PROMPT_VERSION,
@@ -425,7 +425,23 @@ export function taskfoldLastActivityAt(card: TaskfoldCard): number {
 
 export function computeCardDiagnostics(card: TaskfoldCard, now: number): TaskfoldDiagnostic[] {
   if (card.metadata?.archivedAt) {
-    return [];
+    // Archived cards intentionally skip automation. Keep nonterminal cards
+    // visible as a transient diagnostic without rewriting archived metadata.
+    if (card.status === "done") {
+      return [];
+    }
+    return [
+      diagnostic(
+        {
+          kind: "archived_but_active",
+          severity: "warning",
+          title: "Archived card is still in an active status",
+          detail: `Card status is "${card.status}" but it is archived, so it is excluded from dispatch without any start failure or error. Unarchive it or move it to "done" to stop the silent skip.`,
+          actions: [],
+        },
+        now,
+      ),
+    ];
   }
   const diagnostics: TaskfoldDiagnostic[] = [];
   const claim = card.metadata?.claim;

@@ -173,4 +173,39 @@ describe("Taskfold card revision", () => {
       db.close();
     }
   });
+
+  it("reports archived_but_active for an archived card stuck in a nonterminal status", async () => {
+    const { open } = openSharedDatabase();
+    const store = open();
+
+    const card = await store.create({ title: "Archived while running", status: "running" });
+    await store.archive(card.id, true);
+
+    const result = await store.diagnostics(Date.now());
+    expect(result).toMatchObject({
+      diagnostics: [
+        {
+          card: { id: card.id },
+          diagnostics: [
+            {
+              kind: "archived_but_active",
+              severity: "warning",
+              actions: [],
+            },
+          ],
+        },
+      ],
+      count: 1,
+    });
+  });
+
+  it("stays silent once an archived card reaches the done status", async () => {
+    const { open } = openSharedDatabase();
+    const store = open();
+
+    const card = await store.create({ title: "Archived and done", status: "done" });
+    await store.archive(card.id, true);
+
+    await expect(store.diagnostics(Date.now())).resolves.toEqual({ diagnostics: [], count: 0 });
+  });
 });
