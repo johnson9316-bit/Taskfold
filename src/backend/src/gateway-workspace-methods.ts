@@ -5,9 +5,12 @@ import {
   readId,
   readPatch,
   resolveGatewayTaskfoldWorkspaceAccess,
+  respondConflict,
   respondError,
+  withoutTaskfoldCasParams,
   type GatewayMethodContext,
 } from "./gateway-helpers.js";
+import { TaskfoldRevisionConflictError } from "./store-core.js";
 import type { TaskfoldStore } from "./store.js";
 import {
   assertTaskfoldWorkspaceMutationAccess,
@@ -20,6 +23,19 @@ import {
 } from "./workspace-access.js";
 
 const WRITE_SCOPE = "operator.write" as const;
+
+// CAS guard for taskfold.cards.update: unset means keep the existing
+// last-writer-wins behavior; set means store.update() rejects a stale write.
+function readOptionalExpectedRevision(requestParams: Record<string, unknown>): number | undefined {
+  const value = requestParams.expectedRevision;
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("expectedRevision must be a non-negative safe integer.");
+  }
+  return value;
+}
 
 async function resolveGatewayWorkspaceMutationAccess(
   request: GatewayMethodContext,
@@ -96,18 +112,30 @@ export function registerTaskfoldWorkspaceCardMethods(params: WorkspaceGatewayMet
     async (request) => {
       const { params: requestParams, respond } = request;
       try {
-        const patch = withoutTaskfoldWorkspaceAccess(readPatch(requestParams));
+        const id = readId(requestParams);
+        const expectedRevision = readOptionalExpectedRevision(requestParams);
+        const patch = withoutTaskfoldCasParams(withoutTaskfoldWorkspaceAccess(readPatch(requestParams)));
         const access = await resolveGatewayWorkspaceMutationAccess(request, patch);
-        respond(true, {
-          card: redactCard(
-            await store.update(
-              readId(requestParams),
-              containsTaskfoldWorkspaceMutation(patch)
-                ? withTaskfoldWorkspaceAccess(patch, access)
-                : patch,
-            ),
-          ),
-        });
+        let updated;
+        try {
+          updated = await store.update(
+            id,
+            containsTaskfoldWorkspaceMutation(patch)
+              ? withTaskfoldWorkspaceAccess(patch, access)
+              : patch,
+            expectedRevision !== undefined ? { expectedRevision } : {},
+          );
+        } catch (error) {
+          if (error instanceof TaskfoldRevisionConflictError) {
+            const current = await store.get(id);
+            if (current) {
+              respondConflict(respond, redactCard(current));
+              return;
+            }
+          }
+          throw error;
+        }
+        respond(true, { card: redactCard(updated) });
       } catch (error) {
         respondError(respond, error);
       }
