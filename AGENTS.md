@@ -9,6 +9,7 @@
 | 项 | 值 |
 | --- | --- |
 | OpenClaw CLI / Gateway 版本 | `2026.9.4` (`3a9d69d`)，均已核实一致 |
+| **Node 版本（易踩）** | 开发必须 `>=24.16.0`——`openclaw@2026.9.4` 的 `preinstall` 硬性要求（它自己的 `engines` 是 `>=24.16.0 <25 \|\| >=26.1.0`）。**本机默认 node 是 `v22.22.3`，直接跑 `npm install` 会当场失败。** 已加 `.nvmrc`（`24.21.0`，不进发布包）与 `engines.node`，先 `nvm use` 或 `export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"` 再跑任何 npm 命令 |
 | Gateway 运行方式 | systemd user service，`127.0.0.1:18789`，loopback-only |
 | Taskfold 加载方式 | `~/.openclaw/openclaw.json` 的 `plugins.load.paths` 指向本地 checkout，**不是**通过 npm/ClawHub 安装 |
 | 本地 checkout 路径 | `/home/john/src/personal/Taskfold` |
@@ -33,7 +34,7 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 
 上游 `78d6c6c`（fork 点）→ `3a9d69d`（`v2026.9.4`，本机当前版本）的具体差异、新增能力、以及是否值得 Taskfold 借鉴，详见 [[需求/15-上游2026.9.4差异评估]]（中文，规划层文档）。**两版真实 TS 源码已拉取存放在 `tpm/openclaw-<短SHA>-workboard-source/`**（被 `.gitignore` 排除），openclaw 是公开 MIT 仓库（`github.com/openclaw/openclaw`），下次升级后按该文档「对比方法」一节的命令重新拉取一份新快照即可继续对照，不用整仓克隆。
 
-结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点见文档正文。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
+结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点与**当前进展**见该文档「实施进展」一节（1/2/3/5 已落地，4 经核实本来就不需要做，7/8 已出设计文档 [[需求/15.7-会话生命周期设计]]／[[需求/15.8-并发与补偿设计]]，9 进行中见 [[需求/15.9-ControlUI注入调查]]）。**两项有意挂起**：并行执行方案（[[需求/15.10-并发执行模型调查]]，四选一待定，等实际使用一段时间再决定）与第 8 项的 owner slot 子项（与前者动同一段代码）——查明上游 stock workboard 同样是串行，而并行零代码即可开启（给卡填不同 `agentId`）。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
 
 ## 四份历史数据库
 
