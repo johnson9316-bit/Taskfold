@@ -7,9 +7,8 @@ import {
 import type { Command } from "commander";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { addGatewayClientOptions, callGatewayFromCli } from "openclaw/plugin-sdk/gateway-runtime";
-import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/number-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
-import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { isRecord, parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { resolveTaskfoldCardByIdOrPrefix } from "./card-lookup.js";
 import { redactClaimToken } from "./card-redaction.js";
 import type { TaskfoldDispatchResult, TaskfoldStore } from "./store.js";

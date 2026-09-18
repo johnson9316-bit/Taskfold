@@ -187,6 +187,10 @@ async function materializeWorkspace(params: {
     const removed = await params.worktrees
       .removeIfLossless({
         path: worktree.path,
+        // Must match the ownerKind/ownerId passed to worktrees.create() above,
+        // or the host's ownership check silently refuses the removal.
+        ownerKind: "workboard",
+        ownerId: params.card.id,
       })
       .catch(() => false);
     if (!removed) {
@@ -519,6 +523,11 @@ async function runTaskfoldDispatch(
         await params.worktrees
           .removeIfLossless({
             path: materializedWorkspace.path,
+            // Must match the ownerKind/ownerId used when this worktree was
+            // created (card.id, not the dispatch claim `ownerId` above), or
+            // the host's ownership check silently refuses the removal.
+            ownerKind: "workboard",
+            ownerId: card.id,
           })
           .catch(() => undefined);
         const sourceWorkspace = card.metadata?.automation?.workspace;

@@ -24,9 +24,17 @@ for (const relativePath of activeFiles) {
     if (!/\bworkboard\b/i.test(line)) {
       continue;
     }
-    const allowedHostCompatibility =
-      relativePath === "src/backend/src/dispatcher.ts" &&
-      /^\s*ownerKind:\s*"workboard",\s*$/.test(line);
+    // The host's managed-worktree API types `ownerKind` as the literal
+    // "workboard" on both worktrees.create() and worktrees.removeIfLossless().
+    // That is the host's ownership vocabulary, shared by every plugin that owns
+    // worktrees, not a Taskfold public name, and the host's worktreeOwnerMatches()
+    // refuses any record whose kind differs -- pass something else and the
+    // worktree silently leaks. Exempt that single field assignment wherever it
+    // appears rather than listing call sites: the host widened the signature in
+    // 2026.9.4, so pinning this to one file only broke the audit the next time a
+    // caller had to supply it. Every other occurrence still fails, including tool
+    // names, gateway methods, identifiers, and prose in comments.
+    const allowedHostCompatibility = /^\s*ownerKind:\s*"workboard",?\s*$/.test(line);
     if (!allowedHostCompatibility) {
       violations.push(`${relativePath}:${index + 1}: ${line.trim()}`);
     }

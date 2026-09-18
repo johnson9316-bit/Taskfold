@@ -39,6 +39,10 @@ export async function cleanupTaskfoldRunWorktree(params: {
   }
   await params.worktrees.removeIfLossless({
     path: workspace.path,
+    // Must match the ownerKind/ownerId used when this worktree was created
+    // (card.id), or the host's ownership check silently refuses the removal.
+    ownerKind: "workboard",
+    ownerId: card.id,
   });
 }
 

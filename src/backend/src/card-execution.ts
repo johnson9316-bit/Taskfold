@@ -322,7 +322,13 @@ export async function startTaskfoldCardExecution(params: {
         worktreePath = await canonicalPathFromExistingAncestor(worktree.path);
       } catch (error) {
         const removed = await params.options.runtime.worktrees
-          .removeIfLossless({ path: worktree.path })
+          .removeIfLossless({
+            path: worktree.path,
+            // Must match the ownerKind/ownerId passed to worktrees.create()
+            // above, or the host's ownership check silently refuses removal.
+            ownerKind: "workboard",
+            ownerId: latest.id,
+          })
           .catch(() => false);
         if (!removed) {
           throw new Error(`${formatErrorMessage(error)}; managed worktree cleanup failed`, {
@@ -403,7 +409,14 @@ export async function startTaskfoldCardExecution(params: {
     } catch (error) {
       if (!runStarted && materializedWorkspace?.path) {
         await params.options.runtime.worktrees
-          .removeIfLossless({ path: materializedWorkspace.path })
+          .removeIfLossless({
+            path: materializedWorkspace.path,
+            // Must match the ownerKind/ownerId used when this worktree was
+            // created (latest.id), or the host's ownership check silently
+            // refuses the removal.
+            ownerKind: "workboard",
+            ownerId: latest.id,
+          })
           .catch(() => false);
         await params.store
           .update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace })
