@@ -273,6 +273,15 @@ export class TaskfoldGatewayClient {
       version: "control-ui",
       platform: navigator.platform,
       mode: "webchat",
+      // Taskfold ships its own independently built and versioned UI bundle;
+      // the Gateway owns no matching build identity for it. "dev" is the
+      // sentinel the host's own ui:dev server uses to opt out of the
+      // same-origin build-freshness check it otherwise applies to clients
+      // claiming the control-ui identity (see openclaw's
+      // control-ui-build-admission.ts). Without it, every connection is
+      // rejected with "protocol mismatch: Control UI updated" because this
+      // bundle never carries a Gateway-issued build id to compare.
+      buildId: "dev",
     };
     try {
       const signature = await signAsync(

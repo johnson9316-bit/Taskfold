@@ -342,3 +342,91 @@ name mismatch.
 Not re-verified in this pass: the runtime and Git-distribution checks below, and
 the trusted Control UI smoke test. Both were taken up in the live-host verification
 above, which supersedes this section's claims about reconciliation.
+
+## Control UI could never connect on OpenClaw 2026.9.4 — September 18, 2026
+
+### Symptom
+
+The Taskfold Control UI tab showed "正在连接网关..." then "网关连接已关闭"
+indefinitely, on every browser tried (Chrome and Edge, including fresh profiles
+with no prior cache). Reloading never helped. Stock `workboard`'s Control UI tab,
+on the same host, connected normally throughout.
+
+### Root cause
+
+Confirmed from the running host's own source
+(`~/.nvm/versions/node/v24.21.0/lib/node_modules/openclaw/dist/message-handler-BBAGn2rf.mjs:2673`,
+function `resolveControlUiBuildMismatch`, region `src/gateway/server/ws-connection/control-ui-build-admission.ts`):
+any WebSocket `connect` whose declared `client.id` equals the reserved identity
+`openclaw-control-ui` (`GATEWAY_CLIENT_IDS.CONTROL_UI`) is checked against the
+Gateway's own current build id. A mismatch — or a missing `buildId` field
+entirely — closes the socket with `1008 protocol mismatch: Control UI updated;
+reload this page to continue`.
+
+`ui/src/gateway-client.ts` hardcodes `client.id: "openclaw-control-ui"` —
+inherited unchanged from the copied workboard bootstrap code — and never sent a
+`buildId` field. This id is currently the *only* client identity the protocol
+recognizes as eligible for paired-browser-device trust from a plugin-hosted
+iframe; there is no separate, dedicated client id reserved for third-party
+plugin UIs (see `GATEWAY_CLIENT_IDS` in `client-info-5hij-UZJ.mjs`). Any plugin
+taking the same iframe-with-its-own-WebSocket approach would need to use the
+same id today. The check therefore rejected every connection, unconditionally,
+regardless of browser or cache state — there was no newer client build for a
+reload to fetch, because `ui/dist/` had not changed since July 31.
+
+Confirmed this is a Taskfold-only bug, not a Gateway or nginx issue: the
+`nginx.conf.d/openclaw.conf` reverse proxy (mkcert TLS termination for
+`https://openclaw.local`, added 2026-09-17) has no caching and correctly
+forwards WebSocket upgrade headers. Stock `workboard`'s Control UI never hits
+this path at all — it is natively injected via `registerControlUiDescriptor` +
+manifest `controlUi.entry` and reuses the shell's single already-authenticated
+session, rather than opening a second WebSocket connection of its own.
+
+### Fix
+
+Added `buildId: "dev"` to the `client` object in `ui/src/gateway-client.ts`.
+The host's own source comment on `resolveControlUiBuildMismatch` documents this
+as the intended exemption for exactly this situation: *"configured roots serve
+an independently built artifact the Gateway owns no matching build identity
+for, 'dev' is the ui:dev sentinel... Exempted skew fails visibly at the first
+missing method instead."* This does not touch `client.id`, so it does not affect
+`isOperatorUiClient`/`isControlUi` classification or any scope/capability tied
+to it — confirmed by reading `isOperatorUiClient`/`isBrowserOperatorUiClient`
+(`message-channel-MQsF-tJM.mjs:24`) and `isBrowserRelatedPairedDevice`
+(`device-pairing-tokens-fzL3XUgw.mjs:13`), neither of which reads `buildId`.
+
+An earlier candidate fix (changing `client.id` to `"webchat-ui"`, the other
+member of `BROWSER_DEVICE_CLIENT_IDS`, to sidestep the check entirely) was
+considered and rejected: `isOperatorUiClient` only recognizes `CONTROL_UI`,
+`BROWSER_COPILOT`, and `TUI` — switching away from `CONTROL_UI` would have
+silently reclassified Taskfold's connection as a webchat client instead of an
+operator UI client.
+
+### Verification
+
+```bash
+npm run build:ui   # rebuilt ui/dist with the fix
+npm run typecheck  # clean
+npm test           # 19 files, 98 tests passed
+openclaw gateway restart
+```
+
+Confirmed in the Gateway's own log immediately after restart:
+
+```
+[ws] webchat connected conn=... remote=127.0.0.1 client=openclaw-control-ui webchat vcontrol-ui build=dev
+```
+
+— no `1008`, in place of the prior unconditional
+`closed before connect ... code=1008 reason=protocol mismatch`.
+
+### Not re-verified in this pass
+
+Whether other first-party OpenClaw apps (macOS/iOS/Android native shells, if
+any of them ever load Taskfold's Control UI route directly rather than through
+a browser) hit the same `isGatewayHostBrowserOrigin` gate — the fix only
+changes behavior when a browser origin is involved, which is Taskfold's only
+supported access path today. Longer-term, `需求/15-上游2026.9.4差异评估.md`
+item 9 (migrate to native `controlUi` injection) would remove the need to open
+a second connection under a borrowed client id at all, rather than relying on
+the `buildId: "dev"` exemption to keep it working.

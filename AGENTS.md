@@ -33,7 +33,7 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 
 上游 `78d6c6c`（fork 点）→ `3a9d69d`（`v2026.9.4`，本机当前版本）的具体差异、新增能力、以及是否值得 Taskfold 借鉴，详见 [[需求/15-上游2026.9.4差异评估]]（中文，规划层文档）。**两版真实 TS 源码已拉取存放在 `tpm/openclaw-<短SHA>-workboard-source/`**（被 `.gitignore` 排除），openclaw 是公开 MIT 仓库（`github.com/openclaw/openclaw`），下次升级后按该文档「对比方法」一节的命令重新拉取一份新快照即可继续对照，不用整仓克隆。
 
-结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口；`openclaw plugins validate`/`plugins build` 失败是因为这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），Taskfold 和 stock `workboard` 都用旧的命令式 `definePluginEntry`+`register(api)` 写法，**大概率 stock workboard 自己也过不了这两个命令**，不是 Taskfold 该修的地方；真正待评估的是会话生命周期两阶段落地（vs Taskfold 自己的本地证据判活）和乐观并发/补偿/owner slot 这两项，上游确实有、Taskfold 确实没有。
+结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点见文档正文。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
 
 ## 四份历史数据库
 
