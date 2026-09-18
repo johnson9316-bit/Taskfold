@@ -127,6 +127,21 @@ relative to `OPENCLAW_STATE_DIR`. It uses its own data, commands, tools, RPC
 methods, UI route, and database namespace. The bundled OpenClaw Workboard can
 remain enabled.
 
+### Planned: Markdown-Native Storage
+
+Taskfold sits between two tools that each cover half of this problem. OpenClaw's
+Workboard supplies the execution side — managed worktrees, subagent dispatch,
+claim and reconciliation — while keeping its state in a database. Backlog.md
+keeps tasks as plain Markdown in the repository, readable and diffable next to
+the code, but has no execution layer.
+
+The planned direction combines the two: keep the execution orchestration, and
+move card storage to Markdown files under `<repo>/.taskfold/`, format-compatible
+with Backlog.md so that both tools can operate on the same files.
+
+This describes planned work, not current behavior — cards are stored in SQLite
+today. The full design is in `需求/16-文件存储改造.md` (Chinese).
+
 ### Migrating From Flowboard
 
 Taskfold `0.2.0` is the renamed successor to the local Flowboard plugin. Before
