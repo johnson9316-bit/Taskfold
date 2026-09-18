@@ -14,6 +14,7 @@ import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
 import { taskfoldCardMatchesLifecycleLink } from "./session-link.js";
+import { invertTaskfoldCardMutation } from "./store-compensation.js";
 import {
   appendEvent,
   assertCanMutateClaimedCard,
@@ -1128,6 +1129,15 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       const existingCardIds = new Set((await this.list()).map((card) => card.id));
       const children: TaskfoldCard[] = [];
       const reusedChildSnapshots = new Map<string, TaskfoldCard>();
+      // `after` snapshots for the compensation merge below, captured immediately
+      // once per loop iteration -- right after this operation's own edit to
+      // that card, not lazily in the catch block. Capturing lazily would sweep
+      // any concurrent host edit that happened *during* an earlier iteration
+      // into what this operation "produced", and a three-way merge that
+      // mistakes a host's edit for its own can roll that host edit back
+      // instead of preserving it (需求/15.8-并发与补偿设计.md §4.4).
+      const reusedChildAfter = new Map<string, TaskfoldCard>();
+      let parentAfter: TaskfoldCard = parent;
       try {
         for (const rawChild of childrenInput) {
           if (!rawChild || typeof rawChild !== "object" || Array.isArray(rawChild)) {
@@ -1152,14 +1162,17 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           if (reusedUnlinkedChild) {
             reusedChildSnapshots.set(created.id, created);
           }
-          children.push(
-            cardParentIds(created).includes(parent.id)
-              ? created
-              : await this.linkCardsDirect(parent.id, created.id, Date.now(), {
-                  allowStatusOnlyActiveChild: true,
-                  scope: scope === null ? undefined : scope,
-                }),
-          );
+          const linked = cardParentIds(created).includes(parent.id)
+            ? created
+            : await this.linkCardsDirect(parent.id, created.id, Date.now(), {
+                allowStatusOnlyActiveChild: true,
+                scope: scope === null ? undefined : scope,
+              });
+          if (reusedUnlinkedChild) {
+            reusedChildAfter.set(created.id, linked);
+          }
+          children.push(linked);
+          parentAfter = (await this.get(parent.id)) ?? parentAfter;
         }
         const summary = normalizeBoundedString(input.summary, undefined, 2000, "decompose summary");
         const completeParent = input.completeParent !== false;
@@ -1205,10 +1218,16 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
             await this.deleteDirect(child.id);
           }
         }
-        for (const child of reusedChildSnapshots.values()) {
-          await this.store.register(child.id, { version: 1, card: child });
+        // Both compensations are a three-way merge against each card's
+        // pre-decompose snapshot and the `after` this loop captured for it
+        // (需求/15.8-并发与补偿设计.md §4.4), replacing the old unconditional
+        // store.register() so a concurrent edit made to the card during (or
+        // after) decompose survives the rollback instead of being clobbered.
+        for (const [childId, childBefore] of reusedChildSnapshots) {
+          const childAfter = reusedChildAfter.get(childId) ?? childBefore;
+          await this.compensateCardMutation(childId, childBefore, childAfter, invertTaskfoldCardMutation);
         }
-        await this.store.register(parent.id, { version: 1, card: parent });
+        await this.compensateCardMutation(parent.id, parent, parentAfter, invertTaskfoldCardMutation);
         throw error;
       }
     });

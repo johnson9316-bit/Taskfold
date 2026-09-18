@@ -190,7 +190,7 @@ __export(cli_exports, {
 import { formatErrorMessage as formatErrorMessage5 } from "openclaw/plugin-sdk/error-runtime";
 import { addGatewayClientOptions, callGatewayFromCli } from "openclaw/plugin-sdk/gateway-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
-import { isRecord, parseStrictPositiveInteger as parseStrictPositiveInteger2 } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { isRecord as isRecord2, parseStrictPositiveInteger as parseStrictPositiveInteger2 } from "openclaw/plugin-sdk/string-coerce-runtime";
 function invalidCliArgument(message) {
   const error = new Error(message);
   error.name = "InvalidArgumentError";
@@ -445,7 +445,7 @@ function registerTaskfoldCli(params) {
       if (options.json) {
         writeJson(result);
       } else {
-        const record = isRecord(result) ? result : {};
+        const record = isRecord2(result) ? result : {};
         const started = Array.isArray(record.started) ? record.started.length : 0;
         const failures = Array.isArray(record.startFailures) ? record.startFailures.length : 0;
         writeLine(`dispatch complete: started=${started} failures=${failures}`);
@@ -2969,6 +2969,8 @@ async function runTaskfoldDispatch(params) {
     let implicitWorkspaceCwd;
     let runStarted = false;
     let openedLaunch;
+    let workspaceMutationBefore;
+    let workspaceMutationAfter;
     const requestedWorkspace = card.metadata?.automation?.workspace;
     let workspaceAccess;
     let targetWorkspace;
@@ -3084,7 +3086,11 @@ async function runTaskfoldDispatch(params) {
       }
       materializedWorkspace = materialized.workspace;
       if (materializedWorkspace) {
-        await params.store.update(card.id, { workspace: materializedWorkspace, workspaceAccess });
+        workspaceMutationBefore = claimed.card;
+        workspaceMutationAfter = await params.store.update(card.id, {
+          workspace: materializedWorkspace,
+          workspaceAccess
+        });
       }
       const opened = await params.store.openExecutionLaunch(card.id, {
         requestedSessionKey: sessionKey,
@@ -3160,9 +3166,8 @@ async function runTaskfoldDispatch(params) {
           ownerKind: "workboard",
           ownerId: card.id
         }).catch(() => void 0);
-        const sourceWorkspace = card.metadata?.automation?.workspace;
-        if (sourceWorkspace) {
-          await params.store.update(card.id, { workspace: sourceWorkspace }).catch(() => void 0);
+        if (workspaceMutationBefore && workspaceMutationAfter) {
+          await params.store.compensateWorkspaceMutation(workspaceMutationBefore, workspaceMutationAfter).catch(() => void 0);
         }
       }
       const message = formatErrorMessage(error);
@@ -3404,7 +3409,8 @@ async function startTaskfoldCardExecution(params) {
     let materializedWorkspace;
     let runStarted = false;
     let openedLaunch;
-    const previousWorkspace = latest.metadata?.automation?.workspace;
+    let workspaceMutationBefore;
+    let workspaceMutationAfter;
     try {
       const claimed = await params.store.claimExecution(latest.id, {
         ownerId,
@@ -3444,7 +3450,8 @@ async function startTaskfoldCardExecution(params) {
         sourcePath: source.sourceCheckout,
         ...source.baseBranch ? { sourceBranch: source.baseBranch } : {}
       };
-      await params.store.update(latest.id, {
+      workspaceMutationBefore = claimed.card;
+      workspaceMutationAfter = await params.store.update(latest.id, {
         workspace: materializedWorkspace,
         workspaceAccess: source.workspaceAccess
       });
@@ -3516,7 +3523,9 @@ async function startTaskfoldCardExecution(params) {
           ownerKind: "workboard",
           ownerId: latest.id
         }).catch(() => false);
-        await params.store.update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace }).catch(() => void 0);
+        if (workspaceMutationBefore && workspaceMutationAfter) {
+          await params.store.compensateWorkspaceMutation(workspaceMutationBefore, workspaceMutationAfter).catch(() => void 0);
+        }
       }
       if (!runStarted && openedLaunch) {
         await params.store.failExecutionLaunch(latest.id, {
@@ -3903,6 +3912,151 @@ var TaskfoldChangeTracker = class {
   }
 };
 
+// src/backend/src/store-compensation.ts
+import { isDeepStrictEqual } from "node:util";
+import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+var ABSENT = Symbol("taskfold-compensation-absent");
+function recordValue(record, key) {
+  return Object.hasOwn(record, key) && record[key] !== void 0 ? record[key] : ABSENT;
+}
+function canonicalValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalValue);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== void 0).map(([key, entry]) => [key, canonicalValue(entry)])
+  );
+}
+function sameValue(left, right) {
+  return isDeepStrictEqual(canonicalValue(left), canonicalValue(right));
+}
+function stableId(value) {
+  return isRecord(value) && typeof value.id === "string" ? value.id : void 0;
+}
+function hasOnlyStableIds(values) {
+  return values.every((value) => stableId(value) !== void 0);
+}
+function insertRestoredValues(current, restored, reference) {
+  const result = [...current];
+  for (const value of restored.toReversed()) {
+    const referenceIndex = reference.findIndex((entry) => stableId(entry) === stableId(value));
+    const nextId = reference.slice(referenceIndex + 1).map(stableId).find((id) => id !== void 0 && result.some((entry) => stableId(entry) === id));
+    const nextIndex = nextId ? result.findIndex((entry) => stableId(entry) === nextId) : -1;
+    result.splice(nextIndex >= 0 ? nextIndex : result.length, 0, value);
+  }
+  return result;
+}
+function rollbackStableIdArray(before, after, current) {
+  const beforeById = new Map(before.map((value) => [stableId(value), value]));
+  const afterById = new Map(after.map((value) => [stableId(value), value]));
+  const currentIds = new Set(current.map((value) => stableId(value)));
+  const merged = current.flatMap((currentValue) => {
+    const id = stableId(currentValue);
+    const beforeValue = beforeById.get(id);
+    const afterValue = afterById.get(id);
+    if (beforeValue === void 0 && afterValue !== void 0) {
+      return sameValue(currentValue, afterValue) ? [] : [currentValue];
+    }
+    if (beforeValue !== void 0 && afterValue !== void 0) {
+      const value = rollbackValue(beforeValue, afterValue, currentValue);
+      return value === ABSENT ? [] : [value];
+    }
+    return [currentValue];
+  });
+  const restored = before.filter((value) => {
+    const id = stableId(value);
+    return !afterById.has(id) && !currentIds.has(id);
+  });
+  return insertRestoredValues(merged, restored, before);
+}
+function rollbackRecord(before, after, current) {
+  const beforeRecord = isRecord(before) ? before : {};
+  const afterRecord = isRecord(after) ? after : {};
+  const keys = /* @__PURE__ */ new Set([
+    ...Object.keys(beforeRecord),
+    ...Object.keys(afterRecord),
+    ...Object.keys(current)
+  ]);
+  const merged = {};
+  for (const key of keys) {
+    const value = rollbackValue(
+      recordValue(beforeRecord, key),
+      recordValue(afterRecord, key),
+      recordValue(current, key)
+    );
+    if (value !== ABSENT) {
+      merged[key] = value;
+    }
+  }
+  return before === ABSENT && Object.keys(merged).length === 0 ? ABSENT : merged;
+}
+function rollbackValue(before, after, current) {
+  if (sameValue(before, after)) {
+    return current;
+  }
+  if (sameValue(current, after)) {
+    return before;
+  }
+  if (current === ABSENT) {
+    return ABSENT;
+  }
+  if (Array.isArray(current) && (Array.isArray(before) || before === ABSENT) && (Array.isArray(after) || after === ABSENT)) {
+    const beforeArray = Array.isArray(before) ? before : [];
+    const afterArray = Array.isArray(after) ? after : [];
+    return hasOnlyStableIds([...beforeArray, ...afterArray, ...current]) ? rollbackStableIdArray(beforeArray, afterArray, current) : current;
+  }
+  if (isRecord(current) && (isRecord(before) || before === ABSENT) && (isRecord(after) || after === ABSENT)) {
+    return rollbackRecord(before, after, current);
+  }
+  return current;
+}
+function invertTaskfoldCardMutation(before, after, current) {
+  const merged = rollbackValue(before, after, current);
+  if (!isRecord(merged)) {
+    throw new Error("taskfold card compensation produced an invalid card");
+  }
+  return { ...merged, id: current.id, revision: current.revision };
+}
+function sameTaskfoldCardState(left, right) {
+  const { updatedAt: _leftUpdatedAt, revision: _leftRevision, ...leftState } = left;
+  const { updatedAt: _rightUpdatedAt, revision: _rightRevision, ...rightState } = right;
+  return sameValue(leftState, rightState);
+}
+function invertTaskfoldWorkspaceMutation(before, after, current) {
+  const merged = invertTaskfoldCardMutation(before, after, current);
+  const afterAutomation = after.metadata?.automation;
+  const currentAutomation = current.metadata?.automation;
+  if (sameValue(currentAutomation?.workspace, afterAutomation?.workspace)) {
+    return merged;
+  }
+  const automation = { ...merged.metadata?.automation };
+  if (currentAutomation?.workspace) {
+    automation.workspace = currentAutomation.workspace;
+  } else {
+    delete automation.workspace;
+  }
+  if (currentAutomation?.workspaceAccess) {
+    automation.workspaceAccess = currentAutomation.workspaceAccess;
+  } else {
+    delete automation.workspaceAccess;
+  }
+  const metadata = { ...merged.metadata };
+  if (Object.keys(automation).length > 0) {
+    metadata.automation = automation;
+  } else {
+    delete metadata.automation;
+  }
+  if (Object.keys(metadata).length > 0) {
+    return { ...merged, metadata };
+  }
+  const withoutMetadata = { ...merged };
+  delete withoutMetadata.metadata;
+  return withoutMetadata;
+}
+
 // src/backend/src/store-core.ts
 var TaskfoldRevisionConflictError = class extends Error {
   constructor(cardId, expectedRevision) {
@@ -4195,8 +4349,11 @@ var TaskfoldCoreStore = class {
         card = await this.setCardRequirementDirect(card.id, requirementId, Date.now(), scope);
         return card;
       } catch (error) {
-        await this.store.delete(card.id);
-        await this.removeReferencesToCard(card.id);
+        const current = await this.get(card.id);
+        if (current && sameTaskfoldCardState(current, card)) {
+          await this.store.delete(card.id);
+          await this.removeReferencesToCard(card.id);
+        }
         throw error;
       }
     });
@@ -4330,8 +4487,11 @@ var TaskfoldCoreStore = class {
         });
       }
     } catch (error) {
-      await this.store.delete(card.id);
-      await this.removeReferencesToCard(card.id);
+      const current = await this.get(card.id);
+      if (current && sameTaskfoldCardState(current, card)) {
+        await this.store.delete(card.id);
+        await this.removeReferencesToCard(card.id);
+      }
       throw error;
     }
     return card;
@@ -4503,6 +4663,11 @@ var TaskfoldCoreStore = class {
    * check and the write atomically when it can; backends without that capability
    * fall back to the plain write already guarded by the read-revision check in
    * {@link updateCard} and the in-process mutation queue.
+   *
+   * `protected`, not `private`: {@link compensateCardMutation} below and
+   * store-workflow.ts's `decompose` rollback both need to persist an already-
+   * merged card verbatim (no re-normalization, no patch semantics), which
+   * `update`/`updateCard` do not offer.
    */
   async persistCard(card, expectedRevision) {
     if (expectedRevision === void 0 || !this.store.compareAndSwap) {
@@ -4531,6 +4696,60 @@ var TaskfoldCoreStore = class {
         }
       }
     }
+  }
+  /**
+   * Read-invert-persist compensation loop shared by {@link compensateWorkspaceMutation}
+   * and store-workflow.ts's `decompose` rollback (需求/15.8-并发与补偿设计.md §4.4).
+   * `before`/`after` bracket the single edit the caller wants to undo; each attempt
+   * re-reads the live card, computes `invert(before, after, current)`, and swaps it
+   * in with `current.revision` as the CAS guard, preserving whatever a concurrent
+   * writer did to the card that `before`/`after` never touched.
+   *
+   * This does not call {@link enqueueMutation}: it assumes the caller either holds a
+   * mutation-queue slot already (decompose, which runs entirely inside one) or takes
+   * its own slot around the call (see {@link compensateWorkspaceMutation}). Wrapping
+   * it here too would deadlock a caller invoking this from inside its own
+   * enqueueMutation-wrapped operation, because enqueueMutation chains onto a queue
+   * that will not advance until that outer operation returns. `protected`: store-
+   * workflow.ts's `decompose` rollback calls this directly with
+   * {@link invertTaskfoldCardMutation} for that reason -- it already runs entirely
+   * inside its own enqueueMutation call.
+   */
+  async compensateCardMutation(id, before, after, invert) {
+    for (let attempt = 1; ; attempt += 1) {
+      const current = await this.get(id);
+      if (!current) {
+        return;
+      }
+      const merged = invert(before, after, current);
+      if (sameTaskfoldCardState(current, merged)) {
+        return;
+      }
+      try {
+        await this.persistCard(merged, current.revision);
+        return;
+      } catch (error) {
+        if (!(error instanceof TaskfoldRevisionConflictError) || attempt >= CARD_CAS_MAX_ATTEMPTS) {
+          throw new Error(`card changed repeatedly during compensation: ${id}`);
+        }
+      }
+    }
+  }
+  /**
+   * Rolls back a workspace materialization that a caller (dispatcher.ts,
+   * card-execution.ts) already committed via {@link update} but must now undo
+   * because starting the run failed. Unlike the callers' old plain
+   * `store.update(id, { workspace: ... })` rollback, this preserves any edit a
+   * concurrent UI/agent write made to the card during the materialize-then-fail
+   * window instead of silently overwriting it (需求/15.8-并发与补偿设计.md §2.4).
+   *
+   * Takes its own {@link enqueueMutation} slot: both call sites invoke this from
+   * outside any store mutation of their own.
+   */
+  async compensateWorkspaceMutation(before, after) {
+    await this.enqueueMutation(
+      async () => await this.compensateCardMutation(before.id, before, after, invertTaskfoldWorkspaceMutation)
+    );
   }
   async assertActiveStatusAllowed(existing, next, now) {
     if (next.status !== "ready" && next.status !== "running" && next.status !== "review" && next.status !== "done") {
@@ -4891,12 +5110,23 @@ var TaskfoldCoreStore = class {
       targetCardId: parent.id,
       createdAt: now
     });
-    await this.updateCard(parent.id, {
+    const updatedParent = await this.updateCard(parent.id, {
       metadata: { ...parent.metadata, links: nextParentLinks }
     });
-    const nextChild = await this.updateCard(child.id, {
-      metadata: { ...child.metadata, links: nextChildLinks }
-    });
+    let nextChild;
+    try {
+      nextChild = await this.updateCard(child.id, {
+        metadata: { ...child.metadata, links: nextChildLinks }
+      });
+    } catch (error) {
+      await this.compensateCardMutation(
+        parent.id,
+        parent,
+        updatedParent,
+        invertTaskfoldCardMutation
+      ).catch(() => void 0);
+      throw error;
+    }
     return await this.promoteDependencyReady(nextChild.id);
   }
   async dependencyTargetStatus(card, now) {
@@ -7610,7 +7840,7 @@ import { stat } from "node:fs/promises";
 
 // src/backend/src/store-workflow.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
 import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
@@ -8321,10 +8551,10 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         throw new Error("project is archived and cannot start new work.");
       }
       const expectedAuthority = options.expectedAuthority;
-      if (expectedAuthority && (guarded.status !== expectedAuthority.status || cardBoardId(guarded) !== expectedAuthority.boardId || guarded.agentId !== expectedAuthority.agentId || !isDeepStrictEqual(
+      if (expectedAuthority && (guarded.status !== expectedAuthority.status || cardBoardId(guarded) !== expectedAuthority.boardId || guarded.agentId !== expectedAuthority.agentId || !isDeepStrictEqual2(
         guarded.metadata?.automation?.workspace,
         expectedAuthority.workspace
-      ) || !isDeepStrictEqual(
+      ) || !isDeepStrictEqual2(
         guarded.metadata?.automation?.workspaceAccess,
         expectedAuthority.workspaceAccess
       ))) {
@@ -8676,6 +8906,8 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       const existingCardIds = new Set((await this.list()).map((card) => card.id));
       const children = [];
       const reusedChildSnapshots = /* @__PURE__ */ new Map();
+      const reusedChildAfter = /* @__PURE__ */ new Map();
+      let parentAfter = parent;
       try {
         for (const rawChild of childrenInput) {
           if (!rawChild || typeof rawChild !== "object" || Array.isArray(rawChild)) {
@@ -8697,12 +8929,15 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           if (reusedUnlinkedChild) {
             reusedChildSnapshots.set(created.id, created);
           }
-          children.push(
-            cardParentIds(created).includes(parent.id) ? created : await this.linkCardsDirect(parent.id, created.id, Date.now(), {
-              allowStatusOnlyActiveChild: true,
-              scope: scope === null ? void 0 : scope
-            })
-          );
+          const linked = cardParentIds(created).includes(parent.id) ? created : await this.linkCardsDirect(parent.id, created.id, Date.now(), {
+            allowStatusOnlyActiveChild: true,
+            scope: scope === null ? void 0 : scope
+          });
+          if (reusedUnlinkedChild) {
+            reusedChildAfter.set(created.id, linked);
+          }
+          children.push(linked);
+          parentAfter = await this.get(parent.id) ?? parentAfter;
         }
         const summary = normalizeBoundedString(input.summary, void 0, 2e3, "decompose summary");
         const completeParent = input.completeParent !== false;
@@ -8743,10 +8978,11 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             await this.deleteDirect(child.id);
           }
         }
-        for (const child of reusedChildSnapshots.values()) {
-          await this.store.register(child.id, { version: 1, card: child });
+        for (const [childId, childBefore] of reusedChildSnapshots) {
+          const childAfter = reusedChildAfter.get(childId) ?? childBefore;
+          await this.compensateCardMutation(childId, childBefore, childAfter, invertTaskfoldCardMutation);
         }
-        await this.store.register(parent.id, { version: 1, card: parent });
+        await this.compensateCardMutation(parent.id, parent, parentAfter, invertTaskfoldCardMutation);
         throw error;
       }
     });

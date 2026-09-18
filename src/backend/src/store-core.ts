@@ -37,6 +37,11 @@ import {
 } from "./store-card-helpers.js";
 import { TaskfoldChangeTracker } from "./store-change-tracker.js";
 import {
+  invertTaskfoldCardMutation,
+  invertTaskfoldWorkspaceMutation,
+  sameTaskfoldCardState,
+} from "./store-compensation.js";
+import {
   MAX_CARD_COMMENTS,
   MAX_CARD_WORKER_LOGS,
   nextTaskfoldCardRevision,
@@ -459,8 +464,15 @@ export class TaskfoldCoreStore {
         card = await this.setCardRequirementDirect(card.id, requirementId, Date.now(), scope);
         return card;
       } catch (error) {
-        await this.store.delete(card.id);
-        await this.removeReferencesToCard(card.id);
+        // Only clean up the card this call just created if nothing else has
+        // touched it since: a concurrent edit landing in this window must
+        // survive, even though that leaves the card without its intended
+        // requirement (需求/15.8-并发与补偿设计.md §4.4, rollbackCreatedCard).
+        const current = await this.get(card.id);
+        if (current && sameTaskfoldCardState(current, card)) {
+          await this.store.delete(card.id);
+          await this.removeReferencesToCard(card.id);
+        }
         throw error;
       }
     });
@@ -622,8 +634,14 @@ export class TaskfoldCoreStore {
         });
       }
     } catch (error) {
-      await this.store.delete(card.id);
-      await this.removeReferencesToCard(card.id);
+      // Same guard as create()'s outer catch: only delete what this call itself
+      // produced. A concurrent edit to the new card during dependency linking
+      // must survive, even without the parent link this call was attempting.
+      const current = await this.get(card.id);
+      if (current && sameTaskfoldCardState(current, card)) {
+        await this.store.delete(card.id);
+        await this.removeReferencesToCard(card.id);
+      }
       throw error;
     }
     return card;
@@ -894,8 +912,13 @@ export class TaskfoldCoreStore {
    * check and the write atomically when it can; backends without that capability
    * fall back to the plain write already guarded by the read-revision check in
    * {@link updateCard} and the in-process mutation queue.
+   *
+   * `protected`, not `private`: {@link compensateCardMutation} below and
+   * store-workflow.ts's `decompose` rollback both need to persist an already-
+   * merged card verbatim (no re-normalization, no patch semantics), which
+   * `update`/`updateCard` do not offer.
    */
-  private async persistCard(card: TaskfoldCard, expectedRevision?: number): Promise<void> {
+  protected async persistCard(card: TaskfoldCard, expectedRevision?: number): Promise<void> {
     if (expectedRevision === undefined || !this.store.compareAndSwap) {
       await this.store.register(card.id, { version: 1, card });
       return;
@@ -923,6 +946,68 @@ export class TaskfoldCoreStore {
         }
       }
     }
+  }
+
+  /**
+   * Read-invert-persist compensation loop shared by {@link compensateWorkspaceMutation}
+   * and store-workflow.ts's `decompose` rollback (需求/15.8-并发与补偿设计.md §4.4).
+   * `before`/`after` bracket the single edit the caller wants to undo; each attempt
+   * re-reads the live card, computes `invert(before, after, current)`, and swaps it
+   * in with `current.revision` as the CAS guard, preserving whatever a concurrent
+   * writer did to the card that `before`/`after` never touched.
+   *
+   * This does not call {@link enqueueMutation}: it assumes the caller either holds a
+   * mutation-queue slot already (decompose, which runs entirely inside one) or takes
+   * its own slot around the call (see {@link compensateWorkspaceMutation}). Wrapping
+   * it here too would deadlock a caller invoking this from inside its own
+   * enqueueMutation-wrapped operation, because enqueueMutation chains onto a queue
+   * that will not advance until that outer operation returns. `protected`: store-
+   * workflow.ts's `decompose` rollback calls this directly with
+   * {@link invertTaskfoldCardMutation} for that reason -- it already runs entirely
+   * inside its own enqueueMutation call.
+   */
+  protected async compensateCardMutation(
+    id: string,
+    before: TaskfoldCard,
+    after: TaskfoldCard,
+    invert: (before: TaskfoldCard, after: TaskfoldCard, current: TaskfoldCard) => TaskfoldCard,
+  ): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      const current = await this.get(id);
+      if (!current) {
+        return;
+      }
+      const merged = invert(before, after, current);
+      if (sameTaskfoldCardState(current, merged)) {
+        return;
+      }
+      try {
+        await this.persistCard(merged, current.revision);
+        return;
+      } catch (error) {
+        if (!(error instanceof TaskfoldRevisionConflictError) || attempt >= CARD_CAS_MAX_ATTEMPTS) {
+          throw new Error(`card changed repeatedly during compensation: ${id}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Rolls back a workspace materialization that a caller (dispatcher.ts,
+   * card-execution.ts) already committed via {@link update} but must now undo
+   * because starting the run failed. Unlike the callers' old plain
+   * `store.update(id, { workspace: ... })` rollback, this preserves any edit a
+   * concurrent UI/agent write made to the card during the materialize-then-fail
+   * window instead of silently overwriting it (需求/15.8-并发与补偿设计.md §2.4).
+   *
+   * Takes its own {@link enqueueMutation} slot: both call sites invoke this from
+   * outside any store mutation of their own.
+   */
+  async compensateWorkspaceMutation(before: TaskfoldCard, after: TaskfoldCard): Promise<void> {
+    await this.enqueueMutation(
+      async () =>
+        await this.compensateCardMutation(before.id, before, after, invertTaskfoldWorkspaceMutation),
+    );
   }
 
   private async assertActiveStatusAllowed(
@@ -1369,12 +1454,28 @@ export class TaskfoldCoreStore {
           targetCardId: parent.id,
           createdAt: now,
         });
-    await this.updateCard(parent.id, {
+    const updatedParent = await this.updateCard(parent.id, {
       metadata: { ...parent.metadata, links: nextParentLinks },
     });
-    const nextChild = await this.updateCard(child.id, {
-      metadata: { ...child.metadata, links: nextChildLinks },
-    });
+    let nextChild: TaskfoldCard;
+    try {
+      nextChild = await this.updateCard(child.id, {
+        metadata: { ...child.metadata, links: nextChildLinks },
+      });
+    } catch (error) {
+      // The parent's half of the link already committed; undo it rather than
+      // leave a one-sided link with no reciprocal on the child (需求
+      // /15.8-并发与补偿设计.md §2.3/§4.4, 选做). No enqueueMutation here:
+      // linkCardsDirect always runs from inside a caller's own enqueueMutation
+      // call (create, decompose, or the public linkCards()).
+      await this.compensateCardMutation(
+        parent.id,
+        parent,
+        updatedParent,
+        invertTaskfoldCardMutation,
+      ).catch(() => undefined);
+      throw error;
+    }
     return await this.promoteDependencyReady(nextChild.id);
   }
 

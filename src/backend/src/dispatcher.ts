@@ -328,6 +328,12 @@ async function runTaskfoldDispatch(
     let implicitWorkspaceCwd: string | undefined;
     let runStarted = false;
     let openedLaunch: TaskfoldPreparedLaunch | undefined;
+    // Bracket the workspace-materializing update below so a failed start can
+    // undo exactly that edit via a three-way merge instead of overwriting
+    // whatever the card looks like by the time the failure is caught (需求
+    // /15.8-并发与补偿设计.md §2.4/§4.4).
+    let workspaceMutationBefore: TaskfoldCard | undefined;
+    let workspaceMutationAfter: TaskfoldCard | undefined;
     const requestedWorkspace = card.metadata?.automation?.workspace;
     let workspaceAccess: TaskfoldWorkspaceAccess;
     let targetWorkspace: string | undefined;
@@ -450,7 +456,11 @@ async function runTaskfoldDispatch(
       }
       materializedWorkspace = materialized.workspace;
       if (materializedWorkspace) {
-        await params.store.update(card.id, { workspace: materializedWorkspace, workspaceAccess });
+        workspaceMutationBefore = claimed.card;
+        workspaceMutationAfter = await params.store.update(card.id, {
+          workspace: materializedWorkspace,
+          workspaceAccess,
+        });
       }
       // Opens the launch window (需求/15.7-会话生命周期设计.md §5 边①) after the
       // claim is won but before the host is asked to admit the run, so a
@@ -552,9 +562,10 @@ async function runTaskfoldDispatch(
             ownerId: card.id,
           })
           .catch(() => undefined);
-        const sourceWorkspace = card.metadata?.automation?.workspace;
-        if (sourceWorkspace) {
-          await params.store.update(card.id, { workspace: sourceWorkspace }).catch(() => undefined);
+        if (workspaceMutationBefore && workspaceMutationAfter) {
+          await params.store
+            .compensateWorkspaceMutation(workspaceMutationBefore, workspaceMutationAfter)
+            .catch(() => undefined);
         }
       }
       const message = formatErrorMessage(error);

@@ -301,7 +301,12 @@ export async function startTaskfoldCardExecution(params: {
     let materializedWorkspace: TaskfoldWorkspace | undefined;
     let runStarted = false;
     let openedLaunch: TaskfoldPreparedLaunch | undefined;
-    const previousWorkspace = latest.metadata?.automation?.workspace;
+    // Bracket the workspace-materializing update below so a failed start can
+    // undo exactly that edit via a three-way merge instead of overwriting
+    // whatever the card looks like by the time the failure is caught (需求
+    // /15.8-并发与补偿设计.md §2.4/§4.4).
+    let workspaceMutationBefore: TaskfoldCard | undefined;
+    let workspaceMutationAfter: TaskfoldCard | undefined;
     try {
       const claimed = await params.store.claimExecution(latest.id, {
         ownerId,
@@ -343,7 +348,8 @@ export async function startTaskfoldCardExecution(params: {
         sourcePath: source.sourceCheckout,
         ...(source.baseBranch ? { sourceBranch: source.baseBranch } : {}),
       };
-      await params.store.update(latest.id, {
+      workspaceMutationBefore = claimed.card;
+      workspaceMutationAfter = await params.store.update(latest.id, {
         workspace: materializedWorkspace,
         workspaceAccess: source.workspaceAccess,
       });
@@ -431,9 +437,11 @@ export async function startTaskfoldCardExecution(params: {
             ownerId: latest.id,
           })
           .catch(() => false);
-        await params.store
-          .update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace })
-          .catch(() => undefined);
+        if (workspaceMutationBefore && workspaceMutationAfter) {
+          await params.store
+            .compensateWorkspaceMutation(workspaceMutationBefore, workspaceMutationAfter)
+            .catch(() => undefined);
+        }
       }
       if (!runStarted && openedLaunch) {
         // §5 边③: the launch was opened but subagent.run() itself rejected.
