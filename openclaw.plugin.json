@@ -1,5 +1,19 @@
 {
   "id": "taskfold",
+  "cliCommands": [
+    {
+      "name": "taskfold",
+      "description": "Manage Taskfold cards and worker dispatch",
+      "hasSubcommands": true
+    }
+  ],
+  "doctorContract": {
+    "stateMigrations": [
+      {
+        "id": "taskfold-28-kv-to-sqlite"
+      }
+    ]
+  },
   "enabledByDefault": false,
   "activation": {
     "onStartup": true,
