@@ -143,7 +143,7 @@ npm run pack:check
 For local Gateway testing:
 
 ```bash
-openclaw plugins install --link /home/john/src/personal/Taskfold
+openclaw plugins install --link /path/to/Taskfold
 openclaw plugins enable taskfold
 openclaw gateway restart
 openclaw plugins inspect taskfold --runtime

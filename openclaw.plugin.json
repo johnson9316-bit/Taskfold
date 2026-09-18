@@ -40,6 +40,7 @@
   },
   "name": "Taskfold",
   "description": "Taskfold for agent-owned issues and sessions.",
+  "categories": ["tools"],
   "catalog": { "featured": true, "order": 10 },
   "contracts": {
     "tools": [
