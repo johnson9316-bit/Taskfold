@@ -427,6 +427,22 @@ function ensureTaskfoldSchema(db) {
       ON taskfold_cards(board_id, milestone_id, position);
     CREATE INDEX IF NOT EXISTS taskfold_cards_claim_owner_idx
       ON taskfold_cards(claim_owner_id, status);
+    CREATE INDEX IF NOT EXISTS taskfold_card_events_card_idx
+      ON taskfold_card_events(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_attempts_card_idx
+      ON taskfold_card_attempts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_comments_card_idx
+      ON taskfold_card_comments(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_links_card_idx
+      ON taskfold_card_links(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_proof_card_idx
+      ON taskfold_card_proof(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_artifacts_card_idx
+      ON taskfold_card_artifacts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_notifications_card_idx
+      ON taskfold_card_notifications(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_worker_logs_card_idx
+      ON taskfold_worker_logs(card_id, ordinal);
   `);
   const migrationId = `schema-${SCHEMA_VERSION}`;
   const current = db.prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?").get(migrationId);
@@ -1336,6 +1352,19 @@ var TaskfoldSqliteCardStore = class {
     return runTransaction(this.db, () => {
       const row = this.db.prepare("SELECT revision FROM taskfold_cards WHERE id = ?").get(key);
       if (!row || (numberValue(row, "revision") ?? 0) !== expectedRevision) {
+        return false;
+      }
+      insertCard(this.db, value.card);
+      return true;
+    });
+  }
+  async registerIfAbsent(key, value) {
+    if (value.version !== 1 || value.card.id !== key) {
+      throw new Error("invalid taskfold card payload");
+    }
+    return runTransaction(this.db, () => {
+      const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
+      if (row) {
         return false;
       }
       insertCard(this.db, value.card);

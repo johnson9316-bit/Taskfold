@@ -114,7 +114,8 @@ var init_contract = __esm({
       "blocked_too_long",
       "repeated_failures",
       "missing_proof",
-      "orphaned_session"
+      "orphaned_session",
+      "archived_but_active"
     ];
     TASKFOLD_DIAGNOSTIC_SEVERITIES = ["warning", "error", "critical"];
     TASKFOLD_NOTIFICATION_KINDS = ["completed", "failed", "stale"];
@@ -188,9 +189,8 @@ __export(cli_exports, {
 });
 import { formatErrorMessage as formatErrorMessage5 } from "openclaw/plugin-sdk/error-runtime";
 import { addGatewayClientOptions, callGatewayFromCli } from "openclaw/plugin-sdk/gateway-runtime";
-import { parseStrictPositiveInteger as parseStrictPositiveInteger2 } from "openclaw/plugin-sdk/number-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
-import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { isRecord, parseStrictPositiveInteger as parseStrictPositiveInteger2 } from "openclaw/plugin-sdk/string-coerce-runtime";
 function invalidCliArgument(message) {
   const error = new Error(message);
   error.name = "InvalidArgumentError";
@@ -811,7 +811,11 @@ async function cleanupTaskfoldRunWorktree(params) {
     return;
   }
   await params.worktrees.removeIfLossless({
-    path: workspace.path
+    path: workspace.path,
+    // Must match the ownerKind/ownerId used when this worktree was created
+    // (card.id), or the host's ownership check silently refuses the removal.
+    ownerKind: "workboard",
+    ownerId: card.id
   });
 }
 async function resolveDispatchWorkspaceAccess(params) {
@@ -879,7 +883,7 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3
 init_contract();
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
-import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import { truncateUtf16Safe } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 // src/backend/src/store-constants.ts
 import {
@@ -2352,7 +2356,21 @@ function taskfoldLastActivityAt(card) {
 }
 function computeCardDiagnostics(card, now) {
   if (card.metadata?.archivedAt) {
-    return [];
+    if (card.status === "done") {
+      return [];
+    }
+    return [
+      diagnostic(
+        {
+          kind: "archived_but_active",
+          severity: "warning",
+          title: "Archived card is still in an active status",
+          detail: `Card status is "${card.status}" but it is archived, so it is excluded from dispatch without any start failure or error. Unarchive it or move it to "done" to stop the silent skip.`,
+          actions: []
+        },
+        now
+      )
+    ];
   }
   const diagnostics = [];
   const claim = card.metadata?.claim;
@@ -2777,7 +2795,11 @@ async function materializeWorkspace(params) {
     cwd = await canonicalPathFromExistingAncestor3(worktree.path);
   } catch (error) {
     const removed = await params.worktrees.removeIfLossless({
-      path: worktree.path
+      path: worktree.path,
+      // Must match the ownerKind/ownerId passed to worktrees.create() above,
+      // or the host's ownership check silently refuses the removal.
+      ownerKind: "workboard",
+      ownerId: params.card.id
     }).catch(() => false);
     if (!removed) {
       throw new Error(`${formatErrorMessage(error)}; managed worktree cleanup failed`, {
@@ -3049,7 +3071,12 @@ async function runTaskfoldDispatch(params) {
     } catch (error) {
       if (!runStarted && materializedWorkspace?.kind === "worktree" && materializedWorkspace.path && params.worktrees) {
         await params.worktrees.removeIfLossless({
-          path: materializedWorkspace.path
+          path: materializedWorkspace.path,
+          // Must match the ownerKind/ownerId used when this worktree was
+          // created (card.id, not the dispatch claim `ownerId` above), or
+          // the host's ownership check silently refuses the removal.
+          ownerKind: "workboard",
+          ownerId: card.id
         }).catch(() => void 0);
         const sourceWorkspace = card.metadata?.automation?.workspace;
         if (sourceWorkspace) {
@@ -3306,7 +3333,13 @@ async function startTaskfoldCardExecution(params) {
       try {
         worktreePath = await canonicalPathFromExistingAncestor4(worktree.path);
       } catch (error) {
-        const removed = await params.options.runtime.worktrees.removeIfLossless({ path: worktree.path }).catch(() => false);
+        const removed = await params.options.runtime.worktrees.removeIfLossless({
+          path: worktree.path,
+          // Must match the ownerKind/ownerId passed to worktrees.create()
+          // above, or the host's ownership check silently refuses removal.
+          ownerKind: "workboard",
+          ownerId: latest.id
+        }).catch(() => false);
         if (!removed) {
           throw new Error(`${formatErrorMessage2(error)}; managed worktree cleanup failed`, {
             cause: error
@@ -3383,7 +3416,14 @@ async function startTaskfoldCardExecution(params) {
       };
     } catch (error) {
       if (!runStarted && materializedWorkspace?.path) {
-        await params.options.runtime.worktrees.removeIfLossless({ path: materializedWorkspace.path }).catch(() => false);
+        await params.options.runtime.worktrees.removeIfLossless({
+          path: materializedWorkspace.path,
+          // Must match the ownerKind/ownerId used when this worktree was
+          // created (latest.id), or the host's ownership check silently
+          // refuses the removal.
+          ownerKind: "workboard",
+          ownerId: latest.id
+        }).catch(() => false);
         await params.store.update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace }).catch(() => void 0);
       }
       if (claimToken && !runStarted) {
@@ -3482,7 +3522,7 @@ async function reconcileTaskfoldCardExecution(params) {
 // src/backend/src/gateway-helpers.ts
 init_contract();
 import { formatErrorMessage as formatErrorMessage3 } from "openclaw/plugin-sdk/error-runtime";
-import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/number-runtime";
+import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
 function respondError(respond, error) {
   respond(false, void 0, {
     code: "taskfold_error",
@@ -3609,6 +3649,26 @@ function registerTaskfoldWorkspaceCardMethods(params) {
         respond(true, {
           card: redactCard(
             await store.create(withTaskfoldWorkspaceAccess(inputWithProjectWorkspace, access))
+          )
+        });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE }
+  );
+  api.registerGatewayMethod(
+    "taskfold.cards.captureSession",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const input = withoutTaskfoldWorkspaceAccess(requestParams);
+        const project = await store.getProject(input.boardId);
+        const inputWithProjectWorkspace = input.workspace === void 0 && project.board.defaultWorkspace ? { ...input, workspace: project.board.defaultWorkspace } : input;
+        const access = await resolveGatewayWorkspaceMutationAccess(request, inputWithProjectWorkspace);
+        respond(true, {
+          card: redactCard(
+            await store.captureSession(withTaskfoldWorkspaceAccess(inputWithProjectWorkspace, access))
           )
         });
       } catch (error) {
@@ -4718,6 +4778,22 @@ function ensureTaskfoldSchema(db) {
       ON taskfold_cards(board_id, milestone_id, position);
     CREATE INDEX IF NOT EXISTS taskfold_cards_claim_owner_idx
       ON taskfold_cards(claim_owner_id, status);
+    CREATE INDEX IF NOT EXISTS taskfold_card_events_card_idx
+      ON taskfold_card_events(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_attempts_card_idx
+      ON taskfold_card_attempts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_comments_card_idx
+      ON taskfold_card_comments(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_links_card_idx
+      ON taskfold_card_links(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_proof_card_idx
+      ON taskfold_card_proof(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_artifacts_card_idx
+      ON taskfold_card_artifacts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_notifications_card_idx
+      ON taskfold_card_notifications(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_worker_logs_card_idx
+      ON taskfold_worker_logs(card_id, ordinal);
   `);
   const migrationId = `schema-${SCHEMA_VERSION}`;
   const current = db.prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?").get(migrationId);
@@ -5633,6 +5709,19 @@ var TaskfoldSqliteCardStore = class {
       return true;
     });
   }
+  async registerIfAbsent(key, value) {
+    if (value.version !== 1 || value.card.id !== key) {
+      throw new Error("invalid taskfold card payload");
+    }
+    return runTransaction(this.db, () => {
+      const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
+      if (row) {
+        return false;
+      }
+      insertCard(this.db, value.card);
+      return true;
+    });
+  }
   async lookup(key) {
     const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key);
     return row ? { version: 1, card: readCard(this.db, row) } : void 0;
@@ -6120,7 +6209,7 @@ import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/pl
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
 // src/backend/src/store-core.ts
-import { randomUUID as randomUUID6 } from "node:crypto";
+import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
 
 // src/backend/src/store-automation.ts
 function normalizeTrustedWorkspaceAccess(value, fallback) {
@@ -6232,6 +6321,15 @@ var TaskfoldChangeTracker = class {
           }
           return swapped;
         }
+      } : {},
+      ...store.registerIfAbsent ? {
+        registerIfAbsent: async (key, value) => {
+          const inserted = await store.registerIfAbsent(key, value);
+          if (inserted) {
+            this.mutationRevision += 1;
+          }
+          return inserted;
+        }
       } : {}
     };
   }
@@ -6303,8 +6401,18 @@ function stampCardRevisions(store) {
     entries: async () => await store.entries(),
     ...store.compareAndSwap ? {
       compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value))
+    } : {},
+    ...store.registerIfAbsent ? {
+      registerIfAbsent: async (key, value) => await store.registerIfAbsent(key, stamp(value))
     } : {}
   };
+}
+function sessionCaptureCardId(sessionKey) {
+  const digest = createHash2("sha256").update("openclaw.taskfold.session-capture.v1\0").update(sessionKey).digest();
+  digest.writeUInt8(digest.readUInt8(6) & 15 | 128, 6);
+  digest.writeUInt8(digest.readUInt8(8) & 63 | 128, 8);
+  const hex = digest.toString("hex", 0, 16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 var TaskfoldCoreStore = class {
   mutationQueue = Promise.resolve();
@@ -6567,7 +6675,7 @@ var TaskfoldCoreStore = class {
       }
     });
   }
-  async createDirect(input, scope) {
+  async createDirect(input, scope, options = {}) {
     const now = Date.now();
     const requestedStatus = normalizeStatus(input.status, "todo");
     const kind = normalizeCardKind(input.kind);
@@ -6636,7 +6744,7 @@ var TaskfoldCoreStore = class {
       ).map((card2) => card2.position)
     ) + POSITION_STEP;
     let card = {
-      id: randomUUID6(),
+      id: options.cardId ?? randomUUID6(),
       title: normalizeTitle(input.title),
       ...kind === "requirement" ? { kind } : {},
       status,
@@ -6670,7 +6778,18 @@ var TaskfoldCoreStore = class {
       ...completedAt ? { completedAt } : {},
       ...!metadataIsEmpty(syncedMetadata) ? { metadata: syncedMetadata } : {}
     };
-    await this.store.register(card.id, { version: 1, card });
+    if (options.insertIfAbsent && this.store.registerIfAbsent) {
+      const inserted = await this.store.registerIfAbsent(card.id, { version: 1, card });
+      if (!inserted) {
+        const winner = await this.get(card.id);
+        if (!winner) {
+          throw new Error("captured session card disappeared during creation.");
+        }
+        return winner;
+      }
+    } else {
+      await this.store.register(card.id, { version: 1, card });
+    }
     try {
       if (kind === "requirement" && parentCards.length > 0) {
         throw new Error("requirement cards cannot be child cards.");
@@ -6690,6 +6809,48 @@ var TaskfoldCoreStore = class {
       throw error;
     }
     return card;
+  }
+  /**
+   * Turn an already-running session into a card, once. Idempotent by
+   * `sessionKey`: a second call for the same key returns the existing card
+   * unchanged, or restores it first if it was archived, instead of creating a
+   * duplicate.
+   */
+  async captureSession(input) {
+    return await this.retryOnRevisionConflict(async () => await this.captureSessionOnce(input));
+  }
+  async captureSessionOnce(input) {
+    return await this.enqueueMutation(async () => {
+      const sessionKey = normalizeOptionalString(input.sessionKey);
+      if (!sessionKey) {
+        throw new Error("sessionKey is required.");
+      }
+      const boardId = normalizeBoardId(input.boardId) ?? "default";
+      const matches = (await this.list()).filter((card) => cardSessionKey(card) === sessionKey).toSorted((left, right) => right.updatedAt - left.updatedAt);
+      const existing = matches.find((card) => !card.metadata?.archivedAt) ?? matches.find((card) => Boolean(card.metadata?.archivedAt));
+      if (existing) {
+        if (!existing.metadata?.archivedAt) {
+          return existing;
+        }
+        if (cardSessionKey(existing) !== sessionKey) {
+          throw new Error("captured session identity collision.");
+        }
+        return await this.updateCard(
+          existing.id,
+          { metadata: { ...existing.metadata, archivedAt: 0 } },
+          { expectedRevision: existing.revision }
+        );
+      }
+      const winner = await this.createDirect(
+        { ...input, boardId, parents: void 0 },
+        void 0,
+        { cardId: sessionCaptureCardId(sessionKey), insertIfAbsent: true }
+      );
+      if (cardSessionKey(winner) !== sessionKey) {
+        throw new Error("captured session identity collision.");
+      }
+      return winner;
+    });
   }
   async update(id, patch, options = {}) {
     return await this.enqueueMutation(
@@ -8325,7 +8486,7 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
 };
 
 // src/backend/src/project-document-discovery.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import fs3 from "node:fs/promises";
 import path4 from "node:path";
 var MAX_DISCOVERED_DOCUMENTS = 500;
@@ -8383,7 +8544,7 @@ function candidateKey(relativePath, source) {
     const normalized = relativePath.toLocaleLowerCase().replace(/\.(?:md|markdown)$/i, "").replace(/[\\/]+/g, ".").replace(/[^a-z0-9._-]/g, "-").replace(/^\.+/, "");
     return `ai.${normalized}`;
   }
-  return `file.${createHash2("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
+  return `file.${createHash3("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
 }
 function candidateTitle(relativePath) {
   return path4.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
@@ -9269,7 +9430,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
     }
     return await super.deleteBoard(boardId);
   }
-  async createDirect(input, scope) {
+  async createDirect(input, scope, options) {
     const parentId = normalizeOptionalString(input.createdByCardId) ?? (Array.isArray(input.parents) ? input.parents.find(
       (value) => typeof value === "string" && value.trim() !== ""
     ) : void 0);
@@ -9292,7 +9453,8 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
         ...milestoneId ? { milestoneId } : {},
         ...!input.workspace && board.defaultWorkspace ? { workspace: board.defaultWorkspace } : {}
       },
-      scope
+      scope,
+      options
     );
   }
 };
