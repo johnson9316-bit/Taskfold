@@ -16,6 +16,7 @@
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
-    "ui/src/main.ts"
+    "ui/src/main.ts",
+    "browser/index.ts"
   ]
 }

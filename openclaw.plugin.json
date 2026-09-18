@@ -239,5 +239,8 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "controlUi": {
+    "entry": "dist/control-ui/index.js"
   }
 }

@@ -3529,6 +3529,16 @@ function respondError(respond, error) {
     message: formatErrorMessage3(error)
   });
 }
+function respondConflict(respond, currentCard) {
+  respond(false, void 0, {
+    code: "taskfold_conflict",
+    message: "card changed since expected revision; reload it before saving.",
+    details: {
+      type: "taskfold_card_conflict",
+      card: currentCard
+    }
+  });
+}
 function readId(params) {
   const value = params.id;
   if (typeof value === "string" && value.trim()) {
@@ -3552,6 +3562,10 @@ function readPatch(params) {
     return patch;
   }
   return params;
+}
+function withoutTaskfoldCasParams(patch) {
+  const { expectedRevision: _expectedRevision, ...rest } = patch;
+  return rest;
 }
 function assertNoCursorAdvance(params) {
   if (params.advance === true) {
@@ -3623,8 +3637,1290 @@ function createTaskfoldDispatchHandler(params) {
   };
 }
 
+// src/backend/src/store-core.ts
+import { createHash, randomUUID as randomUUID4 } from "node:crypto";
+
+// src/backend/src/store-automation.ts
+function normalizeTrustedWorkspaceAccess(value, fallback) {
+  if (value === void 0) {
+    return fallback;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("workspace access must be an object.");
+  }
+  const record = value;
+  if (record.unrestricted === true) {
+    return { unrestricted: true };
+  }
+  if (record.unrestricted !== false || !Array.isArray(record.roots)) {
+    throw new Error("restricted workspace access requires roots.");
+  }
+  if (typeof record.writable !== "boolean") {
+    throw new Error("restricted workspace access requires a writable flag.");
+  }
+  const roots = Array.from(
+    new Set(
+      record.roots.map((entry) => {
+        const root = normalizeBoundedString(entry, void 0, 2e3, "workspace access root");
+        if (!root || !isAbsoluteWorkspacePath(root)) {
+          throw new Error("workspace access roots must be absolute.");
+        }
+        return root;
+      })
+    )
+  );
+  if (roots.length === 0) {
+    throw new Error("restricted workspace access requires at least one root.");
+  }
+  return { unrestricted: false, roots, writable: record.writable };
+}
+function normalizeCardAutomation(input) {
+  const workspaceAccess = normalizeTrustedWorkspaceAccess(input.workspaceAccess);
+  return normalizeAutomation(
+    {
+      tenant: input.tenant,
+      boardId: input.boardId,
+      createdByCardId: input.createdByCardId,
+      idempotencyKey: input.idempotencyKey,
+      skills: input.skills,
+      workspace: input.workspace,
+      maxRuntimeSeconds: input.maxRuntimeSeconds,
+      maxRetries: input.maxRetries,
+      scheduledAt: input.scheduledAt
+    },
+    workspaceAccess ? { workspaceAccess } : void 0
+  );
+}
+function normalizeAutomationPatch(patch, current) {
+  const workspaceAccess = Object.hasOwn(patch, "workspaceAccess") ? normalizeTrustedWorkspaceAccess(patch.workspaceAccess, current?.workspaceAccess) : current?.workspaceAccess;
+  return normalizeAutomation(patch, {
+    ...current,
+    ...workspaceAccess ? { workspaceAccess } : {}
+  });
+}
+
+// src/backend/src/store-change-tracker.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
+var CHANGE_REVISION_BLOCK = 1e4;
+var TaskfoldChangeTracker = class {
+  constructor(readDataVersion, epoch, reserveRevisions) {
+    this.readDataVersion = readDataVersion;
+    this.epoch = epoch ?? randomUUID3();
+    this.reserveRevisions = reserveRevisions ?? (() => 0);
+    this.revision = this.reserveRevisions(CHANGE_REVISION_BLOCK);
+    this.revisionCeiling = this.revision + CHANGE_REVISION_BLOCK;
+    this.externalDataVersion = readDataVersion?.();
+  }
+  epoch;
+  revision;
+  revisionCeiling;
+  latestChange;
+  mutationRevision = 0;
+  externalDataVersion;
+  listeners = /* @__PURE__ */ new Set();
+  reserveRevisions;
+  nextRevision() {
+    if (this.revision + 1 >= this.revisionCeiling) {
+      const base = Math.max(this.reserveRevisions(CHANGE_REVISION_BLOCK), this.revision);
+      this.revision = base;
+      this.revisionCeiling = base + CHANGE_REVISION_BLOCK;
+    }
+    return ++this.revision;
+  }
+  track(store) {
+    return {
+      register: async (key, value) => {
+        await store.register(key, value);
+        this.mutationRevision += 1;
+      },
+      lookup: async (key) => await store.lookup(key),
+      delete: async (key) => {
+        const deleted = await store.delete(key);
+        if (deleted) {
+          this.mutationRevision += 1;
+        }
+        return deleted;
+      },
+      entries: async () => await store.entries(),
+      ...store.compareAndSwap ? {
+        compareAndSwap: async (key, expectedRevision, value) => {
+          const swapped = await store.compareAndSwap(key, expectedRevision, value);
+          if (swapped) {
+            this.mutationRevision += 1;
+          }
+          return swapped;
+        }
+      } : {},
+      ...store.registerIfAbsent ? {
+        registerIfAbsent: async (key, value) => {
+          const inserted = await store.registerIfAbsent(key, value);
+          if (inserted) {
+            this.mutationRevision += 1;
+          }
+          return inserted;
+        }
+      } : {}
+    };
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  announceEpoch() {
+    this.emit();
+  }
+  current() {
+    return this.latestChange;
+  }
+  reconcileExternalChanges() {
+    if (!this.readDataVersion) {
+      return false;
+    }
+    const current = this.readDataVersion();
+    if (current === this.externalDataVersion) {
+      return false;
+    }
+    this.externalDataVersion = current;
+    this.emit();
+    return true;
+  }
+  async runMutation(run) {
+    const initialRevision = this.mutationRevision;
+    try {
+      return await run();
+    } finally {
+      if (this.mutationRevision !== initialRevision) {
+        this.emit();
+      }
+    }
+  }
+  emit() {
+    const change = { epoch: this.epoch, revision: this.nextRevision() };
+    this.latestChange = change;
+    for (const listener of this.listeners) {
+      try {
+        listener(change);
+      } catch {
+      }
+    }
+  }
+};
+
+// src/backend/src/store-core.ts
+var TaskfoldRevisionConflictError = class extends Error {
+  constructor(cardId, expectedRevision) {
+    super(`card ${cardId} changed since revision ${expectedRevision}.`);
+    this.cardId = cardId;
+    this.expectedRevision = expectedRevision;
+    this.name = "TaskfoldRevisionConflictError";
+  }
+};
+var CARD_CAS_MAX_ATTEMPTS = 3;
+function stampCardRevisions(store) {
+  const stamp = (value) => {
+    if (value?.version === 1 && value.card) {
+      value.card.revision = nextTaskfoldCardRevision(value.card.revision);
+    }
+    return value;
+  };
+  return {
+    register: async (key, value) => await store.register(key, stamp(value)),
+    lookup: async (key) => await store.lookup(key),
+    delete: async (key) => await store.delete(key),
+    entries: async () => await store.entries(),
+    ...store.compareAndSwap ? {
+      compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value))
+    } : {},
+    ...store.registerIfAbsent ? {
+      registerIfAbsent: async (key, value) => await store.registerIfAbsent(key, stamp(value))
+    } : {}
+  };
+}
+function sessionCaptureCardId(sessionKey) {
+  const digest = createHash("sha256").update("openclaw.taskfold.session-capture.v1\0").update(sessionKey).digest();
+  digest.writeUInt8(digest.readUInt8(6) & 15 | 128, 6);
+  digest.writeUInt8(digest.readUInt8(8) & 63 | 128, 8);
+  const hex = digest.toString("hex", 0, 16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+var TaskfoldCoreStore = class {
+  mutationQueue = Promise.resolve();
+  lastNotificationSequence = 0;
+  changes;
+  store;
+  boardStore;
+  milestoneStore;
+  documentStore;
+  subscriptionStore;
+  attachmentStore;
+  constructor(store, stores = {}) {
+    this.changes = new TaskfoldChangeTracker(
+      stores.dataVersion,
+      stores.changeEpoch,
+      stores.reserveChangeRevisions
+    );
+    this.store = this.changes.track(stampCardRevisions(store));
+    this.boardStore = this.changes.track(
+      stores.boards ?? store
+    );
+    this.milestoneStore = this.changes.track(
+      stores.milestones ?? store
+    );
+    this.documentStore = this.changes.track(
+      stores.documents ?? store
+    );
+    this.subscriptionStore = stores.subscriptions ?? store;
+    this.attachmentStore = stores.attachments ?? store;
+  }
+  announceChangeEpoch() {
+    this.changes.announceEpoch();
+  }
+  reconcileExternalChanges() {
+    return this.changes.reconcileExternalChanges();
+  }
+  currentChange() {
+    return this.changes.current();
+  }
+  async waitForChange(after, timeoutMs) {
+    const isNewer = (change) => !after || change.epoch !== after.epoch || change.revision > after.revision;
+    const current = this.changes.current();
+    if (current && isNewer(current)) {
+      return { change: current, timedOut: false };
+    }
+    return await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        resolve({ change: this.changes.current(), timedOut: true });
+      }, timeoutMs);
+      const unsubscribe = this.changes.subscribe((change) => {
+        if (!isNewer(change)) {
+          return;
+        }
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve({ change, timedOut: false });
+      });
+    });
+  }
+  async enqueueMutation(run) {
+    const runAndNotify = async () => await this.changes.runMutation(run);
+    const result = this.mutationQueue.then(runAndNotify, runAndNotify);
+    this.mutationQueue = result.then(
+      () => void 0,
+      () => void 0
+    );
+    return await result;
+  }
+  async updateMetadata(id, mutate, options = {}) {
+    return await this.enqueueMutation(async () => {
+      const existing = await this.get(id);
+      if (!existing) {
+        throw new Error(`card not found: ${id}`);
+      }
+      return await this.updateCard(id, { metadata: mutate(existing) }, options);
+    });
+  }
+  async deleteDetachedAttachments(existing, next) {
+    const nextIds = new Set(next.metadata?.attachments?.map((attachment) => attachment.id) ?? []);
+    for (const attachment of existing.metadata?.attachments ?? []) {
+      if (!nextIds.has(attachment.id)) {
+        await this.attachmentStore.delete(attachment.id);
+      }
+    }
+  }
+  nextNotificationSequence(now) {
+    const base = Math.max(0, Math.trunc(now)) * 1e3;
+    this.lastNotificationSequence = Math.max(this.lastNotificationSequence + 1, base);
+    return this.lastNotificationSequence;
+  }
+  async list(options = {}) {
+    const boardId = normalizeBoardId(options.boardId);
+    const entries = await this.store.entries();
+    return entries.map((entry) => entry.value).filter(
+      (entry) => entry?.version === 1 && Boolean(entry.card?.id)
+    ).map((entry) => entry.card).filter((card) => !boardId || cardBoardId(card) === boardId).toSorted(compareCards);
+  }
+  async listBoards() {
+    const boards = /* @__PURE__ */ new Map();
+    for (const entry of await this.boardStore.entries()) {
+      if (entry.value?.version !== 1 || !entry.value.board?.id) {
+        continue;
+      }
+      const board = entry.value.board;
+      boards.set(board.id, {
+        id: board.id,
+        ...board.name ? { name: board.name } : {},
+        ...board.description ? { description: board.description } : {},
+        ...board.icon ? { icon: board.icon } : {},
+        ...board.color ? { color: board.color } : {},
+        ...board.position !== void 0 ? { position: board.position } : {},
+        ...board.version ? { version: board.version } : {},
+        ...board.currentObjective ? { currentObjective: board.currentObjective } : {},
+        ...board.coreValue ? { coreValue: board.coreValue } : {},
+        ...board.sourceOfTruth ? { sourceOfTruth: board.sourceOfTruth } : {},
+        ...board.repositoryUrl ? { repositoryUrl: board.repositoryUrl } : {},
+        ...board.planningPath ? { planningPath: board.planningPath } : {},
+        ...board.homepageUrl ? { homepageUrl: board.homepageUrl } : {},
+        ...board.defaultWorkspace ? { defaultWorkspace: board.defaultWorkspace } : {},
+        ...board.orchestration ? { orchestration: board.orchestration } : {},
+        ...board.boardView ? { boardView: board.boardView } : {},
+        total: 0,
+        active: 0,
+        archived: 0,
+        byStatus: {},
+        updatedAt: board.updatedAt,
+        ...board.archivedAt ? { archivedAt: board.archivedAt } : {}
+      });
+    }
+    if (!boards.has("default")) {
+      boards.set("default", {
+        id: "default",
+        total: 0,
+        active: 0,
+        archived: 0,
+        byStatus: {}
+      });
+    }
+    for (const card of await this.list()) {
+      const boardId = cardBoardId(card);
+      const summary = boards.get(boardId) ?? {
+        id: boardId,
+        total: 0,
+        active: 0,
+        archived: 0,
+        byStatus: {}
+      };
+      summary.total += 1;
+      if (card.metadata?.archivedAt) {
+        summary.archived += 1;
+      } else {
+        summary.active += 1;
+      }
+      summary.byStatus[card.status] = (summary.byStatus[card.status] ?? 0) + 1;
+      summary.updatedAt = Math.max(summary.updatedAt ?? 0, card.updatedAt);
+      boards.set(boardId, summary);
+    }
+    return {
+      boards: [...boards.values()].toSorted(
+        (a, b) => a.id === "default" ? -1 : b.id === "default" ? 1 : a.id.localeCompare(b.id)
+      )
+    };
+  }
+  async isProjectArchived(boardId) {
+    const board = await this.boardStore.lookup(boardId);
+    return Boolean(board?.version === 1 && board.board.archivedAt);
+  }
+  async upsertBoard(input) {
+    return await this.enqueueMutation(async () => {
+      const id = normalizeBoardIdRequired(input.id);
+      const existing = await this.boardStore.lookup(id);
+      const board = normalizeBoardMetadata({ ...input, id }, existing?.board);
+      await this.boardStore.register(id, { version: 1, board });
+      return board;
+    });
+  }
+  async archiveBoard(id, archived = true) {
+    return await this.upsertBoard({ id, archived });
+  }
+  async deleteBoard(id) {
+    return await this.enqueueMutation(async () => {
+      const boardId = normalizeBoardIdRequired(id);
+      if (boardId === "default") {
+        throw new Error("default board cannot be deleted.");
+      }
+      if ((await this.list({ boardId })).length > 0) {
+        throw new Error("board still has cards; archive it or move/delete the cards first.");
+      }
+      for (const entry of await this.subscriptionStore.entries()) {
+        if (entry.value?.version === 1 && entry.value.subscription?.boardId === boardId) {
+          await this.subscriptionStore.delete(entry.key);
+        }
+      }
+      return { deleted: await this.boardStore.delete(boardId) };
+    });
+  }
+  async stats(input = {}, now = Date.now()) {
+    const cards = await this.list(input);
+    const boardId = normalizeBoardId(input.boardId) ?? "all";
+    const byStatus = {};
+    const byAgent = /* @__PURE__ */ Object.create(null);
+    let oldestReadyAt;
+    let updatedAt;
+    let archived = 0;
+    for (const card of cards) {
+      byStatus[card.status] = (byStatus[card.status] ?? 0) + 1;
+      byAgent[card.agentId ?? "(default)"] = (byAgent[card.agentId ?? "(default)"] ?? 0) + 1;
+      if (card.metadata?.archivedAt) {
+        archived += 1;
+      }
+      if (card.status === "ready" && !card.metadata?.archivedAt) {
+        oldestReadyAt = Math.min(oldestReadyAt ?? card.updatedAt, card.updatedAt);
+      }
+      updatedAt = Math.max(updatedAt ?? 0, card.updatedAt);
+    }
+    return {
+      id: boardId,
+      total: cards.length,
+      active: cards.length - archived,
+      archived,
+      byStatus,
+      byAgent,
+      ...oldestReadyAt ? { oldestReadyAgeMs: Math.max(0, now - oldestReadyAt) } : {},
+      ...updatedAt ? { updatedAt } : {}
+    };
+  }
+  async get(id) {
+    const entry = await this.store.lookup(id.trim());
+    return entry?.version === 1 ? entry.card : void 0;
+  }
+  async removeReferencesToCard(cardId) {
+    for (const card of await this.list()) {
+      const links = card.metadata?.links;
+      if (!links?.some((link) => link.targetCardId === cardId)) {
+        continue;
+      }
+      await this.updateCard(card.id, {
+        metadata: {
+          ...card.metadata,
+          links: links.filter((link) => link.targetCardId !== cardId)
+        }
+      });
+    }
+  }
+  async create(input, scope) {
+    return await this.enqueueMutation(async () => {
+      let card = await this.createDirect(input, scope);
+      const requirementId = normalizeOptionalString(input.requirementId);
+      if (!requirementId) {
+        return card;
+      }
+      try {
+        card = await this.setCardRequirementDirect(card.id, requirementId, Date.now(), scope);
+        return card;
+      } catch (error) {
+        await this.store.delete(card.id);
+        await this.removeReferencesToCard(card.id);
+        throw error;
+      }
+    });
+  }
+  async createDirect(input, scope, options = {}) {
+    const now = Date.now();
+    const requestedStatus = normalizeStatus(input.status, "todo");
+    const kind = normalizeCardKind(input.kind);
+    const cards = await this.list();
+    const parents = normalizeStringList(input.parents, "parents", 120);
+    const automation = normalizeCardAutomation(input);
+    const heldBySchedule = Boolean(automation?.scheduledAt && automation.scheduledAt > now) && requestedStatus !== "blocked";
+    let status = heldBySchedule ? "scheduled" : requestedStatus;
+    let heldByDependencies = false;
+    if (parents.length > 0 && (status === "running" || status === "review")) {
+      status = "todo";
+      heldByDependencies = true;
+    }
+    if (automation?.idempotencyKey) {
+      const existing = cards.find(
+        (card2) => card2.metadata?.automation?.idempotencyKey === automation.idempotencyKey && card2.metadata?.automation?.tenant === automation.tenant && cardBoardId(card2) === (automation.boardId ?? "default")
+      );
+      if (existing) {
+        return existing;
+      }
+    }
+    const cardsById = new Map(cards.map((card2) => [card2.id, card2]));
+    const parentCards = parents.map((parentId) => {
+      const parent = cardsById.get(parentId);
+      if (!parent) {
+        throw new Error(`card not found: ${parentId}`);
+      }
+      return parent;
+    });
+    const childAutomation = normalizeAutomation(
+      {
+        ...automation,
+        createdByCardId: automation?.createdByCardId ?? (parents.length === 1 ? parents[0] : void 0)
+      },
+      automation
+    );
+    const normalizedPosition = normalizePosition(input.position, Number.NaN);
+    const notes = normalizeNotes(input.notes);
+    const agentId = normalizeOptionalString(input.agentId);
+    const sessionKey = normalizeOptionalString(input.sessionKey);
+    const runId = normalizeOptionalString(input.runId);
+    const taskId = normalizeOptionalString(input.taskId);
+    const sourceUrl = normalizeOptionalString(input.sourceUrl);
+    const normalizedExecution = normalizeExecution(input.execution);
+    const delivery = normalizeDelivery(input.delivery, void 0, now);
+    const execution = normalizedExecution?.status === "running" && (heldBySchedule || heldByDependencies) ? void 0 : normalizedExecution;
+    const startedAt = input.startedAt === void 0 ? status === "running" ? now : void 0 : normalizeTimestamp(input.startedAt, 0) || void 0;
+    const completedAt = input.completedAt === void 0 ? status === "done" ? now : void 0 : normalizeTimestamp(input.completedAt, 0) || void 0;
+    const metadata = normalizeMetadata(
+      input.metadata,
+      {
+        templateId: normalizeTemplateId(input.templateId),
+        ...childAutomation ? { automation: childAutomation } : {}
+      },
+      { allowDependencyLinks: false }
+    );
+    const syncedMetadata = trimMetadataToBudget(
+      syncExecutionAttemptMetadata(metadata, execution, now)
+    );
+    const boardId = syncedMetadata.automation?.boardId ?? "default";
+    const milestoneId = normalizeOptionalString(input.milestoneId);
+    const position = Number.isFinite(normalizedPosition) ? normalizedPosition : Math.max(
+      0,
+      ...cards.filter(
+        (card2) => cardBoardId(card2) === boardId && card2.milestoneId === milestoneId
+      ).map((card2) => card2.position)
+    ) + POSITION_STEP;
+    let card = {
+      id: options.cardId ?? randomUUID4(),
+      title: normalizeTitle(input.title),
+      ...kind === "requirement" ? { kind } : {},
+      status,
+      priority: normalizePriority(input.priority, "normal"),
+      labels: normalizeLabels(input.labels),
+      ...milestoneId ? { milestoneId } : {},
+      position,
+      createdAt: now,
+      updatedAt: now,
+      // Stamped to the first real revision by the persistence boundary below.
+      revision: 0,
+      events: [
+        {
+          id: randomUUID4(),
+          kind: "created",
+          at: now,
+          toStatus: status,
+          ...sessionKey ? { sessionKey } : {},
+          ...runId ? { runId } : {}
+        }
+      ],
+      ...notes ? { notes } : {},
+      ...agentId ? { agentId } : {},
+      ...sessionKey ? { sessionKey } : {},
+      ...runId ? { runId } : {},
+      ...taskId ? { taskId } : {},
+      ...sourceUrl ? { sourceUrl } : {},
+      ...execution ? { execution } : {},
+      ...delivery ? { delivery } : {},
+      ...startedAt ? { startedAt } : {},
+      ...completedAt ? { completedAt } : {},
+      ...!metadataIsEmpty(syncedMetadata) ? { metadata: syncedMetadata } : {}
+    };
+    if (options.insertIfAbsent && this.store.registerIfAbsent) {
+      const inserted = await this.store.registerIfAbsent(card.id, { version: 1, card });
+      if (!inserted) {
+        const winner = await this.get(card.id);
+        if (!winner) {
+          throw new Error("captured session card disappeared during creation.");
+        }
+        return winner;
+      }
+    } else {
+      await this.store.register(card.id, { version: 1, card });
+    }
+    try {
+      if (kind === "requirement" && parentCards.length > 0) {
+        throw new Error("requirement cards cannot be child cards.");
+      }
+      for (const parent of parentCards) {
+        if (isRequirementCard(parent)) {
+          throw new Error("requirement cards cannot be execution dependencies.");
+        }
+        card = await this.linkCardsDirect(parent.id, card.id, now, {
+          allowStatusOnlyActiveChild: true,
+          scope
+        });
+      }
+    } catch (error) {
+      await this.store.delete(card.id);
+      await this.removeReferencesToCard(card.id);
+      throw error;
+    }
+    return card;
+  }
+  /**
+   * Turn an already-running session into a card, once. Idempotent by
+   * `sessionKey`: a second call for the same key returns the existing card
+   * unchanged, or restores it first if it was archived, instead of creating a
+   * duplicate.
+   */
+  async captureSession(input) {
+    return await this.retryOnRevisionConflict(async () => await this.captureSessionOnce(input));
+  }
+  async captureSessionOnce(input) {
+    return await this.enqueueMutation(async () => {
+      const sessionKey = normalizeOptionalString(input.sessionKey);
+      if (!sessionKey) {
+        throw new Error("sessionKey is required.");
+      }
+      const boardId = normalizeBoardId(input.boardId) ?? "default";
+      const matches = (await this.list()).filter((card) => cardSessionKey(card) === sessionKey).toSorted((left, right) => right.updatedAt - left.updatedAt);
+      const existing = matches.find((card) => !card.metadata?.archivedAt) ?? matches.find((card) => Boolean(card.metadata?.archivedAt));
+      if (existing) {
+        if (!existing.metadata?.archivedAt) {
+          return existing;
+        }
+        if (cardSessionKey(existing) !== sessionKey) {
+          throw new Error("captured session identity collision.");
+        }
+        return await this.updateCard(
+          existing.id,
+          { metadata: { ...existing.metadata, archivedAt: 0 } },
+          { expectedRevision: existing.revision }
+        );
+      }
+      const winner = await this.createDirect(
+        { ...input, boardId, parents: void 0 },
+        void 0,
+        { cardId: sessionCaptureCardId(sessionKey), insertIfAbsent: true }
+      );
+      if (cardSessionKey(winner) !== sessionKey) {
+        throw new Error("captured session identity collision.");
+      }
+      return winner;
+    });
+  }
+  async update(id, patch, options = {}) {
+    return await this.enqueueMutation(
+      async () => await this.updateCard(id, patch, {
+        allowMetadataDependencyLinks: false,
+        enforceStatusHolds: true,
+        ...options.expectedRevision !== void 0 ? { expectedRevision: options.expectedRevision } : {}
+      })
+    );
+  }
+  async updateCard(id, patch, options = {}) {
+    const existing = await this.get(id);
+    if (!existing) {
+      throw new Error(`card not found: ${id}`);
+    }
+    if (options.expectedRevision !== void 0 && existing.revision !== options.expectedRevision) {
+      throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
+    }
+    const lifecycleStatusSourceUpdatedAt = lifecycleStatusSourceUpdatedAtFromPatch(patch.metadata);
+    const existingLifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
+    const hasFreshLifecycleStatusSource = lifecycleStatusSourceUpdatedAt !== void 0 && lifecycleStatusSourceUpdatedAt !== existingLifecycleStatusSourceUpdatedAt;
+    let effectivePatch = patch;
+    if (patch.status !== void 0 && lifecycleStatusSourceUpdatedAt !== void 0 && shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt)) {
+      effectivePatch = { ...patch, status: void 0 };
+      if (patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)) {
+        const metadataPatch = patch.metadata;
+        const { lifecycleStatusSourceUpdatedAt: _ignored, ...rest } = metadataPatch;
+        effectivePatch.metadata = Object.keys(rest).length > 0 ? rest : void 0;
+      }
+      const hasSemanticPatch = Object.entries(effectivePatch).some(
+        ([key, value]) => key !== "status" && key !== "metadata" && value !== void 0
+      );
+      if (!hasSemanticPatch && effectivePatch.metadata === void 0) {
+        return existing;
+      }
+    }
+    const status = normalizeStatus(effectivePatch.status, existing.status);
+    const now = Date.now();
+    const startedAt = effectivePatch.startedAt === void 0 ? status === "running" ? existing.startedAt ?? now : existing.startedAt : normalizeTimestamp(effectivePatch.startedAt, 0) || void 0;
+    const completedAt = effectivePatch.completedAt === void 0 ? status === "done" ? existing.completedAt ?? now : void 0 : normalizeTimestamp(effectivePatch.completedAt, 0) || void 0;
+    const sessionKey = effectivePatch.sessionKey === void 0 ? existing.sessionKey : normalizeOptionalString(effectivePatch.sessionKey);
+    const execution = effectivePatch.execution === void 0 ? effectivePatch.sessionKey === void 0 ? existing.execution : syncExecutionSessionKey(existing.execution, sessionKey) : normalizeExecution(effectivePatch.execution);
+    let metadata = normalizeMetadata(effectivePatch.metadata, existing.metadata, {
+      allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
+      preserveProofId: options.preserveProofId
+    });
+    if (status !== existing.status && !hasFreshLifecycleStatusSource) {
+      metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: void 0 };
+    }
+    const effectivePatchRecord = effectivePatch;
+    const automationPatch = {};
+    for (const key of [
+      "tenant",
+      "boardId",
+      "createdByCardId",
+      "idempotencyKey",
+      "skills",
+      "workspace",
+      "workspaceAccess",
+      "maxRuntimeSeconds",
+      "maxRetries",
+      "scheduledAt"
+    ]) {
+      if (Object.hasOwn(effectivePatchRecord, key) && effectivePatchRecord[key] !== void 0) {
+        automationPatch[key] = effectivePatchRecord[key];
+      }
+    }
+    if (Object.keys(automationPatch).length > 0) {
+      metadata = trimMetadataToBudget(
+        {
+          ...metadata,
+          automation: normalizeAutomationPatch(automationPatch, metadata.automation)
+        },
+        options
+      );
+    }
+    const next = removeUndefinedCardFields({
+      ...existing,
+      title: effectivePatch.title === void 0 ? existing.title : normalizeTitle(effectivePatch.title),
+      notes: effectivePatch.notes === void 0 ? existing.notes : normalizeNotes(effectivePatch.notes),
+      status,
+      priority: effectivePatch.priority === void 0 ? existing.priority : normalizePriority(effectivePatch.priority, existing.priority),
+      labels: effectivePatch.labels === void 0 ? existing.labels : normalizeLabels(effectivePatch.labels),
+      agentId: effectivePatch.agentId === void 0 ? existing.agentId : normalizeOptionalString(effectivePatch.agentId),
+      sessionKey,
+      runId: effectivePatch.runId === void 0 ? existing.runId : normalizeOptionalString(effectivePatch.runId),
+      taskId: effectivePatch.taskId === void 0 ? existing.taskId : normalizeOptionalString(effectivePatch.taskId),
+      sourceUrl: effectivePatch.sourceUrl === void 0 ? existing.sourceUrl : normalizeOptionalString(effectivePatch.sourceUrl),
+      execution,
+      delivery: effectivePatch.delivery === void 0 ? existing.delivery : normalizeDelivery(effectivePatch.delivery, existing.delivery, now),
+      metadata: effectivePatch.templateId === void 0 ? metadata : { ...metadata, templateId: normalizeTemplateId(effectivePatch.templateId) },
+      position: effectivePatchRecord.position === void 0 ? existing.position : normalizePosition(effectivePatchRecord.position, existing.position),
+      updatedAt: now,
+      ...startedAt ? { startedAt } : {},
+      ...completedAt ? { completedAt } : {}
+    });
+    next.metadata = trimMetadataToBudget(
+      syncExecutionAttemptMetadata(next.metadata ?? {}, execution, now),
+      options
+    );
+    next.events = appendEvent(next, updateEvent(existing, next), now);
+    if (options.enforceStatusHolds && effectivePatch.status !== void 0) {
+      await this.assertActiveStatusAllowed(existing, next, now);
+    }
+    if (status !== "done") {
+      delete next.completedAt;
+    }
+    if (effectivePatch.startedAt !== void 0 && !startedAt) {
+      delete next.startedAt;
+    }
+    if (effectivePatch.completedAt !== void 0 && !completedAt) {
+      delete next.completedAt;
+    }
+    if (metadataIsEmpty(next.metadata)) {
+      delete next.metadata;
+    }
+    await this.persistCard(next, options.expectedRevision);
+    await this.deleteDetachedAttachments(existing, next);
+    return next;
+  }
+  /**
+   * Single card write boundary. With `expectedRevision` the backend performs the
+   * check and the write atomically when it can; backends without that capability
+   * fall back to the plain write already guarded by the read-revision check in
+   * {@link updateCard} and the in-process mutation queue.
+   */
+  async persistCard(card, expectedRevision) {
+    if (expectedRevision === void 0 || !this.store.compareAndSwap) {
+      await this.store.register(card.id, { version: 1, card });
+      return;
+    }
+    const swapped = await this.store.compareAndSwap(card.id, expectedRevision, {
+      version: 1,
+      card
+    });
+    if (!swapped) {
+      throw new TaskfoldRevisionConflictError(card.id, expectedRevision);
+    }
+  }
+  /**
+   * Retries `run` when it loses a compare-and-swap race. Callers must re-read the
+   * card inside `run` so each attempt swaps against the revision it actually saw.
+   */
+  async retryOnRevisionConflict(run) {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await run();
+      } catch (error) {
+        if (!(error instanceof TaskfoldRevisionConflictError) || attempt >= CARD_CAS_MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
+  }
+  async assertActiveStatusAllowed(existing, next, now) {
+    if (next.status !== "ready" && next.status !== "running" && next.status !== "review" && next.status !== "done") {
+      return;
+    }
+    const parents = cardParentIds(next);
+    const cards = parents.length > 0 ? new Map((await this.list()).map((card) => [card.id, card])) : void 0;
+    if (parents.length > 0 && !parents.every((parentId) => cards?.get(parentId)?.status === "done")) {
+      throw new Error("card dependencies are not done.");
+    }
+    if (next.status === "done") {
+      return;
+    }
+    const scheduledAt = next.metadata?.automation?.scheduledAt;
+    if (scheduledAt && scheduledAt > now || existing.status === "scheduled" && !scheduledAt) {
+      throw new Error("card is scheduled for later.");
+    }
+  }
+  async delete(id) {
+    return await this.enqueueMutation(async () => await this.deleteDirect(id));
+  }
+  async deleteDirect(id) {
+    const cardId = id.trim();
+    const deleted = await this.store.delete(cardId);
+    if (!deleted) {
+      return { deleted: false };
+    }
+    for (const entry of await this.subscriptionStore.entries()) {
+      if (entry.value?.version === 1 && entry.value.subscription?.cardId === cardId) {
+        await this.subscriptionStore.delete(entry.key);
+      }
+    }
+    for (const entry of await this.attachmentStore.entries()) {
+      if (entry.value?.version === 1 && entry.value.attachment?.cardId === cardId) {
+        await this.attachmentStore.delete(entry.key);
+      }
+    }
+    await this.removeReferencesToCard(cardId);
+    return { deleted: true };
+  }
+  async addComment(id, input, scope) {
+    const now = Date.now();
+    const body = normalizeBoundedString(input.body, void 0, 2e3, "comment body");
+    if (!body) {
+      throw new Error("comment body is required.");
+    }
+    const comment = { id: randomUUID4(), body, createdAt: now };
+    return await this.updateMetadata(id, (existing) => {
+      assertCanMutateClaimedCard(existing, scope);
+      return {
+        ...existing.metadata,
+        comments: [...existing.metadata?.comments ?? [], comment].slice(-MAX_CARD_COMMENTS)
+      };
+    });
+  }
+  async addSourceReference(id, input) {
+    const now = Date.now();
+    const label = normalizeTitle(input.label);
+    const target = normalizeBoundedString(input.target, void 0, 2e3, "source reference target");
+    const note = normalizeBoundedString(input.note, void 0, 2e3, "source reference note");
+    if (!target || target.includes("\0") || target.includes("\n")) {
+      throw new Error("source reference target is required and must be a single line.");
+    }
+    return await this.mutateSourceReferences(id, (references) => [
+      ...references,
+      {
+        id: randomUUID4(),
+        label,
+        target,
+        position: Math.max(0, ...references.map((reference) => reference.position)) + POSITION_STEP,
+        createdAt: now,
+        updatedAt: now,
+        ...note ? { note } : {}
+      }
+    ]);
+  }
+  async updateSourceReference(id, input) {
+    const sourceReferenceId = normalizeBoundedString(
+      input.sourceReferenceId,
+      void 0,
+      120,
+      "source reference id"
+    );
+    if (!sourceReferenceId) {
+      throw new Error("sourceReferenceId is required.");
+    }
+    return await this.mutateSourceReferences(id, (references) => {
+      const existing = references.find((reference) => reference.id === sourceReferenceId);
+      if (!existing) {
+        throw new Error(`source reference not found: ${sourceReferenceId}`);
+      }
+      const label = input.label === void 0 ? existing.label : normalizeTitle(input.label);
+      const target = input.target === void 0 ? existing.target : normalizeBoundedString(input.target, void 0, 2e3, "source reference target");
+      const note = input.note === void 0 ? existing.note : normalizeBoundedString(input.note, void 0, 2e3, "source reference note");
+      if (!target || target.includes("\0") || target.includes("\n")) {
+        throw new Error("source reference target is required and must be a single line.");
+      }
+      return references.map((reference) => {
+        if (reference.id !== sourceReferenceId) {
+          return reference;
+        }
+        const next = {
+          ...reference,
+          label,
+          target,
+          updatedAt: Date.now(),
+          ...note ? { note } : {}
+        };
+        if (!note) {
+          delete next.note;
+        }
+        return next;
+      });
+    });
+  }
+  async deleteSourceReference(id, input) {
+    const sourceReferenceId = normalizeBoundedString(
+      input.sourceReferenceId,
+      void 0,
+      120,
+      "source reference id"
+    );
+    if (!sourceReferenceId) {
+      throw new Error("sourceReferenceId is required.");
+    }
+    return await this.mutateSourceReferences(id, (references) => {
+      if (!references.some((reference) => reference.id === sourceReferenceId)) {
+        throw new Error(`source reference not found: ${sourceReferenceId}`);
+      }
+      return references.filter((reference) => reference.id !== sourceReferenceId);
+    });
+  }
+  async reorderSourceReferences(id, input) {
+    if (!Array.isArray(input.sourceReferenceIds) || input.sourceReferenceIds.some((value) => typeof value !== "string")) {
+      throw new Error("sourceReferenceIds are required.");
+    }
+    const sourceReferenceIds = input.sourceReferenceIds;
+    return await this.mutateSourceReferences(id, (references) => {
+      if (sourceReferenceIds.length !== references.length || new Set(sourceReferenceIds).size !== sourceReferenceIds.length) {
+        throw new Error("sourceReferenceIds must contain every source reference exactly once.");
+      }
+      const byId = new Map(references.map((reference) => [reference.id, reference]));
+      const now = Date.now();
+      return sourceReferenceIds.map((sourceReferenceId, index) => {
+        const reference = byId.get(sourceReferenceId);
+        if (!reference) {
+          throw new Error(`source reference not found: ${sourceReferenceId}`);
+        }
+        return {
+          ...reference,
+          position: (index + 1) * POSITION_STEP,
+          updatedAt: now
+        };
+      });
+    });
+  }
+  async mutateSourceReferences(id, mutate) {
+    return await this.enqueueMutation(async () => {
+      const existing = await this.get(id);
+      if (!existing) {
+        throw new Error(`card not found: ${id}`);
+      }
+      const sourceReferences = mutate(
+        [...existing.sourceReferences ?? []].toSorted(
+          (left, right) => left.position - right.position || left.createdAt - right.createdAt
+        )
+      );
+      const now = Date.now();
+      const next = removeUndefinedCardFields({
+        ...existing,
+        ...sourceReferences.length ? { sourceReferences } : {},
+        updatedAt: now
+      });
+      if (!sourceReferences.length) {
+        delete next.sourceReferences;
+      }
+      next.events = appendEvent(next, { kind: "edited" }, now);
+      await this.store.register(next.id, { version: 1, card: next });
+      return next;
+    });
+  }
+  async addLink(id, input) {
+    const now = Date.now();
+    const targetCardId = normalizeBoundedString(input.targetCardId, void 0, 120, "link target");
+    const url = normalizeBoundedString(input.url, void 0, 2e3, "link URL");
+    const title = normalizeBoundedString(input.title, void 0, 180, "link title");
+    if (!targetCardId && !url) {
+      throw new Error("link targetCardId or url is required.");
+    }
+    const type = normalizeLinkType(input.type, "relates_to");
+    if (type === "parent" || type === "child") {
+      throw new Error("parent and child dependency links must use linkDependency.");
+    }
+    if (type === "contains" || type === "contained_by") {
+      throw new Error("requirement hierarchy links must use setCardRequirement.");
+    }
+    const link = {
+      id: randomUUID4(),
+      type,
+      createdAt: now,
+      ...targetCardId ? { targetCardId } : {},
+      ...title ? { title } : {},
+      ...url ? { url } : {}
+    };
+    return await this.updateMetadata(id, (existing) => ({
+      ...existing.metadata,
+      links: appendLinkPreservingDependencies(existing.metadata?.links ?? [], link)
+    }));
+  }
+  async linkCards(parentId, childId, scope) {
+    return await this.enqueueMutation(
+      async () => await this.linkCardsDirect(parentId, childId, Date.now(), { scope })
+    );
+  }
+  async setCardRequirement(childId, requirementId, scope) {
+    return await this.enqueueMutation(
+      async () => await this.setCardRequirementDirect(childId, requirementId, Date.now(), scope)
+    );
+  }
+  async setCardRequirementDirect(childId, requirementId, now = Date.now(), scope) {
+    const child = await this.get(childId);
+    if (!child) {
+      throw new Error(`card not found: ${childId}`);
+    }
+    if (isRequirementCard(child)) {
+      throw new Error("requirement cards cannot be assigned to another requirement.");
+    }
+    const boardId = cardBoardId(child);
+    if (await this.isProjectArchived(boardId)) {
+      throw new Error("project is archived.");
+    }
+    assertCanMutateClaimedCard(child, scope);
+    const currentRequirementId = cardRequirementId(child);
+    const detach = async (parentId) => {
+      const parent = await this.get(parentId);
+      if (!parent) {
+        return;
+      }
+      assertCanMutateClaimedCard(parent, scope);
+      await this.updateCard(parent.id, {
+        metadata: {
+          ...parent.metadata,
+          links: (parent.metadata?.links ?? []).filter(
+            (link) => !(link.type === "contains" && link.targetCardId === child.id)
+          )
+        }
+      });
+    };
+    if (!requirementId) {
+      if (!currentRequirementId) {
+        return child;
+      }
+      await detach(currentRequirementId);
+      return await this.updateCard(child.id, {
+        metadata: {
+          ...child.metadata,
+          links: (child.metadata?.links ?? []).filter((link) => link.type !== "contained_by")
+        }
+      });
+    }
+    const normalizedRequirementId = requirementId.trim();
+    if (!normalizedRequirementId) {
+      return await this.setCardRequirementDirect(child.id, void 0, now, scope);
+    }
+    if (normalizedRequirementId === child.id) {
+      throw new Error("a card cannot be its own requirement.");
+    }
+    const requirement = await this.get(normalizedRequirementId);
+    if (!requirement) {
+      throw new Error(`card not found: ${normalizedRequirementId}`);
+    }
+    if (!isRequirementCard(requirement)) {
+      throw new Error("target card is not a requirement.");
+    }
+    if (cardBoardId(requirement) !== boardId) {
+      throw new Error("requirement must belong to the same project.");
+    }
+    if (cardRequirementId(requirement)) {
+      throw new Error("nested requirements are not supported.");
+    }
+    assertCanMutateClaimedCard(requirement, scope);
+    if (currentRequirementId && currentRequirementId !== requirement.id) {
+      await detach(currentRequirementId);
+    }
+    const requirementLinks = requirement.metadata?.links ?? [];
+    const childLinks = child.metadata?.links ?? [];
+    const nextRequirementLinks = requirementLinks.some(
+      (link) => link.type === "contains" && link.targetCardId === child.id
+    ) ? requirementLinks : appendLinkPreservingDependencies(requirementLinks, {
+      id: randomUUID4(),
+      type: "contains",
+      targetCardId: child.id,
+      createdAt: now
+    });
+    const nextChildLinks = [
+      ...childLinks.filter((link) => link.type !== "contained_by"),
+      {
+        id: randomUUID4(),
+        type: "contained_by",
+        targetCardId: requirement.id,
+        createdAt: now
+      }
+    ];
+    await this.updateCard(requirement.id, {
+      metadata: { ...requirement.metadata, links: nextRequirementLinks }
+    });
+    return await this.updateCard(child.id, {
+      metadata: { ...child.metadata, links: nextChildLinks }
+    });
+  }
+  async linkCardsDirect(parentId, childId, now = Date.now(), options = {}) {
+    if (parentId.trim() === childId.trim()) {
+      throw new Error("parent and child cards must differ.");
+    }
+    const parent = await this.get(parentId);
+    const child = await this.get(childId);
+    if (!parent) {
+      throw new Error(`card not found: ${parentId}`);
+    }
+    if (!child) {
+      throw new Error(`card not found: ${childId}`);
+    }
+    if (isRequirementCard(parent) || child.kind === "requirement") {
+      throw new Error("requirement cards cannot be execution dependencies.");
+    }
+    assertCanMutateClaimedCard(parent, options.scope);
+    assertCanMutateClaimedCard(child, options.scope);
+    if (child.status === "done" || child.status === "blocked") {
+      const cardsById = new Map((await this.list()).map((card) => [card.id, card]));
+      const parentIds = [...cardParentIds(child), parent.id].filter(
+        (id, index, ids) => ids.indexOf(id) === index
+      );
+      if (parentIds.some((id) => cardsById.get(id)?.status !== "done")) {
+        throw new Error("terminal child cards cannot gain incomplete parent dependencies.");
+      }
+    }
+    if (isActiveDependencyTarget(child, { allowStatusOnly: options.allowStatusOnlyActiveChild })) {
+      throw new Error("active child cards cannot gain parent dependencies.");
+    }
+    if (await this.dependsOn(parent.id, child.id)) {
+      throw new Error("dependency link would create a cycle.");
+    }
+    const parentLinks = parent.metadata?.links ?? [];
+    const childLinks = child.metadata?.links ?? [];
+    const nextParentLinks = parentLinks.some(
+      (link) => link.type === "child" && link.targetCardId === child.id
+    ) ? parentLinks : appendLinkPreservingDependencies(parentLinks, {
+      id: randomUUID4(),
+      type: "child",
+      targetCardId: child.id,
+      createdAt: now
+    });
+    const nextChildLinks = childLinks.some(
+      (link) => link.type === "parent" && link.targetCardId === parent.id
+    ) ? childLinks : appendLinkPreservingDependencies(childLinks, {
+      id: randomUUID4(),
+      type: "parent",
+      targetCardId: parent.id,
+      createdAt: now
+    });
+    await this.updateCard(parent.id, {
+      metadata: { ...parent.metadata, links: nextParentLinks }
+    });
+    const nextChild = await this.updateCard(child.id, {
+      metadata: { ...child.metadata, links: nextChildLinks }
+    });
+    return await this.promoteDependencyReady(nextChild.id);
+  }
+  async dependencyTargetStatus(card, now) {
+    const scheduledAt = card.metadata?.automation?.scheduledAt;
+    const parents = cardParentIds(card);
+    if (card.status === "scheduled" && !scheduledAt) {
+      return "scheduled";
+    }
+    if (parents.length === 0) {
+      if (scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
+        return "scheduled";
+      }
+      return card.status === "scheduled" ? "ready" : card.status;
+    }
+    const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
+    const parentsDone = parentCards.every((parent) => parent?.status === "done");
+    if (!parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
+      return "scheduled";
+    }
+    if (!parentsDone && isDependencyPromotableStatus(card.status)) {
+      return "todo";
+    }
+    if (parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
+      return "scheduled";
+    }
+    return parentsDone && isDependencyPromotableStatus(card.status) ? "ready" : card.status;
+  }
+  async dependsOn(cardId, targetParentId) {
+    const cards = new Map((await this.list()).map((entry) => [entry.id, entry]));
+    const seen = /* @__PURE__ */ new Set();
+    const visit = (id) => {
+      if (id === targetParentId) {
+        return true;
+      }
+      if (seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      const card = cards.get(id);
+      return Boolean(card && cardParentIds(card).some(visit));
+    };
+    return visit(cardId);
+  }
+  async recordDispatch(card, now) {
+    const metadata = trimMetadataToBudget(
+      normalizeMetadata(
+        {
+          ...card.metadata,
+          automation: normalizeAutomation(
+            {
+              ...card.metadata?.automation,
+              dispatchCount: (card.metadata?.automation?.dispatchCount ?? 0) + 1,
+              lastDispatchAt: now
+            },
+            card.metadata?.automation
+          )
+        },
+        card.metadata
+      )
+    );
+    const next = removeUndefinedCardFields({
+      ...card,
+      ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
+      events: appendEvent(card, { kind: "dispatch" }, now)
+    });
+    await this.store.register(card.id, { version: 1, card: next });
+    return next;
+  }
+  async recordOrchestrationCandidate(card, now) {
+    const metadata = trimMetadataToBudget({
+      ...card.metadata,
+      workerLogs: [
+        ...card.metadata?.workerLogs ?? [],
+        {
+          id: randomUUID4(),
+          level: "info",
+          message: "Auto orchestration marked this triage card for specification or decomposition.",
+          createdAt: now
+        }
+      ].slice(-MAX_CARD_WORKER_LOGS),
+      workerProtocol: {
+        state: "idle",
+        updatedAt: now,
+        detail: "Awaiting taskfold_specify or taskfold_decompose."
+      }
+    });
+    const next = removeUndefinedCardFields({
+      ...card,
+      ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
+      events: appendEvent(card, { kind: "orchestration" }, now)
+    });
+    await this.store.register(card.id, { version: 1, card: next });
+    return next;
+  }
+  async promoteDependencyReady(id, now = Date.now()) {
+    const card = await this.get(id);
+    if (!card) {
+      throw new Error(`card not found: ${id}`);
+    }
+    if (card.metadata?.archivedAt) {
+      return card;
+    }
+    const target = await this.dependencyTargetStatus(card, now);
+    if (target === card.status) {
+      return card;
+    }
+    return await this.updateCard(card.id, { status: target });
+  }
+};
+
 // src/backend/src/gateway-workspace-methods.ts
 var WRITE_SCOPE = "operator.write";
+function readOptionalExpectedRevision(requestParams) {
+  const value = requestParams.expectedRevision;
+  if (value === void 0) {
+    return void 0;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("expectedRevision must be a non-negative safe integer.");
+  }
+  return value;
+}
 async function resolveGatewayWorkspaceMutationAccess(request, value) {
   const access = await canonicalizeTaskfoldWorkspaceAccess(
     resolveGatewayTaskfoldWorkspaceAccess({
@@ -3682,16 +4978,28 @@ function registerTaskfoldWorkspaceCardMethods(params) {
     async (request) => {
       const { params: requestParams, respond } = request;
       try {
-        const patch = withoutTaskfoldWorkspaceAccess(readPatch(requestParams));
+        const id = readId(requestParams);
+        const expectedRevision = readOptionalExpectedRevision(requestParams);
+        const patch = withoutTaskfoldCasParams(withoutTaskfoldWorkspaceAccess(readPatch(requestParams)));
         const access = await resolveGatewayWorkspaceMutationAccess(request, patch);
-        respond(true, {
-          card: redactCard(
-            await store.update(
-              readId(requestParams),
-              containsTaskfoldWorkspaceMutation(patch) ? withTaskfoldWorkspaceAccess(patch, access) : patch
-            )
-          )
-        });
+        let updated;
+        try {
+          updated = await store.update(
+            id,
+            containsTaskfoldWorkspaceMutation(patch) ? withTaskfoldWorkspaceAccess(patch, access) : patch,
+            expectedRevision !== void 0 ? { expectedRevision } : {}
+          );
+        } catch (error) {
+          if (error instanceof TaskfoldRevisionConflictError) {
+            const current = await store.get(id);
+            if (current) {
+              respondConflict(respond, redactCard(current));
+              return;
+            }
+          }
+          throw error;
+        }
+        respond(true, { card: redactCard(updated) });
       } catch (error) {
         respondError(respond, error);
       }
@@ -3781,13 +5089,13 @@ function registerTaskfoldWorkspaceWorkflowMethods(params) {
 }
 
 // src/backend/src/project-document-reader.ts
-import { createHash, randomUUID as randomUUID3 } from "node:crypto";
+import { createHash as createHash2, randomUUID as randomUUID5 } from "node:crypto";
 import fs from "node:fs/promises";
 import path2 from "node:path";
 var MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;
 var MARKDOWN_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown"]);
 function documentRevision(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
+  return createHash2("sha256").update(bytes).digest("hex");
 }
 function decodeUtf8(bytes) {
   let content;
@@ -3892,7 +5200,7 @@ async function writeTaskfoldProjectDocumentPath(params) {
   const directory = path2.dirname(current.path);
   const temporaryPath = path2.join(
     directory,
-    `.${path2.basename(current.path)}.taskfold-${randomUUID3()}.tmp`
+    `.${path2.basename(current.path)}.taskfold-${randomUUID5()}.tmp`
   );
   const originalMode = Number(current.stat.mode) & 4095;
   try {
@@ -4350,7 +5658,7 @@ function registerTaskfoldProjectGatewayMethods(params) {
 import { randomUUID as randomUUID11 } from "node:crypto";
 
 // src/backend/src/sqlite-store.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { randomUUID as randomUUID6 } from "node:crypto";
 import fs2 from "node:fs";
 import path3 from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -4809,7 +6117,7 @@ function ensureChangeEpoch(db) {
   if (current) {
     return current;
   }
-  const epoch = randomUUID4();
+  const epoch = randomUUID6();
   db.prepare("INSERT OR IGNORE INTO taskfold_meta (key, value) VALUES ('change_epoch', ?)").run(
     epoch
   );
@@ -6207,1278 +7515,6 @@ import { randomUUID as randomUUID9 } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
-
-// src/backend/src/store-core.ts
-import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
-
-// src/backend/src/store-automation.ts
-function normalizeTrustedWorkspaceAccess(value, fallback) {
-  if (value === void 0) {
-    return fallback;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("workspace access must be an object.");
-  }
-  const record = value;
-  if (record.unrestricted === true) {
-    return { unrestricted: true };
-  }
-  if (record.unrestricted !== false || !Array.isArray(record.roots)) {
-    throw new Error("restricted workspace access requires roots.");
-  }
-  if (typeof record.writable !== "boolean") {
-    throw new Error("restricted workspace access requires a writable flag.");
-  }
-  const roots = Array.from(
-    new Set(
-      record.roots.map((entry) => {
-        const root = normalizeBoundedString(entry, void 0, 2e3, "workspace access root");
-        if (!root || !isAbsoluteWorkspacePath(root)) {
-          throw new Error("workspace access roots must be absolute.");
-        }
-        return root;
-      })
-    )
-  );
-  if (roots.length === 0) {
-    throw new Error("restricted workspace access requires at least one root.");
-  }
-  return { unrestricted: false, roots, writable: record.writable };
-}
-function normalizeCardAutomation(input) {
-  const workspaceAccess = normalizeTrustedWorkspaceAccess(input.workspaceAccess);
-  return normalizeAutomation(
-    {
-      tenant: input.tenant,
-      boardId: input.boardId,
-      createdByCardId: input.createdByCardId,
-      idempotencyKey: input.idempotencyKey,
-      skills: input.skills,
-      workspace: input.workspace,
-      maxRuntimeSeconds: input.maxRuntimeSeconds,
-      maxRetries: input.maxRetries,
-      scheduledAt: input.scheduledAt
-    },
-    workspaceAccess ? { workspaceAccess } : void 0
-  );
-}
-function normalizeAutomationPatch(patch, current) {
-  const workspaceAccess = Object.hasOwn(patch, "workspaceAccess") ? normalizeTrustedWorkspaceAccess(patch.workspaceAccess, current?.workspaceAccess) : current?.workspaceAccess;
-  return normalizeAutomation(patch, {
-    ...current,
-    ...workspaceAccess ? { workspaceAccess } : {}
-  });
-}
-
-// src/backend/src/store-change-tracker.ts
-import { randomUUID as randomUUID5 } from "node:crypto";
-var CHANGE_REVISION_BLOCK = 1e4;
-var TaskfoldChangeTracker = class {
-  constructor(readDataVersion, epoch, reserveRevisions) {
-    this.readDataVersion = readDataVersion;
-    this.epoch = epoch ?? randomUUID5();
-    this.reserveRevisions = reserveRevisions ?? (() => 0);
-    this.revision = this.reserveRevisions(CHANGE_REVISION_BLOCK);
-    this.revisionCeiling = this.revision + CHANGE_REVISION_BLOCK;
-    this.externalDataVersion = readDataVersion?.();
-  }
-  epoch;
-  revision;
-  revisionCeiling;
-  latestChange;
-  mutationRevision = 0;
-  externalDataVersion;
-  listeners = /* @__PURE__ */ new Set();
-  reserveRevisions;
-  nextRevision() {
-    if (this.revision + 1 >= this.revisionCeiling) {
-      const base = Math.max(this.reserveRevisions(CHANGE_REVISION_BLOCK), this.revision);
-      this.revision = base;
-      this.revisionCeiling = base + CHANGE_REVISION_BLOCK;
-    }
-    return ++this.revision;
-  }
-  track(store) {
-    return {
-      register: async (key, value) => {
-        await store.register(key, value);
-        this.mutationRevision += 1;
-      },
-      lookup: async (key) => await store.lookup(key),
-      delete: async (key) => {
-        const deleted = await store.delete(key);
-        if (deleted) {
-          this.mutationRevision += 1;
-        }
-        return deleted;
-      },
-      entries: async () => await store.entries(),
-      ...store.compareAndSwap ? {
-        compareAndSwap: async (key, expectedRevision, value) => {
-          const swapped = await store.compareAndSwap(key, expectedRevision, value);
-          if (swapped) {
-            this.mutationRevision += 1;
-          }
-          return swapped;
-        }
-      } : {},
-      ...store.registerIfAbsent ? {
-        registerIfAbsent: async (key, value) => {
-          const inserted = await store.registerIfAbsent(key, value);
-          if (inserted) {
-            this.mutationRevision += 1;
-          }
-          return inserted;
-        }
-      } : {}
-    };
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-  announceEpoch() {
-    this.emit();
-  }
-  current() {
-    return this.latestChange;
-  }
-  reconcileExternalChanges() {
-    if (!this.readDataVersion) {
-      return false;
-    }
-    const current = this.readDataVersion();
-    if (current === this.externalDataVersion) {
-      return false;
-    }
-    this.externalDataVersion = current;
-    this.emit();
-    return true;
-  }
-  async runMutation(run) {
-    const initialRevision = this.mutationRevision;
-    try {
-      return await run();
-    } finally {
-      if (this.mutationRevision !== initialRevision) {
-        this.emit();
-      }
-    }
-  }
-  emit() {
-    const change = { epoch: this.epoch, revision: this.nextRevision() };
-    this.latestChange = change;
-    for (const listener of this.listeners) {
-      try {
-        listener(change);
-      } catch {
-      }
-    }
-  }
-};
-
-// src/backend/src/store-core.ts
-var TaskfoldRevisionConflictError = class extends Error {
-  constructor(cardId, expectedRevision) {
-    super(`card ${cardId} changed since revision ${expectedRevision}.`);
-    this.cardId = cardId;
-    this.expectedRevision = expectedRevision;
-    this.name = "TaskfoldRevisionConflictError";
-  }
-};
-var CARD_CAS_MAX_ATTEMPTS = 3;
-function stampCardRevisions(store) {
-  const stamp = (value) => {
-    if (value?.version === 1 && value.card) {
-      value.card.revision = nextTaskfoldCardRevision(value.card.revision);
-    }
-    return value;
-  };
-  return {
-    register: async (key, value) => await store.register(key, stamp(value)),
-    lookup: async (key) => await store.lookup(key),
-    delete: async (key) => await store.delete(key),
-    entries: async () => await store.entries(),
-    ...store.compareAndSwap ? {
-      compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value))
-    } : {},
-    ...store.registerIfAbsent ? {
-      registerIfAbsent: async (key, value) => await store.registerIfAbsent(key, stamp(value))
-    } : {}
-  };
-}
-function sessionCaptureCardId(sessionKey) {
-  const digest = createHash2("sha256").update("openclaw.taskfold.session-capture.v1\0").update(sessionKey).digest();
-  digest.writeUInt8(digest.readUInt8(6) & 15 | 128, 6);
-  digest.writeUInt8(digest.readUInt8(8) & 63 | 128, 8);
-  const hex = digest.toString("hex", 0, 16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-var TaskfoldCoreStore = class {
-  mutationQueue = Promise.resolve();
-  lastNotificationSequence = 0;
-  changes;
-  store;
-  boardStore;
-  milestoneStore;
-  documentStore;
-  subscriptionStore;
-  attachmentStore;
-  constructor(store, stores = {}) {
-    this.changes = new TaskfoldChangeTracker(
-      stores.dataVersion,
-      stores.changeEpoch,
-      stores.reserveChangeRevisions
-    );
-    this.store = this.changes.track(stampCardRevisions(store));
-    this.boardStore = this.changes.track(
-      stores.boards ?? store
-    );
-    this.milestoneStore = this.changes.track(
-      stores.milestones ?? store
-    );
-    this.documentStore = this.changes.track(
-      stores.documents ?? store
-    );
-    this.subscriptionStore = stores.subscriptions ?? store;
-    this.attachmentStore = stores.attachments ?? store;
-  }
-  announceChangeEpoch() {
-    this.changes.announceEpoch();
-  }
-  reconcileExternalChanges() {
-    return this.changes.reconcileExternalChanges();
-  }
-  currentChange() {
-    return this.changes.current();
-  }
-  async waitForChange(after, timeoutMs) {
-    const isNewer = (change) => !after || change.epoch !== after.epoch || change.revision > after.revision;
-    const current = this.changes.current();
-    if (current && isNewer(current)) {
-      return { change: current, timedOut: false };
-    }
-    return await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        resolve({ change: this.changes.current(), timedOut: true });
-      }, timeoutMs);
-      const unsubscribe = this.changes.subscribe((change) => {
-        if (!isNewer(change)) {
-          return;
-        }
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve({ change, timedOut: false });
-      });
-    });
-  }
-  async enqueueMutation(run) {
-    const runAndNotify = async () => await this.changes.runMutation(run);
-    const result = this.mutationQueue.then(runAndNotify, runAndNotify);
-    this.mutationQueue = result.then(
-      () => void 0,
-      () => void 0
-    );
-    return await result;
-  }
-  async updateMetadata(id, mutate, options = {}) {
-    return await this.enqueueMutation(async () => {
-      const existing = await this.get(id);
-      if (!existing) {
-        throw new Error(`card not found: ${id}`);
-      }
-      return await this.updateCard(id, { metadata: mutate(existing) }, options);
-    });
-  }
-  async deleteDetachedAttachments(existing, next) {
-    const nextIds = new Set(next.metadata?.attachments?.map((attachment) => attachment.id) ?? []);
-    for (const attachment of existing.metadata?.attachments ?? []) {
-      if (!nextIds.has(attachment.id)) {
-        await this.attachmentStore.delete(attachment.id);
-      }
-    }
-  }
-  nextNotificationSequence(now) {
-    const base = Math.max(0, Math.trunc(now)) * 1e3;
-    this.lastNotificationSequence = Math.max(this.lastNotificationSequence + 1, base);
-    return this.lastNotificationSequence;
-  }
-  async list(options = {}) {
-    const boardId = normalizeBoardId(options.boardId);
-    const entries = await this.store.entries();
-    return entries.map((entry) => entry.value).filter(
-      (entry) => entry?.version === 1 && Boolean(entry.card?.id)
-    ).map((entry) => entry.card).filter((card) => !boardId || cardBoardId(card) === boardId).toSorted(compareCards);
-  }
-  async listBoards() {
-    const boards = /* @__PURE__ */ new Map();
-    for (const entry of await this.boardStore.entries()) {
-      if (entry.value?.version !== 1 || !entry.value.board?.id) {
-        continue;
-      }
-      const board = entry.value.board;
-      boards.set(board.id, {
-        id: board.id,
-        ...board.name ? { name: board.name } : {},
-        ...board.description ? { description: board.description } : {},
-        ...board.icon ? { icon: board.icon } : {},
-        ...board.color ? { color: board.color } : {},
-        ...board.position !== void 0 ? { position: board.position } : {},
-        ...board.version ? { version: board.version } : {},
-        ...board.currentObjective ? { currentObjective: board.currentObjective } : {},
-        ...board.coreValue ? { coreValue: board.coreValue } : {},
-        ...board.sourceOfTruth ? { sourceOfTruth: board.sourceOfTruth } : {},
-        ...board.repositoryUrl ? { repositoryUrl: board.repositoryUrl } : {},
-        ...board.planningPath ? { planningPath: board.planningPath } : {},
-        ...board.homepageUrl ? { homepageUrl: board.homepageUrl } : {},
-        ...board.defaultWorkspace ? { defaultWorkspace: board.defaultWorkspace } : {},
-        ...board.orchestration ? { orchestration: board.orchestration } : {},
-        ...board.boardView ? { boardView: board.boardView } : {},
-        total: 0,
-        active: 0,
-        archived: 0,
-        byStatus: {},
-        updatedAt: board.updatedAt,
-        ...board.archivedAt ? { archivedAt: board.archivedAt } : {}
-      });
-    }
-    if (!boards.has("default")) {
-      boards.set("default", {
-        id: "default",
-        total: 0,
-        active: 0,
-        archived: 0,
-        byStatus: {}
-      });
-    }
-    for (const card of await this.list()) {
-      const boardId = cardBoardId(card);
-      const summary = boards.get(boardId) ?? {
-        id: boardId,
-        total: 0,
-        active: 0,
-        archived: 0,
-        byStatus: {}
-      };
-      summary.total += 1;
-      if (card.metadata?.archivedAt) {
-        summary.archived += 1;
-      } else {
-        summary.active += 1;
-      }
-      summary.byStatus[card.status] = (summary.byStatus[card.status] ?? 0) + 1;
-      summary.updatedAt = Math.max(summary.updatedAt ?? 0, card.updatedAt);
-      boards.set(boardId, summary);
-    }
-    return {
-      boards: [...boards.values()].toSorted(
-        (a, b) => a.id === "default" ? -1 : b.id === "default" ? 1 : a.id.localeCompare(b.id)
-      )
-    };
-  }
-  async isProjectArchived(boardId) {
-    const board = await this.boardStore.lookup(boardId);
-    return Boolean(board?.version === 1 && board.board.archivedAt);
-  }
-  async upsertBoard(input) {
-    return await this.enqueueMutation(async () => {
-      const id = normalizeBoardIdRequired(input.id);
-      const existing = await this.boardStore.lookup(id);
-      const board = normalizeBoardMetadata({ ...input, id }, existing?.board);
-      await this.boardStore.register(id, { version: 1, board });
-      return board;
-    });
-  }
-  async archiveBoard(id, archived = true) {
-    return await this.upsertBoard({ id, archived });
-  }
-  async deleteBoard(id) {
-    return await this.enqueueMutation(async () => {
-      const boardId = normalizeBoardIdRequired(id);
-      if (boardId === "default") {
-        throw new Error("default board cannot be deleted.");
-      }
-      if ((await this.list({ boardId })).length > 0) {
-        throw new Error("board still has cards; archive it or move/delete the cards first.");
-      }
-      for (const entry of await this.subscriptionStore.entries()) {
-        if (entry.value?.version === 1 && entry.value.subscription?.boardId === boardId) {
-          await this.subscriptionStore.delete(entry.key);
-        }
-      }
-      return { deleted: await this.boardStore.delete(boardId) };
-    });
-  }
-  async stats(input = {}, now = Date.now()) {
-    const cards = await this.list(input);
-    const boardId = normalizeBoardId(input.boardId) ?? "all";
-    const byStatus = {};
-    const byAgent = /* @__PURE__ */ Object.create(null);
-    let oldestReadyAt;
-    let updatedAt;
-    let archived = 0;
-    for (const card of cards) {
-      byStatus[card.status] = (byStatus[card.status] ?? 0) + 1;
-      byAgent[card.agentId ?? "(default)"] = (byAgent[card.agentId ?? "(default)"] ?? 0) + 1;
-      if (card.metadata?.archivedAt) {
-        archived += 1;
-      }
-      if (card.status === "ready" && !card.metadata?.archivedAt) {
-        oldestReadyAt = Math.min(oldestReadyAt ?? card.updatedAt, card.updatedAt);
-      }
-      updatedAt = Math.max(updatedAt ?? 0, card.updatedAt);
-    }
-    return {
-      id: boardId,
-      total: cards.length,
-      active: cards.length - archived,
-      archived,
-      byStatus,
-      byAgent,
-      ...oldestReadyAt ? { oldestReadyAgeMs: Math.max(0, now - oldestReadyAt) } : {},
-      ...updatedAt ? { updatedAt } : {}
-    };
-  }
-  async get(id) {
-    const entry = await this.store.lookup(id.trim());
-    return entry?.version === 1 ? entry.card : void 0;
-  }
-  async removeReferencesToCard(cardId) {
-    for (const card of await this.list()) {
-      const links = card.metadata?.links;
-      if (!links?.some((link) => link.targetCardId === cardId)) {
-        continue;
-      }
-      await this.updateCard(card.id, {
-        metadata: {
-          ...card.metadata,
-          links: links.filter((link) => link.targetCardId !== cardId)
-        }
-      });
-    }
-  }
-  async create(input, scope) {
-    return await this.enqueueMutation(async () => {
-      let card = await this.createDirect(input, scope);
-      const requirementId = normalizeOptionalString(input.requirementId);
-      if (!requirementId) {
-        return card;
-      }
-      try {
-        card = await this.setCardRequirementDirect(card.id, requirementId, Date.now(), scope);
-        return card;
-      } catch (error) {
-        await this.store.delete(card.id);
-        await this.removeReferencesToCard(card.id);
-        throw error;
-      }
-    });
-  }
-  async createDirect(input, scope, options = {}) {
-    const now = Date.now();
-    const requestedStatus = normalizeStatus(input.status, "todo");
-    const kind = normalizeCardKind(input.kind);
-    const cards = await this.list();
-    const parents = normalizeStringList(input.parents, "parents", 120);
-    const automation = normalizeCardAutomation(input);
-    const heldBySchedule = Boolean(automation?.scheduledAt && automation.scheduledAt > now) && requestedStatus !== "blocked";
-    let status = heldBySchedule ? "scheduled" : requestedStatus;
-    let heldByDependencies = false;
-    if (parents.length > 0 && (status === "running" || status === "review")) {
-      status = "todo";
-      heldByDependencies = true;
-    }
-    if (automation?.idempotencyKey) {
-      const existing = cards.find(
-        (card2) => card2.metadata?.automation?.idempotencyKey === automation.idempotencyKey && card2.metadata?.automation?.tenant === automation.tenant && cardBoardId(card2) === (automation.boardId ?? "default")
-      );
-      if (existing) {
-        return existing;
-      }
-    }
-    const cardsById = new Map(cards.map((card2) => [card2.id, card2]));
-    const parentCards = parents.map((parentId) => {
-      const parent = cardsById.get(parentId);
-      if (!parent) {
-        throw new Error(`card not found: ${parentId}`);
-      }
-      return parent;
-    });
-    const childAutomation = normalizeAutomation(
-      {
-        ...automation,
-        createdByCardId: automation?.createdByCardId ?? (parents.length === 1 ? parents[0] : void 0)
-      },
-      automation
-    );
-    const normalizedPosition = normalizePosition(input.position, Number.NaN);
-    const notes = normalizeNotes(input.notes);
-    const agentId = normalizeOptionalString(input.agentId);
-    const sessionKey = normalizeOptionalString(input.sessionKey);
-    const runId = normalizeOptionalString(input.runId);
-    const taskId = normalizeOptionalString(input.taskId);
-    const sourceUrl = normalizeOptionalString(input.sourceUrl);
-    const normalizedExecution = normalizeExecution(input.execution);
-    const delivery = normalizeDelivery(input.delivery, void 0, now);
-    const execution = normalizedExecution?.status === "running" && (heldBySchedule || heldByDependencies) ? void 0 : normalizedExecution;
-    const startedAt = input.startedAt === void 0 ? status === "running" ? now : void 0 : normalizeTimestamp(input.startedAt, 0) || void 0;
-    const completedAt = input.completedAt === void 0 ? status === "done" ? now : void 0 : normalizeTimestamp(input.completedAt, 0) || void 0;
-    const metadata = normalizeMetadata(
-      input.metadata,
-      {
-        templateId: normalizeTemplateId(input.templateId),
-        ...childAutomation ? { automation: childAutomation } : {}
-      },
-      { allowDependencyLinks: false }
-    );
-    const syncedMetadata = trimMetadataToBudget(
-      syncExecutionAttemptMetadata(metadata, execution, now)
-    );
-    const boardId = syncedMetadata.automation?.boardId ?? "default";
-    const milestoneId = normalizeOptionalString(input.milestoneId);
-    const position = Number.isFinite(normalizedPosition) ? normalizedPosition : Math.max(
-      0,
-      ...cards.filter(
-        (card2) => cardBoardId(card2) === boardId && card2.milestoneId === milestoneId
-      ).map((card2) => card2.position)
-    ) + POSITION_STEP;
-    let card = {
-      id: options.cardId ?? randomUUID6(),
-      title: normalizeTitle(input.title),
-      ...kind === "requirement" ? { kind } : {},
-      status,
-      priority: normalizePriority(input.priority, "normal"),
-      labels: normalizeLabels(input.labels),
-      ...milestoneId ? { milestoneId } : {},
-      position,
-      createdAt: now,
-      updatedAt: now,
-      // Stamped to the first real revision by the persistence boundary below.
-      revision: 0,
-      events: [
-        {
-          id: randomUUID6(),
-          kind: "created",
-          at: now,
-          toStatus: status,
-          ...sessionKey ? { sessionKey } : {},
-          ...runId ? { runId } : {}
-        }
-      ],
-      ...notes ? { notes } : {},
-      ...agentId ? { agentId } : {},
-      ...sessionKey ? { sessionKey } : {},
-      ...runId ? { runId } : {},
-      ...taskId ? { taskId } : {},
-      ...sourceUrl ? { sourceUrl } : {},
-      ...execution ? { execution } : {},
-      ...delivery ? { delivery } : {},
-      ...startedAt ? { startedAt } : {},
-      ...completedAt ? { completedAt } : {},
-      ...!metadataIsEmpty(syncedMetadata) ? { metadata: syncedMetadata } : {}
-    };
-    if (options.insertIfAbsent && this.store.registerIfAbsent) {
-      const inserted = await this.store.registerIfAbsent(card.id, { version: 1, card });
-      if (!inserted) {
-        const winner = await this.get(card.id);
-        if (!winner) {
-          throw new Error("captured session card disappeared during creation.");
-        }
-        return winner;
-      }
-    } else {
-      await this.store.register(card.id, { version: 1, card });
-    }
-    try {
-      if (kind === "requirement" && parentCards.length > 0) {
-        throw new Error("requirement cards cannot be child cards.");
-      }
-      for (const parent of parentCards) {
-        if (isRequirementCard(parent)) {
-          throw new Error("requirement cards cannot be execution dependencies.");
-        }
-        card = await this.linkCardsDirect(parent.id, card.id, now, {
-          allowStatusOnlyActiveChild: true,
-          scope
-        });
-      }
-    } catch (error) {
-      await this.store.delete(card.id);
-      await this.removeReferencesToCard(card.id);
-      throw error;
-    }
-    return card;
-  }
-  /**
-   * Turn an already-running session into a card, once. Idempotent by
-   * `sessionKey`: a second call for the same key returns the existing card
-   * unchanged, or restores it first if it was archived, instead of creating a
-   * duplicate.
-   */
-  async captureSession(input) {
-    return await this.retryOnRevisionConflict(async () => await this.captureSessionOnce(input));
-  }
-  async captureSessionOnce(input) {
-    return await this.enqueueMutation(async () => {
-      const sessionKey = normalizeOptionalString(input.sessionKey);
-      if (!sessionKey) {
-        throw new Error("sessionKey is required.");
-      }
-      const boardId = normalizeBoardId(input.boardId) ?? "default";
-      const matches = (await this.list()).filter((card) => cardSessionKey(card) === sessionKey).toSorted((left, right) => right.updatedAt - left.updatedAt);
-      const existing = matches.find((card) => !card.metadata?.archivedAt) ?? matches.find((card) => Boolean(card.metadata?.archivedAt));
-      if (existing) {
-        if (!existing.metadata?.archivedAt) {
-          return existing;
-        }
-        if (cardSessionKey(existing) !== sessionKey) {
-          throw new Error("captured session identity collision.");
-        }
-        return await this.updateCard(
-          existing.id,
-          { metadata: { ...existing.metadata, archivedAt: 0 } },
-          { expectedRevision: existing.revision }
-        );
-      }
-      const winner = await this.createDirect(
-        { ...input, boardId, parents: void 0 },
-        void 0,
-        { cardId: sessionCaptureCardId(sessionKey), insertIfAbsent: true }
-      );
-      if (cardSessionKey(winner) !== sessionKey) {
-        throw new Error("captured session identity collision.");
-      }
-      return winner;
-    });
-  }
-  async update(id, patch, options = {}) {
-    return await this.enqueueMutation(
-      async () => await this.updateCard(id, patch, {
-        allowMetadataDependencyLinks: false,
-        enforceStatusHolds: true,
-        ...options.expectedRevision !== void 0 ? { expectedRevision: options.expectedRevision } : {}
-      })
-    );
-  }
-  async updateCard(id, patch, options = {}) {
-    const existing = await this.get(id);
-    if (!existing) {
-      throw new Error(`card not found: ${id}`);
-    }
-    if (options.expectedRevision !== void 0 && existing.revision !== options.expectedRevision) {
-      throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
-    }
-    const lifecycleStatusSourceUpdatedAt = lifecycleStatusSourceUpdatedAtFromPatch(patch.metadata);
-    const existingLifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
-    const hasFreshLifecycleStatusSource = lifecycleStatusSourceUpdatedAt !== void 0 && lifecycleStatusSourceUpdatedAt !== existingLifecycleStatusSourceUpdatedAt;
-    let effectivePatch = patch;
-    if (patch.status !== void 0 && lifecycleStatusSourceUpdatedAt !== void 0 && shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt)) {
-      effectivePatch = { ...patch, status: void 0 };
-      if (patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)) {
-        const metadataPatch = patch.metadata;
-        const { lifecycleStatusSourceUpdatedAt: _ignored, ...rest } = metadataPatch;
-        effectivePatch.metadata = Object.keys(rest).length > 0 ? rest : void 0;
-      }
-      const hasSemanticPatch = Object.entries(effectivePatch).some(
-        ([key, value]) => key !== "status" && key !== "metadata" && value !== void 0
-      );
-      if (!hasSemanticPatch && effectivePatch.metadata === void 0) {
-        return existing;
-      }
-    }
-    const status = normalizeStatus(effectivePatch.status, existing.status);
-    const now = Date.now();
-    const startedAt = effectivePatch.startedAt === void 0 ? status === "running" ? existing.startedAt ?? now : existing.startedAt : normalizeTimestamp(effectivePatch.startedAt, 0) || void 0;
-    const completedAt = effectivePatch.completedAt === void 0 ? status === "done" ? existing.completedAt ?? now : void 0 : normalizeTimestamp(effectivePatch.completedAt, 0) || void 0;
-    const sessionKey = effectivePatch.sessionKey === void 0 ? existing.sessionKey : normalizeOptionalString(effectivePatch.sessionKey);
-    const execution = effectivePatch.execution === void 0 ? effectivePatch.sessionKey === void 0 ? existing.execution : syncExecutionSessionKey(existing.execution, sessionKey) : normalizeExecution(effectivePatch.execution);
-    let metadata = normalizeMetadata(effectivePatch.metadata, existing.metadata, {
-      allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
-      preserveProofId: options.preserveProofId
-    });
-    if (status !== existing.status && !hasFreshLifecycleStatusSource) {
-      metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: void 0 };
-    }
-    const effectivePatchRecord = effectivePatch;
-    const automationPatch = {};
-    for (const key of [
-      "tenant",
-      "boardId",
-      "createdByCardId",
-      "idempotencyKey",
-      "skills",
-      "workspace",
-      "workspaceAccess",
-      "maxRuntimeSeconds",
-      "maxRetries",
-      "scheduledAt"
-    ]) {
-      if (Object.hasOwn(effectivePatchRecord, key) && effectivePatchRecord[key] !== void 0) {
-        automationPatch[key] = effectivePatchRecord[key];
-      }
-    }
-    if (Object.keys(automationPatch).length > 0) {
-      metadata = trimMetadataToBudget(
-        {
-          ...metadata,
-          automation: normalizeAutomationPatch(automationPatch, metadata.automation)
-        },
-        options
-      );
-    }
-    const next = removeUndefinedCardFields({
-      ...existing,
-      title: effectivePatch.title === void 0 ? existing.title : normalizeTitle(effectivePatch.title),
-      notes: effectivePatch.notes === void 0 ? existing.notes : normalizeNotes(effectivePatch.notes),
-      status,
-      priority: effectivePatch.priority === void 0 ? existing.priority : normalizePriority(effectivePatch.priority, existing.priority),
-      labels: effectivePatch.labels === void 0 ? existing.labels : normalizeLabels(effectivePatch.labels),
-      agentId: effectivePatch.agentId === void 0 ? existing.agentId : normalizeOptionalString(effectivePatch.agentId),
-      sessionKey,
-      runId: effectivePatch.runId === void 0 ? existing.runId : normalizeOptionalString(effectivePatch.runId),
-      taskId: effectivePatch.taskId === void 0 ? existing.taskId : normalizeOptionalString(effectivePatch.taskId),
-      sourceUrl: effectivePatch.sourceUrl === void 0 ? existing.sourceUrl : normalizeOptionalString(effectivePatch.sourceUrl),
-      execution,
-      delivery: effectivePatch.delivery === void 0 ? existing.delivery : normalizeDelivery(effectivePatch.delivery, existing.delivery, now),
-      metadata: effectivePatch.templateId === void 0 ? metadata : { ...metadata, templateId: normalizeTemplateId(effectivePatch.templateId) },
-      position: effectivePatchRecord.position === void 0 ? existing.position : normalizePosition(effectivePatchRecord.position, existing.position),
-      updatedAt: now,
-      ...startedAt ? { startedAt } : {},
-      ...completedAt ? { completedAt } : {}
-    });
-    next.metadata = trimMetadataToBudget(
-      syncExecutionAttemptMetadata(next.metadata ?? {}, execution, now),
-      options
-    );
-    next.events = appendEvent(next, updateEvent(existing, next), now);
-    if (options.enforceStatusHolds && effectivePatch.status !== void 0) {
-      await this.assertActiveStatusAllowed(existing, next, now);
-    }
-    if (status !== "done") {
-      delete next.completedAt;
-    }
-    if (effectivePatch.startedAt !== void 0 && !startedAt) {
-      delete next.startedAt;
-    }
-    if (effectivePatch.completedAt !== void 0 && !completedAt) {
-      delete next.completedAt;
-    }
-    if (metadataIsEmpty(next.metadata)) {
-      delete next.metadata;
-    }
-    await this.persistCard(next, options.expectedRevision);
-    await this.deleteDetachedAttachments(existing, next);
-    return next;
-  }
-  /**
-   * Single card write boundary. With `expectedRevision` the backend performs the
-   * check and the write atomically when it can; backends without that capability
-   * fall back to the plain write already guarded by the read-revision check in
-   * {@link updateCard} and the in-process mutation queue.
-   */
-  async persistCard(card, expectedRevision) {
-    if (expectedRevision === void 0 || !this.store.compareAndSwap) {
-      await this.store.register(card.id, { version: 1, card });
-      return;
-    }
-    const swapped = await this.store.compareAndSwap(card.id, expectedRevision, {
-      version: 1,
-      card
-    });
-    if (!swapped) {
-      throw new TaskfoldRevisionConflictError(card.id, expectedRevision);
-    }
-  }
-  /**
-   * Retries `run` when it loses a compare-and-swap race. Callers must re-read the
-   * card inside `run` so each attempt swaps against the revision it actually saw.
-   */
-  async retryOnRevisionConflict(run) {
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        return await run();
-      } catch (error) {
-        if (!(error instanceof TaskfoldRevisionConflictError) || attempt >= CARD_CAS_MAX_ATTEMPTS) {
-          throw error;
-        }
-      }
-    }
-  }
-  async assertActiveStatusAllowed(existing, next, now) {
-    if (next.status !== "ready" && next.status !== "running" && next.status !== "review" && next.status !== "done") {
-      return;
-    }
-    const parents = cardParentIds(next);
-    const cards = parents.length > 0 ? new Map((await this.list()).map((card) => [card.id, card])) : void 0;
-    if (parents.length > 0 && !parents.every((parentId) => cards?.get(parentId)?.status === "done")) {
-      throw new Error("card dependencies are not done.");
-    }
-    if (next.status === "done") {
-      return;
-    }
-    const scheduledAt = next.metadata?.automation?.scheduledAt;
-    if (scheduledAt && scheduledAt > now || existing.status === "scheduled" && !scheduledAt) {
-      throw new Error("card is scheduled for later.");
-    }
-  }
-  async delete(id) {
-    return await this.enqueueMutation(async () => await this.deleteDirect(id));
-  }
-  async deleteDirect(id) {
-    const cardId = id.trim();
-    const deleted = await this.store.delete(cardId);
-    if (!deleted) {
-      return { deleted: false };
-    }
-    for (const entry of await this.subscriptionStore.entries()) {
-      if (entry.value?.version === 1 && entry.value.subscription?.cardId === cardId) {
-        await this.subscriptionStore.delete(entry.key);
-      }
-    }
-    for (const entry of await this.attachmentStore.entries()) {
-      if (entry.value?.version === 1 && entry.value.attachment?.cardId === cardId) {
-        await this.attachmentStore.delete(entry.key);
-      }
-    }
-    await this.removeReferencesToCard(cardId);
-    return { deleted: true };
-  }
-  async addComment(id, input, scope) {
-    const now = Date.now();
-    const body = normalizeBoundedString(input.body, void 0, 2e3, "comment body");
-    if (!body) {
-      throw new Error("comment body is required.");
-    }
-    const comment = { id: randomUUID6(), body, createdAt: now };
-    return await this.updateMetadata(id, (existing) => {
-      assertCanMutateClaimedCard(existing, scope);
-      return {
-        ...existing.metadata,
-        comments: [...existing.metadata?.comments ?? [], comment].slice(-MAX_CARD_COMMENTS)
-      };
-    });
-  }
-  async addSourceReference(id, input) {
-    const now = Date.now();
-    const label = normalizeTitle(input.label);
-    const target = normalizeBoundedString(input.target, void 0, 2e3, "source reference target");
-    const note = normalizeBoundedString(input.note, void 0, 2e3, "source reference note");
-    if (!target || target.includes("\0") || target.includes("\n")) {
-      throw new Error("source reference target is required and must be a single line.");
-    }
-    return await this.mutateSourceReferences(id, (references) => [
-      ...references,
-      {
-        id: randomUUID6(),
-        label,
-        target,
-        position: Math.max(0, ...references.map((reference) => reference.position)) + POSITION_STEP,
-        createdAt: now,
-        updatedAt: now,
-        ...note ? { note } : {}
-      }
-    ]);
-  }
-  async updateSourceReference(id, input) {
-    const sourceReferenceId = normalizeBoundedString(
-      input.sourceReferenceId,
-      void 0,
-      120,
-      "source reference id"
-    );
-    if (!sourceReferenceId) {
-      throw new Error("sourceReferenceId is required.");
-    }
-    return await this.mutateSourceReferences(id, (references) => {
-      const existing = references.find((reference) => reference.id === sourceReferenceId);
-      if (!existing) {
-        throw new Error(`source reference not found: ${sourceReferenceId}`);
-      }
-      const label = input.label === void 0 ? existing.label : normalizeTitle(input.label);
-      const target = input.target === void 0 ? existing.target : normalizeBoundedString(input.target, void 0, 2e3, "source reference target");
-      const note = input.note === void 0 ? existing.note : normalizeBoundedString(input.note, void 0, 2e3, "source reference note");
-      if (!target || target.includes("\0") || target.includes("\n")) {
-        throw new Error("source reference target is required and must be a single line.");
-      }
-      return references.map((reference) => {
-        if (reference.id !== sourceReferenceId) {
-          return reference;
-        }
-        const next = {
-          ...reference,
-          label,
-          target,
-          updatedAt: Date.now(),
-          ...note ? { note } : {}
-        };
-        if (!note) {
-          delete next.note;
-        }
-        return next;
-      });
-    });
-  }
-  async deleteSourceReference(id, input) {
-    const sourceReferenceId = normalizeBoundedString(
-      input.sourceReferenceId,
-      void 0,
-      120,
-      "source reference id"
-    );
-    if (!sourceReferenceId) {
-      throw new Error("sourceReferenceId is required.");
-    }
-    return await this.mutateSourceReferences(id, (references) => {
-      if (!references.some((reference) => reference.id === sourceReferenceId)) {
-        throw new Error(`source reference not found: ${sourceReferenceId}`);
-      }
-      return references.filter((reference) => reference.id !== sourceReferenceId);
-    });
-  }
-  async reorderSourceReferences(id, input) {
-    if (!Array.isArray(input.sourceReferenceIds) || input.sourceReferenceIds.some((value) => typeof value !== "string")) {
-      throw new Error("sourceReferenceIds are required.");
-    }
-    const sourceReferenceIds = input.sourceReferenceIds;
-    return await this.mutateSourceReferences(id, (references) => {
-      if (sourceReferenceIds.length !== references.length || new Set(sourceReferenceIds).size !== sourceReferenceIds.length) {
-        throw new Error("sourceReferenceIds must contain every source reference exactly once.");
-      }
-      const byId = new Map(references.map((reference) => [reference.id, reference]));
-      const now = Date.now();
-      return sourceReferenceIds.map((sourceReferenceId, index) => {
-        const reference = byId.get(sourceReferenceId);
-        if (!reference) {
-          throw new Error(`source reference not found: ${sourceReferenceId}`);
-        }
-        return {
-          ...reference,
-          position: (index + 1) * POSITION_STEP,
-          updatedAt: now
-        };
-      });
-    });
-  }
-  async mutateSourceReferences(id, mutate) {
-    return await this.enqueueMutation(async () => {
-      const existing = await this.get(id);
-      if (!existing) {
-        throw new Error(`card not found: ${id}`);
-      }
-      const sourceReferences = mutate(
-        [...existing.sourceReferences ?? []].toSorted(
-          (left, right) => left.position - right.position || left.createdAt - right.createdAt
-        )
-      );
-      const now = Date.now();
-      const next = removeUndefinedCardFields({
-        ...existing,
-        ...sourceReferences.length ? { sourceReferences } : {},
-        updatedAt: now
-      });
-      if (!sourceReferences.length) {
-        delete next.sourceReferences;
-      }
-      next.events = appendEvent(next, { kind: "edited" }, now);
-      await this.store.register(next.id, { version: 1, card: next });
-      return next;
-    });
-  }
-  async addLink(id, input) {
-    const now = Date.now();
-    const targetCardId = normalizeBoundedString(input.targetCardId, void 0, 120, "link target");
-    const url = normalizeBoundedString(input.url, void 0, 2e3, "link URL");
-    const title = normalizeBoundedString(input.title, void 0, 180, "link title");
-    if (!targetCardId && !url) {
-      throw new Error("link targetCardId or url is required.");
-    }
-    const type = normalizeLinkType(input.type, "relates_to");
-    if (type === "parent" || type === "child") {
-      throw new Error("parent and child dependency links must use linkDependency.");
-    }
-    if (type === "contains" || type === "contained_by") {
-      throw new Error("requirement hierarchy links must use setCardRequirement.");
-    }
-    const link = {
-      id: randomUUID6(),
-      type,
-      createdAt: now,
-      ...targetCardId ? { targetCardId } : {},
-      ...title ? { title } : {},
-      ...url ? { url } : {}
-    };
-    return await this.updateMetadata(id, (existing) => ({
-      ...existing.metadata,
-      links: appendLinkPreservingDependencies(existing.metadata?.links ?? [], link)
-    }));
-  }
-  async linkCards(parentId, childId, scope) {
-    return await this.enqueueMutation(
-      async () => await this.linkCardsDirect(parentId, childId, Date.now(), { scope })
-    );
-  }
-  async setCardRequirement(childId, requirementId, scope) {
-    return await this.enqueueMutation(
-      async () => await this.setCardRequirementDirect(childId, requirementId, Date.now(), scope)
-    );
-  }
-  async setCardRequirementDirect(childId, requirementId, now = Date.now(), scope) {
-    const child = await this.get(childId);
-    if (!child) {
-      throw new Error(`card not found: ${childId}`);
-    }
-    if (isRequirementCard(child)) {
-      throw new Error("requirement cards cannot be assigned to another requirement.");
-    }
-    const boardId = cardBoardId(child);
-    if (await this.isProjectArchived(boardId)) {
-      throw new Error("project is archived.");
-    }
-    assertCanMutateClaimedCard(child, scope);
-    const currentRequirementId = cardRequirementId(child);
-    const detach = async (parentId) => {
-      const parent = await this.get(parentId);
-      if (!parent) {
-        return;
-      }
-      assertCanMutateClaimedCard(parent, scope);
-      await this.updateCard(parent.id, {
-        metadata: {
-          ...parent.metadata,
-          links: (parent.metadata?.links ?? []).filter(
-            (link) => !(link.type === "contains" && link.targetCardId === child.id)
-          )
-        }
-      });
-    };
-    if (!requirementId) {
-      if (!currentRequirementId) {
-        return child;
-      }
-      await detach(currentRequirementId);
-      return await this.updateCard(child.id, {
-        metadata: {
-          ...child.metadata,
-          links: (child.metadata?.links ?? []).filter((link) => link.type !== "contained_by")
-        }
-      });
-    }
-    const normalizedRequirementId = requirementId.trim();
-    if (!normalizedRequirementId) {
-      return await this.setCardRequirementDirect(child.id, void 0, now, scope);
-    }
-    if (normalizedRequirementId === child.id) {
-      throw new Error("a card cannot be its own requirement.");
-    }
-    const requirement = await this.get(normalizedRequirementId);
-    if (!requirement) {
-      throw new Error(`card not found: ${normalizedRequirementId}`);
-    }
-    if (!isRequirementCard(requirement)) {
-      throw new Error("target card is not a requirement.");
-    }
-    if (cardBoardId(requirement) !== boardId) {
-      throw new Error("requirement must belong to the same project.");
-    }
-    if (cardRequirementId(requirement)) {
-      throw new Error("nested requirements are not supported.");
-    }
-    assertCanMutateClaimedCard(requirement, scope);
-    if (currentRequirementId && currentRequirementId !== requirement.id) {
-      await detach(currentRequirementId);
-    }
-    const requirementLinks = requirement.metadata?.links ?? [];
-    const childLinks = child.metadata?.links ?? [];
-    const nextRequirementLinks = requirementLinks.some(
-      (link) => link.type === "contains" && link.targetCardId === child.id
-    ) ? requirementLinks : appendLinkPreservingDependencies(requirementLinks, {
-      id: randomUUID6(),
-      type: "contains",
-      targetCardId: child.id,
-      createdAt: now
-    });
-    const nextChildLinks = [
-      ...childLinks.filter((link) => link.type !== "contained_by"),
-      {
-        id: randomUUID6(),
-        type: "contained_by",
-        targetCardId: requirement.id,
-        createdAt: now
-      }
-    ];
-    await this.updateCard(requirement.id, {
-      metadata: { ...requirement.metadata, links: nextRequirementLinks }
-    });
-    return await this.updateCard(child.id, {
-      metadata: { ...child.metadata, links: nextChildLinks }
-    });
-  }
-  async linkCardsDirect(parentId, childId, now = Date.now(), options = {}) {
-    if (parentId.trim() === childId.trim()) {
-      throw new Error("parent and child cards must differ.");
-    }
-    const parent = await this.get(parentId);
-    const child = await this.get(childId);
-    if (!parent) {
-      throw new Error(`card not found: ${parentId}`);
-    }
-    if (!child) {
-      throw new Error(`card not found: ${childId}`);
-    }
-    if (isRequirementCard(parent) || child.kind === "requirement") {
-      throw new Error("requirement cards cannot be execution dependencies.");
-    }
-    assertCanMutateClaimedCard(parent, options.scope);
-    assertCanMutateClaimedCard(child, options.scope);
-    if (child.status === "done" || child.status === "blocked") {
-      const cardsById = new Map((await this.list()).map((card) => [card.id, card]));
-      const parentIds = [...cardParentIds(child), parent.id].filter(
-        (id, index, ids) => ids.indexOf(id) === index
-      );
-      if (parentIds.some((id) => cardsById.get(id)?.status !== "done")) {
-        throw new Error("terminal child cards cannot gain incomplete parent dependencies.");
-      }
-    }
-    if (isActiveDependencyTarget(child, { allowStatusOnly: options.allowStatusOnlyActiveChild })) {
-      throw new Error("active child cards cannot gain parent dependencies.");
-    }
-    if (await this.dependsOn(parent.id, child.id)) {
-      throw new Error("dependency link would create a cycle.");
-    }
-    const parentLinks = parent.metadata?.links ?? [];
-    const childLinks = child.metadata?.links ?? [];
-    const nextParentLinks = parentLinks.some(
-      (link) => link.type === "child" && link.targetCardId === child.id
-    ) ? parentLinks : appendLinkPreservingDependencies(parentLinks, {
-      id: randomUUID6(),
-      type: "child",
-      targetCardId: child.id,
-      createdAt: now
-    });
-    const nextChildLinks = childLinks.some(
-      (link) => link.type === "parent" && link.targetCardId === parent.id
-    ) ? childLinks : appendLinkPreservingDependencies(childLinks, {
-      id: randomUUID6(),
-      type: "parent",
-      targetCardId: parent.id,
-      createdAt: now
-    });
-    await this.updateCard(parent.id, {
-      metadata: { ...parent.metadata, links: nextParentLinks }
-    });
-    const nextChild = await this.updateCard(child.id, {
-      metadata: { ...child.metadata, links: nextChildLinks }
-    });
-    return await this.promoteDependencyReady(nextChild.id);
-  }
-  async dependencyTargetStatus(card, now) {
-    const scheduledAt = card.metadata?.automation?.scheduledAt;
-    const parents = cardParentIds(card);
-    if (card.status === "scheduled" && !scheduledAt) {
-      return "scheduled";
-    }
-    if (parents.length === 0) {
-      if (scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-        return "scheduled";
-      }
-      return card.status === "scheduled" ? "ready" : card.status;
-    }
-    const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
-    const parentsDone = parentCards.every((parent) => parent?.status === "done");
-    if (!parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-      return "scheduled";
-    }
-    if (!parentsDone && isDependencyPromotableStatus(card.status)) {
-      return "todo";
-    }
-    if (parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-      return "scheduled";
-    }
-    return parentsDone && isDependencyPromotableStatus(card.status) ? "ready" : card.status;
-  }
-  async dependsOn(cardId, targetParentId) {
-    const cards = new Map((await this.list()).map((entry) => [entry.id, entry]));
-    const seen = /* @__PURE__ */ new Set();
-    const visit = (id) => {
-      if (id === targetParentId) {
-        return true;
-      }
-      if (seen.has(id)) {
-        return false;
-      }
-      seen.add(id);
-      const card = cards.get(id);
-      return Boolean(card && cardParentIds(card).some(visit));
-    };
-    return visit(cardId);
-  }
-  async recordDispatch(card, now) {
-    const metadata = trimMetadataToBudget(
-      normalizeMetadata(
-        {
-          ...card.metadata,
-          automation: normalizeAutomation(
-            {
-              ...card.metadata?.automation,
-              dispatchCount: (card.metadata?.automation?.dispatchCount ?? 0) + 1,
-              lastDispatchAt: now
-            },
-            card.metadata?.automation
-          )
-        },
-        card.metadata
-      )
-    );
-    const next = removeUndefinedCardFields({
-      ...card,
-      ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
-      events: appendEvent(card, { kind: "dispatch" }, now)
-    });
-    await this.store.register(card.id, { version: 1, card: next });
-    return next;
-  }
-  async recordOrchestrationCandidate(card, now) {
-    const metadata = trimMetadataToBudget({
-      ...card.metadata,
-      workerLogs: [
-        ...card.metadata?.workerLogs ?? [],
-        {
-          id: randomUUID6(),
-          level: "info",
-          message: "Auto orchestration marked this triage card for specification or decomposition.",
-          createdAt: now
-        }
-      ].slice(-MAX_CARD_WORKER_LOGS),
-      workerProtocol: {
-        state: "idle",
-        updatedAt: now,
-        detail: "Awaiting taskfold_specify or taskfold_decompose."
-      }
-    });
-    const next = removeUndefinedCardFields({
-      ...card,
-      ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
-      events: appendEvent(card, { kind: "orchestration" }, now)
-    });
-    await this.store.register(card.id, { version: 1, card: next });
-    return next;
-  }
-  async promoteDependencyReady(id, now = Date.now()) {
-    const card = await this.get(id);
-    if (!card) {
-      throw new Error(`card not found: ${id}`);
-    }
-    if (card.metadata?.archivedAt) {
-      return card;
-    }
-    const target = await this.dependencyTargetStatus(card, now);
-    if (target === card.status) {
-      return card;
-    }
-    return await this.updateCard(card.id, { status: target });
-  }
-};
 
 // src/backend/src/store-promote.ts
 import { randomUUID as randomUUID8 } from "node:crypto";

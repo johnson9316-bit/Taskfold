@@ -38,6 +38,7 @@
     "build": "npm run build:backend && npm run build:ui",
     "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/*",
     "build:ui": "vite build --config ui/vite.config.ts",
+    "build:control-ui": "node scripts/build-control-ui.mjs",
     "check:public-names": "node scripts/check-public-names.mjs",
     "dev": "vite --config ui/vite.config.ts --host 127.0.0.1",
     "pack:check": "npm pack --dry-run",
