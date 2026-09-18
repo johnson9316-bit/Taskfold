@@ -50,7 +50,17 @@ export type TaskfoldRunEvidence =
   /** No recent activity, but not yet long enough to call the run gone. */
   | "stale"
   /** Silent long past the grace window. Nothing is left to report an outcome. */
-  | "abandoned";
+  | "abandoned"
+  /**
+   * The card holds a `prepared` launch (需求/15.7-会话生命周期设计.md §5 边①):
+   * a temporary runId/sessionKey `openExecutionLaunch` minted before the host
+   * admitted the run, not one it has accepted yet. Local-evidence liveness has
+   * nothing to judge here regardless of how long it has been silent — a
+   * prepared launch never heartbeats, since no worker has been accepted to
+   * heartbeat it. `reconciler.ts`'s `failStaleLaunch` (regla R, §6) is what
+   * may resolve a launch stuck in `prepared`, not this module.
+   */
+  | "launching";
 
 export type TaskfoldLifecycleState = TaskfoldRunEvidence;
 
@@ -84,6 +94,9 @@ export function taskfoldRunEvidence(params: {
   const { card, now } = params;
   if (!claimsRunning(card) || !cardSessionKey(card)) {
     return "unlinked";
+  }
+  if (card.metadata?.automation?.launch?.phase === "prepared") {
+    return "launching";
   }
   const executionStatus = card.execution?.status;
   if (executionStatus && TERMINAL_EXECUTION_STATUSES.has(executionStatus)) {
@@ -124,7 +137,7 @@ export function getTaskfoldLifecycle(params: {
 }): TaskfoldLifecycle {
   const { card, now } = params;
   const state = taskfoldRunEvidence({ card, now });
-  if (state === "unlinked") {
+  if (state === "unlinked" || state === "launching") {
     return { state };
   }
   const sourceUpdatedAt = taskfoldLastActivityAt(card);
@@ -162,6 +175,9 @@ export function executionStatusForLifecycle(
     // overwrite a real result (`done`) with a coarser one.
     case "finished":
     case "unlinked":
+    // A prepared launch's execution status is a placeholder the host has not
+    // accepted yet; there is no run outcome to reflect.
+    case "launching":
       return undefined;
   }
 }

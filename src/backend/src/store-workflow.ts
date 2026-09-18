@@ -13,6 +13,7 @@ import type {
 import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
+import { taskfoldCardMatchesLifecycleLink } from "./session-link.js";
 import {
   appendEvent,
   assertCanMutateClaimedCard,
@@ -90,7 +91,8 @@ function taskfoldInstanceId(): string {
   return resolveGlobalSingleton(Symbol.for("taskfold.instanceId"), () => randomUUID());
 }
 
-type TaskfoldPreparedLaunch = Extract<TaskfoldLaunchState, { phase: "prepared" }>;
+/** Exported so the launch-opening call sites (dispatcher.ts, card-execution.ts) can hold the `prepared` launch identity between `openExecutionLaunch` and the later `acceptExecutionLaunch`/`failExecutionLaunch` call without re-deriving it. */
+export type TaskfoldPreparedLaunch = Extract<TaskfoldLaunchState, { phase: "prepared" }>;
 
 /**
  * Isomorphic port of `preparedLaunchMatchesCard` from the extension this
@@ -535,17 +537,36 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     });
   }
 
+  /**
+   * Resolves a run's terminal outcome onto whichever card it belongs to
+   * (edge ⑪, 需求/15.7-会话生命周期设计.md §5). `runId` alone was sufficient
+   * before the launch state machine, when a card's `runId` was always the
+   * host's own. Now a card can still hold `openExecutionLaunch`'s provisional
+   * placeholder if a Gateway restart landed between `prepared` and
+   * `accepted` — a host-issued `runId` the card never recorded would then
+   * silently match nothing. `targetSessionKey` (see `session-link.ts`) is the
+   * fallback for exactly that case; at least one of the two is required.
+   */
   async finishExecutionForRun(
-    runId: string,
-    input: { outcome?: unknown; endedAt?: unknown; reason?: unknown } = {},
+    runId: string | undefined,
+    input: {
+      outcome?: unknown;
+      endedAt?: unknown;
+      reason?: unknown;
+      targetSessionKey?: unknown;
+    } = {},
   ): Promise<TaskfoldCard | undefined> {
     const normalizedRunId = normalizeOptionalString(runId);
-    if (!normalizedRunId) {
-      throw new Error("runId is required.");
+    const targetSessionKey = normalizeOptionalString(input.targetSessionKey);
+    if (!normalizedRunId && !targetSessionKey) {
+      throw new Error("runId or targetSessionKey is required.");
     }
     return await this.enqueueMutation(async () => {
-      const existing = (await this.list()).find(
-        (candidate) => cardRunId(candidate) === normalizedRunId,
+      const existing = (await this.list()).find((candidate) =>
+        taskfoldCardMatchesLifecycleLink(candidate, {
+          runId: normalizedRunId,
+          sessionKey: targetSessionKey,
+        }),
       );
       if (!existing) {
         return undefined;

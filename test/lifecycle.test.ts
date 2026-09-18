@@ -116,6 +116,32 @@ describe("Taskfold lifecycle", () => {
       expect(executionStatusForLifecycle(withStatus("done"))).toBeUndefined();
     });
 
+    it("treats a card mid-launch as its own evidence state, never orphaned", () => {
+      // Deliberately far past the abandoned threshold: a prepared launch never
+      // heartbeats (its worker, if any, has not been accepted yet), so this is
+      // exactly the case the guard exists for (需求/15.7-会话生命周期设计.md §6).
+      const launching = quietFor(90, {
+        metadata: {
+          claim: claim(NOW - 90 * MINUTE),
+          automation: {
+            launch: {
+              phase: "prepared",
+              requestedSessionKey: "subagent:taskfold-default-card-1",
+              provisionalRunId: "taskfold:card-1:token-a",
+              preparedAt: NOW - 90 * MINUTE,
+              preparedBy: "instance-1",
+            },
+          },
+        },
+      });
+      expect(taskfoldRunEvidence({ card: launching, now: NOW })).toBe("launching");
+      expect(shouldCloseOrphanedRun({ card: launching, now: NOW })).toBe(false);
+      const lifecycle = getTaskfoldLifecycle({ card: launching, now: NOW });
+      expect(lifecycle).toMatchObject({ state: "launching" });
+      expect(lifecycle.targetStatus).toBeUndefined();
+      expect(executionStatusForLifecycle(lifecycle)).toBeUndefined();
+    });
+
     it("falls back to execution and card timestamps when there is no claim", () => {
       const viaExecution = card({
         metadata: {},

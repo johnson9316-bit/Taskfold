@@ -2,6 +2,7 @@ import type { TaskfoldCard } from "../../contract/index.js";
 // Taskfold dispatch workspace helpers keep authority resolution outside the orchestration loop.
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import { canonicalPathFromExistingAncestor } from "openclaw/plugin-sdk/security-runtime";
+import { taskfoldCardMatchesLifecycleLink } from "./session-link.js";
 import type { TaskfoldStore } from "./store.js";
 import {
   assertCanonicalTaskfoldRootAccess,
@@ -30,9 +31,16 @@ export function managedWorktreeName(cardId: string): string {
 export async function cleanupTaskfoldRunWorktree(params: {
   store: TaskfoldStore;
   worktrees: Pick<PluginRuntime["worktrees"], "removeIfLossless">;
-  runId: string;
+  runId?: string;
+  /** Fallback identity for a card still holding a provisional runId (需求/15.7 §7 步骤 5). */
+  targetSessionKey?: string;
 }): Promise<void> {
-  const card = (await params.store.list()).find((entry) => entry.runId === params.runId);
+  const card = (await params.store.list()).find((entry) =>
+    taskfoldCardMatchesLifecycleLink(entry, {
+      runId: params.runId,
+      sessionKey: params.targetSessionKey,
+    }),
+  );
   const workspace = card?.metadata?.automation?.workspace;
   if (!card || workspace?.kind !== "worktree" || !workspace.path) {
     return;

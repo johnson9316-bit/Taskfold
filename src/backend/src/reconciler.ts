@@ -31,6 +31,18 @@ import type { TaskfoldStore } from "./store.js";
 
 const RECONCILE_INTERVAL_MS = 15_000;
 
+/**
+ * Regla R (需求/15.7-会话生命周期设计.md §5 边④): how long a `prepared` launch
+ * may go without the host accepting it before it is presumed lost. `subagent.
+ * run()` returns at host admission in well under a second (§9 U1, confirmed
+ * live); this leaves three orders of magnitude of margin. Must stay strictly
+ * below `store-constants.ts`'s `RUNNING_HEARTBEAT_STALE_MS` (20 minutes) so a
+ * stuck launch always resolves here before local-evidence liveness
+ * (`lifecycle.ts`) would otherwise have to guess at a launch it cannot see
+ * into (see the `"launching"` evidence state).
+ */
+const LAUNCH_ACCEPT_GRACE_MS = 10 * 60 * 1000;
+
 export type TaskfoldReconcilerRuntime = Pick<PluginRuntime, "worktrees">;
 
 function hasRunningAttempt(card: TaskfoldCard): boolean {
@@ -54,9 +66,35 @@ type ReconcileOutcome = {
   updated: number;
   finished: number;
   reclaimed: number;
+  /** Prepared launches regla R failed for going unaccepted past the grace window. */
+  staleLaunches: number;
   /** Cards this pass could not converge. They are retried on the next pass. */
   skipped: number;
 };
+
+/**
+ * Regla R (需求/15.7-会话生命周期设计.md §5 边④, §6): fails a `prepared` launch
+ * the host has not accepted within `LAUNCH_ACCEPT_GRACE_MS`. Checked before
+ * `finishOrphanedRun` in the per-card loop below — "has this launch been
+ * accepted" is answered before "is the accepted run still alive", since a
+ * `prepared` card's runId is only a placeholder `openExecutionLaunch` minted,
+ * not a run `finishOrphanedRun` could legitimately close.
+ */
+async function failStaleLaunch(params: {
+  store: TaskfoldStore;
+  card: TaskfoldCard;
+  now: number;
+}): Promise<boolean> {
+  const { store, card, now } = params;
+  const launch = card.metadata?.automation?.launch;
+  if (launch?.phase !== "prepared" || now - launch.preparedAt <= LAUNCH_ACCEPT_GRACE_MS) {
+    return false;
+  }
+  return await store.failExecutionLaunch(card.id, {
+    expectedLaunch: launch,
+    reason: "Gateway did not accept this launch within the acceptance window.",
+  });
+}
 
 /**
  * Applies one lifecycle verdict. Status, execution status and staleness are written
@@ -150,11 +188,18 @@ export async function reconcileTaskfoldCards(params: {
     updated: 0,
     finished: 0,
     reclaimed: 0,
+    staleLaunches: 0,
     skipped: 0,
   };
   for (const card of activeCards(await params.store.list())) {
     outcome.checked += 1;
     try {
+      if (await failStaleLaunch({ store: params.store, card, now })) {
+        outcome.staleLaunches += 1;
+        // The card moved; local-evidence liveness judges it fresh on the next
+        // pass rather than against the revision this one read.
+        continue;
+      }
       if (await finishOrphanedRun({ ...params, card, now })) {
         outcome.finished += 1;
         // The card moved; its status catches up on the next pass against fresh state
@@ -217,9 +262,9 @@ export function createTaskfoldReconcilerService(params: {
               ),
           });
           lastFailure = "";
-          if (outcome.updated || outcome.finished || outcome.reclaimed) {
+          if (outcome.updated || outcome.finished || outcome.reclaimed || outcome.staleLaunches) {
             ctx.logger.info(
-              `taskfold reconciled ${outcome.checked} active cards: ${outcome.updated} updated, ${outcome.finished} orphaned runs closed, ${outcome.reclaimed} claims reclaimed, ${outcome.skipped} skipped.`,
+              `taskfold reconciled ${outcome.checked} active cards: ${outcome.updated} updated, ${outcome.finished} orphaned runs closed, ${outcome.reclaimed} claims reclaimed, ${outcome.staleLaunches} stale launches failed, ${outcome.skipped} skipped.`,
             );
           }
         } catch (error) {

@@ -51,18 +51,24 @@ export default definePluginEntry({
     // not live long enough to receive one.
     api.registerService(createTaskfoldReconcilerService({ store, runtime: api.runtime }));
     api.on("subagent_ended", async (event) => {
-      if (event.runId) {
-        await store.finishExecutionForRun(event.runId, {
-          outcome: event.outcome,
-          endedAt: event.endedAt,
-          reason: event.error ?? event.reason,
-        });
-        await cleanupTaskfoldRunWorktree({
-          store,
-          worktrees: api.runtime.worktrees,
-          runId: event.runId,
-        });
-      }
+      // `event.runId` is absent whenever the host never durably associated one
+      // with this hook delivery; `event.targetSessionKey` is always present
+      // and is `finishExecutionForRun`'s fallback identity (`session-link.ts`)
+      // for a card still holding `openExecutionLaunch`'s provisional runId
+      // (需求/15.7-会话生命周期设计.md §7 步骤 5) — so this must run either way,
+      // not only when `event.runId` is present.
+      await store.finishExecutionForRun(event.runId, {
+        outcome: event.outcome,
+        endedAt: event.endedAt,
+        reason: event.error ?? event.reason,
+        targetSessionKey: event.targetSessionKey,
+      });
+      await cleanupTaskfoldRunWorktree({
+        store,
+        worktrees: api.runtime.worktrees,
+        runId: event.runId,
+        targetSessionKey: event.targetSessionKey,
+      });
     });
     api.registerCli(
       async ({ program }) => {

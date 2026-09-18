@@ -492,393 +492,6 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor4
 // src/backend/src/dispatcher-workspace.ts
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2 } from "openclaw/plugin-sdk/security-runtime";
 
-// src/backend/src/workspace-access.ts
-import {
-  listAgentIds,
-  resolveAgentConfig,
-  resolveAgentWorkspaceDir,
-  resolveDefaultAgentId
-} from "openclaw/plugin-sdk/agent-runtime";
-import {
-  canonicalPathFromExistingAncestor,
-  isPathInside
-} from "openclaw/plugin-sdk/security-runtime";
-var TASKFOLD_TOOL_NAMES = [
-  "taskfold_list",
-  "taskfold_create",
-  "taskfold_link",
-  "taskfold_read",
-  "taskfold_claim",
-  "taskfold_heartbeat",
-  "taskfold_complete",
-  "taskfold_attachment_add",
-  "taskfold_attachment_read",
-  "taskfold_attachment_delete",
-  "taskfold_block",
-  "taskfold_boards",
-  "taskfold_board_create",
-  "taskfold_board_archive",
-  "taskfold_board_delete",
-  "taskfold_stats",
-  "taskfold_runs",
-  "taskfold_specify",
-  "taskfold_decompose",
-  "taskfold_notify_subscribe",
-  "taskfold_notify_list",
-  "taskfold_notify_events",
-  "taskfold_notify_advance",
-  "taskfold_notify_unsubscribe",
-  "taskfold_promote",
-  "taskfold_reassign",
-  "taskfold_reclaim",
-  "taskfold_dispatch",
-  "taskfold_release",
-  "taskfold_comment",
-  "taskfold_proof",
-  "taskfold_worker_log",
-  "taskfold_protocol_violation",
-  "taskfold_unblock",
-  "taskfold_move",
-  "taskfold_projects",
-  "taskfold_project_create",
-  "taskfold_project_read",
-  "taskfold_milestone_create",
-  "taskfold_move_milestone",
-  "taskfold_move_project",
-  "taskfold_project_documents",
-  "taskfold_project_document_create"
-];
-var TASKFOLD_REQUIRED_WORKER_TOOLS = [
-  "taskfold_heartbeat",
-  "taskfold_complete",
-  "taskfold_block"
-];
-function resolveTaskfoldAgentWorkspace(config, agentId) {
-  return resolveAgentWorkspaceDir(config, agentId ?? resolveDefaultAgentId(config));
-}
-function resolveConfiguredTaskfoldWorkspaceAccess(params) {
-  if (params.unrestricted) {
-    return { unrestricted: true };
-  }
-  return {
-    unrestricted: false,
-    writable: true,
-    roots: listAgentIds(params.config).map(
-      (agentId) => resolveAgentWorkspaceDir(params.config, agentId)
-    )
-  };
-}
-async function resolveAgentTaskfoldWorkspaceRuntime(params) {
-  const agentId = params.agentId ?? resolveDefaultAgentId(params.config);
-  const sandboxRuntime = params.prepareSandboxWorkspaceAuthority ? await params.prepareSandboxWorkspaceAuthority({
-    config: params.config,
-    agentId,
-    confinedToolNames: TASKFOLD_TOOL_NAMES,
-    requiredToolNames: TASKFOLD_REQUIRED_WORKER_TOOLS,
-    modelProvider: params.modelProvider,
-    modelId: params.modelId,
-    sessionKey: params.sessionKey,
-    workspaceDir: params.workspaceDir
-  }) : void 0;
-  if (!sandboxRuntime) {
-    return {
-      sandboxed: false,
-      workspaceAccess: { unrestricted: true }
-    };
-  }
-  return {
-    sandboxed: sandboxRuntime.sandboxed,
-    workspaceAccess: sandboxRuntime.sandboxed ? {
-      unrestricted: false,
-      roots: [resolveAgentWorkspaceDir(params.config, agentId)],
-      writable: sandboxRuntime.workspaceAccess === "rw"
-    } : { unrestricted: true },
-    ...sandboxRuntime.confinementError ? { confinementError: sandboxRuntime.confinementError } : {}
-  };
-}
-function resolveCommandTaskfoldWorkspaceAccess(params) {
-  if (params.gatewayClientScopes) {
-    return resolveConfiguredTaskfoldWorkspaceAccess({
-      config: params.config,
-      unrestricted: params.gatewayClientScopes.includes("operator.admin")
-    });
-  }
-  const agentId = params.agentId ?? resolveDefaultAgentId(params.config);
-  const sandboxRuntime = params.sessionKey && params.resolveSandboxWorkspaceAuthority ? params.resolveSandboxWorkspaceAuthority({
-    config: params.config,
-    agentId,
-    sessionKey: params.sessionKey
-  }) : void 0;
-  if (sandboxRuntime?.sandboxed) {
-    return {
-      unrestricted: false,
-      roots: [resolveAgentWorkspaceDir(params.config, agentId)],
-      writable: sandboxRuntime.workspaceAccess === "rw"
-    };
-  }
-  const workspaceOnly = resolveAgentConfig(params.config, agentId)?.tools?.fs?.workspaceOnly ?? params.config.tools?.fs?.workspaceOnly;
-  return workspaceOnly === true ? {
-    unrestricted: false,
-    roots: [resolveAgentWorkspaceDir(params.config, agentId)],
-    writable: true
-  } : { unrestricted: true };
-}
-function resolveToolTaskfoldWorkspaceAccess(context, resolveSandboxWorkspaceAuthority) {
-  if (!context?.sandboxed && context?.fsPolicy?.workspaceOnly !== true) {
-    return { unrestricted: true };
-  }
-  const config = context.runtimeConfig ?? context.getRuntimeConfig?.() ?? context.config;
-  const sandboxRuntime = context.sandboxed && config && context.sessionKey && resolveSandboxWorkspaceAuthority ? resolveSandboxWorkspaceAuthority({
-    config,
-    agentId: context.agentId,
-    sessionKey: context.sessionKey
-  }) : void 0;
-  return {
-    unrestricted: false,
-    roots: context.workspaceDir ? [context.workspaceDir] : [],
-    writable: sandboxRuntime ? sandboxRuntime.workspaceAccess === "rw" : !context.sandboxed
-  };
-}
-async function canonicalizeTaskfoldWorkspaceAccess(access) {
-  if (access.unrestricted) {
-    return access;
-  }
-  const roots = Array.from(
-    new Set(
-      await Promise.all(
-        access.roots.map(async (root) => await canonicalPathFromExistingAncestor(root))
-      )
-    )
-  );
-  if (roots.length === 0) {
-    throw new Error("restricted workspace access has no allowed roots.");
-  }
-  return { unrestricted: false, roots, writable: access.writable };
-}
-function intersectTaskfoldWorkspaceAccess(left, right) {
-  if (left.unrestricted) {
-    return right;
-  }
-  if (right.unrestricted) {
-    return left;
-  }
-  const roots = /* @__PURE__ */ new Set();
-  for (const leftRoot of left.roots) {
-    for (const rightRoot of right.roots) {
-      if (leftRoot === rightRoot || isPathInside(leftRoot, rightRoot)) {
-        roots.add(rightRoot);
-      } else if (isPathInside(rightRoot, leftRoot)) {
-        roots.add(leftRoot);
-      }
-    }
-  }
-  if (roots.size === 0) {
-    throw new Error("workspace access does not overlap the card's persisted authority.");
-  }
-  return {
-    unrestricted: false,
-    roots: Array.from(roots),
-    writable: left.writable && right.writable
-  };
-}
-async function assertCanonicalTaskfoldPathAccess(candidate, access) {
-  if (access.unrestricted) {
-    return candidate;
-  }
-  for (const root of access.roots) {
-    const canonicalRoot = await canonicalPathFromExistingAncestor(root);
-    if (isPathInside(canonicalRoot, candidate)) {
-      return candidate;
-    }
-  }
-  throw new Error("workspace path is outside the caller's allowed workspaces.");
-}
-async function assertCanonicalTaskfoldRootAccess(candidate, access) {
-  if (access.unrestricted) {
-    return candidate;
-  }
-  for (const root of access.roots) {
-    const canonicalRoot = await canonicalPathFromExistingAncestor(root);
-    if (canonicalRoot === candidate) {
-      return candidate;
-    }
-  }
-  throw new Error("workspace path must equal one of the caller's allowed workspace roots.");
-}
-async function assertPathAllowed(value, access) {
-  if (typeof value !== "string" || !value.trim()) {
-    return void 0;
-  }
-  const candidate = await canonicalPathFromExistingAncestor(value.trim());
-  return await assertCanonicalTaskfoldPathAccess(candidate, access);
-}
-async function assertWorkspaceAllowed(value, access, options) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return void 0;
-  }
-  const workspace = value;
-  if (options?.sourceOnly) {
-    return await assertPathAllowed(workspace.sourcePath ?? workspace.path, access);
-  }
-  await assertPathAllowed(workspace.path, access);
-  await assertPathAllowed(workspace.sourcePath, access);
-  return void 0;
-}
-function readRecord(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function containsTaskfoldWorkspaceMutation(value) {
-  const record = readRecord(value);
-  if (!record) {
-    return false;
-  }
-  if (Object.hasOwn(record, "workspace") || Object.hasOwn(record, "defaultWorkspace")) {
-    return true;
-  }
-  return containsTaskfoldWorkspaceMutation(record.patch) || containsTaskfoldWorkspaceMutation(readRecord(record.metadata)?.automation) || Array.isArray(record.children) && record.children.some((child) => containsTaskfoldWorkspaceMutation(child));
-}
-function withTaskfoldWorkspaceAccess(value, access) {
-  return { ...withoutTaskfoldWorkspaceAccess(value), workspaceAccess: access };
-}
-function withoutTaskfoldWorkspaceAccess(value) {
-  const record = readRecord(value) ?? {};
-  const { workspaceAccess: _untrustedWorkspaceAccess, ...rest } = record;
-  return rest;
-}
-function withTaskfoldDecomposeWorkspaceAccess(value, access) {
-  const record = withoutTaskfoldWorkspaceAccess(value);
-  return {
-    ...record,
-    ...Array.isArray(record.children) ? {
-      children: record.children.map((child) => withTaskfoldWorkspaceAccess(child, access))
-    } : {}
-  };
-}
-async function assertTaskfoldWorkspaceMutationAccess(value, access) {
-  if (access.unrestricted) {
-    return;
-  }
-  const record = readRecord(value);
-  if (!record) {
-    return;
-  }
-  await assertWorkspaceAllowed(record.workspace, access);
-  await assertWorkspaceAllowed(record.defaultWorkspace, access);
-  const patch = readRecord(record.patch);
-  if (patch) {
-    await assertTaskfoldWorkspaceMutationAccess(patch, access);
-  }
-  const metadata = readRecord(record.metadata);
-  const automation = readRecord(metadata?.automation);
-  if (automation) {
-    await assertTaskfoldWorkspaceMutationAccess(automation, access);
-  }
-  if (Array.isArray(record.children)) {
-    for (const child of record.children) {
-      await assertTaskfoldWorkspaceMutationAccess(child, access);
-    }
-  }
-}
-async function assertTaskfoldWorkspaceSourceAccess(workspace, access) {
-  return await assertWorkspaceAllowed(workspace, access, { sourceOnly: true });
-}
-function guardTaskfoldToolsForWorkspaceAccess(tools, context, resolveSandboxWorkspaceAuthority) {
-  const workspaceAccess = resolveToolTaskfoldWorkspaceAccess(
-    context,
-    resolveSandboxWorkspaceAuthority
-  );
-  return tools.map((tool) => ({
-    ...tool,
-    execute: async (toolCallId, rawParams, signal, onUpdate) => {
-      const canonicalAccess = await canonicalizeTaskfoldWorkspaceAccess(workspaceAccess);
-      await assertTaskfoldWorkspaceMutationAccess(rawParams, canonicalAccess);
-      const sanitizedParams = withoutTaskfoldWorkspaceAccess(rawParams);
-      const constrainedParams = tool.name === "taskfold_create" ? withTaskfoldWorkspaceAccess(sanitizedParams, canonicalAccess) : tool.name === "taskfold_decompose" ? withTaskfoldDecomposeWorkspaceAccess(sanitizedParams, canonicalAccess) : tool.name === "taskfold_specify" && containsTaskfoldWorkspaceMutation(sanitizedParams) ? withTaskfoldWorkspaceAccess(sanitizedParams, canonicalAccess) : sanitizedParams;
-      return await tool.execute(toolCallId, constrainedParams, signal, onUpdate);
-    }
-  }));
-}
-
-// src/backend/src/dispatcher-workspace.ts
-function managedWorktreeName(cardId) {
-  const suffix = cardId.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-  return `wb-${suffix}`.slice(0, 64).replace(/-$/, "");
-}
-async function cleanupTaskfoldRunWorktree(params) {
-  const card = (await params.store.list()).find((entry) => entry.runId === params.runId);
-  const workspace = card?.metadata?.automation?.workspace;
-  if (!card || workspace?.kind !== "worktree" || !workspace.path) {
-    return;
-  }
-  await params.worktrees.removeIfLossless({
-    path: workspace.path,
-    // Must match the ownerKind/ownerId used when this worktree was created
-    // (card.id), or the host's ownership check silently refuses the removal.
-    ownerKind: "workboard",
-    ownerId: card.id
-  });
-}
-async function resolveDispatchWorkspaceAccess(params) {
-  const currentAccess = await canonicalizeTaskfoldWorkspaceAccess(
-    params.currentAccess ?? { unrestricted: true }
-  );
-  const persistedAccess = params.card.metadata?.automation?.workspaceAccess;
-  const workspace = params.card.metadata?.automation?.workspace;
-  let targetWorkspace;
-  if (!persistedAccess?.unrestricted || !currentAccess.unrestricted) {
-    const resolved = params.resolveAgentWorkspace?.(params.card.agentId);
-    targetWorkspace = resolved ? await canonicalPathFromExistingAncestor2(resolved) : void 0;
-  }
-  const cardAccess = persistedAccess ? await canonicalizeTaskfoldWorkspaceAccess(persistedAccess) : currentAccess.unrestricted ? !workspace || workspace.kind === "scratch" ? currentAccess : (() => {
-    throw new Error(
-      "card workspace authority is unknown; re-save its workspace with current permissions before dispatch."
-    );
-  })() : currentAccess;
-  const workspaceAccess = intersectTaskfoldWorkspaceAccess(cardAccess, currentAccess);
-  if (!workspaceAccess.unrestricted && !workspaceAccess.writable) {
-    throw new Error(
-      "card workspace authority is read-only; manual movement is allowed but worker dispatch requires write access."
-    );
-  }
-  return {
-    workspaceAccess,
-    ...targetWorkspace ? { targetWorkspace } : {},
-    persistWorkspaceAccess: !persistedAccess
-  };
-}
-async function assertRestrictedTaskfoldTarget(params) {
-  const resolved = params.resolveAgentWorkspaceRuntime ? await params.resolveAgentWorkspaceRuntime(
-    params.agentId,
-    params.sessionKey,
-    params.root,
-    params.modelProvider,
-    params.modelId
-  ) : {
-    sandboxed: false,
-    workspaceAccess: { unrestricted: true }
-  };
-  const targetRuntime = {
-    ...resolved,
-    workspaceAccess: await canonicalizeTaskfoldWorkspaceAccess(resolved.workspaceAccess)
-  };
-  if (!targetRuntime.sandboxed) {
-    throw new Error("target agent is not sandboxed for this restricted Taskfold card.");
-  }
-  if (targetRuntime.confinementError) {
-    throw new Error(targetRuntime.confinementError);
-  }
-  if (targetRuntime.workspaceAccess.unrestricted || !targetRuntime.workspaceAccess.writable) {
-    throw new Error("target agent does not have writable workspace-only access.");
-  }
-  await assertCanonicalTaskfoldRootAccess(params.root, targetRuntime.workspaceAccess);
-}
-
-// src/backend/src/dispatcher.ts
-import path from "node:path";
-import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
-import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
-
 // src/backend/src/store-card-helpers.ts
 init_contract();
 import { randomUUID as randomUUID2 } from "node:crypto";
@@ -2577,6 +2190,432 @@ function compareNotifications(a, b) {
   return a.id.localeCompare(b.id);
 }
 
+// src/backend/src/session-link.ts
+function sanitizeSessionSegment(value, fallback) {
+  const sanitized = (value ?? fallback).trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return (sanitized || fallback).slice(0, 96);
+}
+function buildSessionKey(card) {
+  const boardId = sanitizeSessionSegment(cardBoardId(card), "default");
+  const cardId = sanitizeSessionSegment(card.id, "card");
+  const suffix = `subagent:taskfold-${boardId}-${cardId}`;
+  return card.agentId ? `agent:${sanitizeSessionSegment(card.agentId, "agent")}:${suffix}` : suffix;
+}
+function taskfoldCardSessionLookupKey(sessionKey) {
+  if (!sessionKey) {
+    return void 0;
+  }
+  const match = /^agent:[^:]+:(.+)$/.exec(sessionKey);
+  return match ? match[1] : sessionKey;
+}
+function isProvisionalOrAbsentRunId(runId, cardId) {
+  return runId === void 0 || runId.startsWith(`taskfold:${cardId}:`);
+}
+function taskfoldCardMatchesLifecycleLink(card, target) {
+  const runId = cardRunId(card);
+  if (target.runId && runId === target.runId) {
+    return true;
+  }
+  if (target.runId && !isProvisionalOrAbsentRunId(runId, card.id)) {
+    return false;
+  }
+  const cardKey = taskfoldCardSessionLookupKey(cardSessionKey(card));
+  const targetKey = taskfoldCardSessionLookupKey(target.sessionKey);
+  return Boolean(cardKey && targetKey && cardKey === targetKey);
+}
+
+// src/backend/src/workspace-access.ts
+import {
+  listAgentIds,
+  resolveAgentConfig,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId
+} from "openclaw/plugin-sdk/agent-runtime";
+import {
+  canonicalPathFromExistingAncestor,
+  isPathInside
+} from "openclaw/plugin-sdk/security-runtime";
+var TASKFOLD_TOOL_NAMES = [
+  "taskfold_list",
+  "taskfold_create",
+  "taskfold_link",
+  "taskfold_read",
+  "taskfold_claim",
+  "taskfold_heartbeat",
+  "taskfold_complete",
+  "taskfold_attachment_add",
+  "taskfold_attachment_read",
+  "taskfold_attachment_delete",
+  "taskfold_block",
+  "taskfold_boards",
+  "taskfold_board_create",
+  "taskfold_board_archive",
+  "taskfold_board_delete",
+  "taskfold_stats",
+  "taskfold_runs",
+  "taskfold_specify",
+  "taskfold_decompose",
+  "taskfold_notify_subscribe",
+  "taskfold_notify_list",
+  "taskfold_notify_events",
+  "taskfold_notify_advance",
+  "taskfold_notify_unsubscribe",
+  "taskfold_promote",
+  "taskfold_reassign",
+  "taskfold_reclaim",
+  "taskfold_dispatch",
+  "taskfold_release",
+  "taskfold_comment",
+  "taskfold_proof",
+  "taskfold_worker_log",
+  "taskfold_protocol_violation",
+  "taskfold_unblock",
+  "taskfold_move",
+  "taskfold_projects",
+  "taskfold_project_create",
+  "taskfold_project_read",
+  "taskfold_milestone_create",
+  "taskfold_move_milestone",
+  "taskfold_move_project",
+  "taskfold_project_documents",
+  "taskfold_project_document_create"
+];
+var TASKFOLD_REQUIRED_WORKER_TOOLS = [
+  "taskfold_heartbeat",
+  "taskfold_complete",
+  "taskfold_block"
+];
+function resolveTaskfoldAgentWorkspace(config, agentId) {
+  return resolveAgentWorkspaceDir(config, agentId ?? resolveDefaultAgentId(config));
+}
+function resolveConfiguredTaskfoldWorkspaceAccess(params) {
+  if (params.unrestricted) {
+    return { unrestricted: true };
+  }
+  return {
+    unrestricted: false,
+    writable: true,
+    roots: listAgentIds(params.config).map(
+      (agentId) => resolveAgentWorkspaceDir(params.config, agentId)
+    )
+  };
+}
+async function resolveAgentTaskfoldWorkspaceRuntime(params) {
+  const agentId = params.agentId ?? resolveDefaultAgentId(params.config);
+  const sandboxRuntime = params.prepareSandboxWorkspaceAuthority ? await params.prepareSandboxWorkspaceAuthority({
+    config: params.config,
+    agentId,
+    confinedToolNames: TASKFOLD_TOOL_NAMES,
+    requiredToolNames: TASKFOLD_REQUIRED_WORKER_TOOLS,
+    modelProvider: params.modelProvider,
+    modelId: params.modelId,
+    sessionKey: params.sessionKey,
+    workspaceDir: params.workspaceDir
+  }) : void 0;
+  if (!sandboxRuntime) {
+    return {
+      sandboxed: false,
+      workspaceAccess: { unrestricted: true }
+    };
+  }
+  return {
+    sandboxed: sandboxRuntime.sandboxed,
+    workspaceAccess: sandboxRuntime.sandboxed ? {
+      unrestricted: false,
+      roots: [resolveAgentWorkspaceDir(params.config, agentId)],
+      writable: sandboxRuntime.workspaceAccess === "rw"
+    } : { unrestricted: true },
+    ...sandboxRuntime.confinementError ? { confinementError: sandboxRuntime.confinementError } : {}
+  };
+}
+function resolveCommandTaskfoldWorkspaceAccess(params) {
+  if (params.gatewayClientScopes) {
+    return resolveConfiguredTaskfoldWorkspaceAccess({
+      config: params.config,
+      unrestricted: params.gatewayClientScopes.includes("operator.admin")
+    });
+  }
+  const agentId = params.agentId ?? resolveDefaultAgentId(params.config);
+  const sandboxRuntime = params.sessionKey && params.resolveSandboxWorkspaceAuthority ? params.resolveSandboxWorkspaceAuthority({
+    config: params.config,
+    agentId,
+    sessionKey: params.sessionKey
+  }) : void 0;
+  if (sandboxRuntime?.sandboxed) {
+    return {
+      unrestricted: false,
+      roots: [resolveAgentWorkspaceDir(params.config, agentId)],
+      writable: sandboxRuntime.workspaceAccess === "rw"
+    };
+  }
+  const workspaceOnly = resolveAgentConfig(params.config, agentId)?.tools?.fs?.workspaceOnly ?? params.config.tools?.fs?.workspaceOnly;
+  return workspaceOnly === true ? {
+    unrestricted: false,
+    roots: [resolveAgentWorkspaceDir(params.config, agentId)],
+    writable: true
+  } : { unrestricted: true };
+}
+function resolveToolTaskfoldWorkspaceAccess(context, resolveSandboxWorkspaceAuthority) {
+  if (!context?.sandboxed && context?.fsPolicy?.workspaceOnly !== true) {
+    return { unrestricted: true };
+  }
+  const config = context.runtimeConfig ?? context.getRuntimeConfig?.() ?? context.config;
+  const sandboxRuntime = context.sandboxed && config && context.sessionKey && resolveSandboxWorkspaceAuthority ? resolveSandboxWorkspaceAuthority({
+    config,
+    agentId: context.agentId,
+    sessionKey: context.sessionKey
+  }) : void 0;
+  return {
+    unrestricted: false,
+    roots: context.workspaceDir ? [context.workspaceDir] : [],
+    writable: sandboxRuntime ? sandboxRuntime.workspaceAccess === "rw" : !context.sandboxed
+  };
+}
+async function canonicalizeTaskfoldWorkspaceAccess(access) {
+  if (access.unrestricted) {
+    return access;
+  }
+  const roots = Array.from(
+    new Set(
+      await Promise.all(
+        access.roots.map(async (root) => await canonicalPathFromExistingAncestor(root))
+      )
+    )
+  );
+  if (roots.length === 0) {
+    throw new Error("restricted workspace access has no allowed roots.");
+  }
+  return { unrestricted: false, roots, writable: access.writable };
+}
+function intersectTaskfoldWorkspaceAccess(left, right) {
+  if (left.unrestricted) {
+    return right;
+  }
+  if (right.unrestricted) {
+    return left;
+  }
+  const roots = /* @__PURE__ */ new Set();
+  for (const leftRoot of left.roots) {
+    for (const rightRoot of right.roots) {
+      if (leftRoot === rightRoot || isPathInside(leftRoot, rightRoot)) {
+        roots.add(rightRoot);
+      } else if (isPathInside(rightRoot, leftRoot)) {
+        roots.add(leftRoot);
+      }
+    }
+  }
+  if (roots.size === 0) {
+    throw new Error("workspace access does not overlap the card's persisted authority.");
+  }
+  return {
+    unrestricted: false,
+    roots: Array.from(roots),
+    writable: left.writable && right.writable
+  };
+}
+async function assertCanonicalTaskfoldPathAccess(candidate, access) {
+  if (access.unrestricted) {
+    return candidate;
+  }
+  for (const root of access.roots) {
+    const canonicalRoot = await canonicalPathFromExistingAncestor(root);
+    if (isPathInside(canonicalRoot, candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error("workspace path is outside the caller's allowed workspaces.");
+}
+async function assertCanonicalTaskfoldRootAccess(candidate, access) {
+  if (access.unrestricted) {
+    return candidate;
+  }
+  for (const root of access.roots) {
+    const canonicalRoot = await canonicalPathFromExistingAncestor(root);
+    if (canonicalRoot === candidate) {
+      return candidate;
+    }
+  }
+  throw new Error("workspace path must equal one of the caller's allowed workspace roots.");
+}
+async function assertPathAllowed(value, access) {
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  const candidate = await canonicalPathFromExistingAncestor(value.trim());
+  return await assertCanonicalTaskfoldPathAccess(candidate, access);
+}
+async function assertWorkspaceAllowed(value, access, options) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const workspace = value;
+  if (options?.sourceOnly) {
+    return await assertPathAllowed(workspace.sourcePath ?? workspace.path, access);
+  }
+  await assertPathAllowed(workspace.path, access);
+  await assertPathAllowed(workspace.sourcePath, access);
+  return void 0;
+}
+function readRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function containsTaskfoldWorkspaceMutation(value) {
+  const record = readRecord(value);
+  if (!record) {
+    return false;
+  }
+  if (Object.hasOwn(record, "workspace") || Object.hasOwn(record, "defaultWorkspace")) {
+    return true;
+  }
+  return containsTaskfoldWorkspaceMutation(record.patch) || containsTaskfoldWorkspaceMutation(readRecord(record.metadata)?.automation) || Array.isArray(record.children) && record.children.some((child) => containsTaskfoldWorkspaceMutation(child));
+}
+function withTaskfoldWorkspaceAccess(value, access) {
+  return { ...withoutTaskfoldWorkspaceAccess(value), workspaceAccess: access };
+}
+function withoutTaskfoldWorkspaceAccess(value) {
+  const record = readRecord(value) ?? {};
+  const { workspaceAccess: _untrustedWorkspaceAccess, ...rest } = record;
+  return rest;
+}
+function withTaskfoldDecomposeWorkspaceAccess(value, access) {
+  const record = withoutTaskfoldWorkspaceAccess(value);
+  return {
+    ...record,
+    ...Array.isArray(record.children) ? {
+      children: record.children.map((child) => withTaskfoldWorkspaceAccess(child, access))
+    } : {}
+  };
+}
+async function assertTaskfoldWorkspaceMutationAccess(value, access) {
+  if (access.unrestricted) {
+    return;
+  }
+  const record = readRecord(value);
+  if (!record) {
+    return;
+  }
+  await assertWorkspaceAllowed(record.workspace, access);
+  await assertWorkspaceAllowed(record.defaultWorkspace, access);
+  const patch = readRecord(record.patch);
+  if (patch) {
+    await assertTaskfoldWorkspaceMutationAccess(patch, access);
+  }
+  const metadata = readRecord(record.metadata);
+  const automation = readRecord(metadata?.automation);
+  if (automation) {
+    await assertTaskfoldWorkspaceMutationAccess(automation, access);
+  }
+  if (Array.isArray(record.children)) {
+    for (const child of record.children) {
+      await assertTaskfoldWorkspaceMutationAccess(child, access);
+    }
+  }
+}
+async function assertTaskfoldWorkspaceSourceAccess(workspace, access) {
+  return await assertWorkspaceAllowed(workspace, access, { sourceOnly: true });
+}
+function guardTaskfoldToolsForWorkspaceAccess(tools, context, resolveSandboxWorkspaceAuthority) {
+  const workspaceAccess = resolveToolTaskfoldWorkspaceAccess(
+    context,
+    resolveSandboxWorkspaceAuthority
+  );
+  return tools.map((tool) => ({
+    ...tool,
+    execute: async (toolCallId, rawParams, signal, onUpdate) => {
+      const canonicalAccess = await canonicalizeTaskfoldWorkspaceAccess(workspaceAccess);
+      await assertTaskfoldWorkspaceMutationAccess(rawParams, canonicalAccess);
+      const sanitizedParams = withoutTaskfoldWorkspaceAccess(rawParams);
+      const constrainedParams = tool.name === "taskfold_create" ? withTaskfoldWorkspaceAccess(sanitizedParams, canonicalAccess) : tool.name === "taskfold_decompose" ? withTaskfoldDecomposeWorkspaceAccess(sanitizedParams, canonicalAccess) : tool.name === "taskfold_specify" && containsTaskfoldWorkspaceMutation(sanitizedParams) ? withTaskfoldWorkspaceAccess(sanitizedParams, canonicalAccess) : sanitizedParams;
+      return await tool.execute(toolCallId, constrainedParams, signal, onUpdate);
+    }
+  }));
+}
+
+// src/backend/src/dispatcher-workspace.ts
+function managedWorktreeName(cardId) {
+  const suffix = cardId.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+  return `wb-${suffix}`.slice(0, 64).replace(/-$/, "");
+}
+async function cleanupTaskfoldRunWorktree(params) {
+  const card = (await params.store.list()).find(
+    (entry) => taskfoldCardMatchesLifecycleLink(entry, {
+      runId: params.runId,
+      sessionKey: params.targetSessionKey
+    })
+  );
+  const workspace = card?.metadata?.automation?.workspace;
+  if (!card || workspace?.kind !== "worktree" || !workspace.path) {
+    return;
+  }
+  await params.worktrees.removeIfLossless({
+    path: workspace.path,
+    // Must match the ownerKind/ownerId used when this worktree was created
+    // (card.id), or the host's ownership check silently refuses the removal.
+    ownerKind: "workboard",
+    ownerId: card.id
+  });
+}
+async function resolveDispatchWorkspaceAccess(params) {
+  const currentAccess = await canonicalizeTaskfoldWorkspaceAccess(
+    params.currentAccess ?? { unrestricted: true }
+  );
+  const persistedAccess = params.card.metadata?.automation?.workspaceAccess;
+  const workspace = params.card.metadata?.automation?.workspace;
+  let targetWorkspace;
+  if (!persistedAccess?.unrestricted || !currentAccess.unrestricted) {
+    const resolved = params.resolveAgentWorkspace?.(params.card.agentId);
+    targetWorkspace = resolved ? await canonicalPathFromExistingAncestor2(resolved) : void 0;
+  }
+  const cardAccess = persistedAccess ? await canonicalizeTaskfoldWorkspaceAccess(persistedAccess) : currentAccess.unrestricted ? !workspace || workspace.kind === "scratch" ? currentAccess : (() => {
+    throw new Error(
+      "card workspace authority is unknown; re-save its workspace with current permissions before dispatch."
+    );
+  })() : currentAccess;
+  const workspaceAccess = intersectTaskfoldWorkspaceAccess(cardAccess, currentAccess);
+  if (!workspaceAccess.unrestricted && !workspaceAccess.writable) {
+    throw new Error(
+      "card workspace authority is read-only; manual movement is allowed but worker dispatch requires write access."
+    );
+  }
+  return {
+    workspaceAccess,
+    ...targetWorkspace ? { targetWorkspace } : {},
+    persistWorkspaceAccess: !persistedAccess
+  };
+}
+async function assertRestrictedTaskfoldTarget(params) {
+  const resolved = params.resolveAgentWorkspaceRuntime ? await params.resolveAgentWorkspaceRuntime(
+    params.agentId,
+    params.sessionKey,
+    params.root,
+    params.modelProvider,
+    params.modelId
+  ) : {
+    sandboxed: false,
+    workspaceAccess: { unrestricted: true }
+  };
+  const targetRuntime = {
+    ...resolved,
+    workspaceAccess: await canonicalizeTaskfoldWorkspaceAccess(resolved.workspaceAccess)
+  };
+  if (!targetRuntime.sandboxed) {
+    throw new Error("target agent is not sandboxed for this restricted Taskfold card.");
+  }
+  if (targetRuntime.confinementError) {
+    throw new Error(targetRuntime.confinementError);
+  }
+  if (targetRuntime.workspaceAccess.unrestricted || !targetRuntime.workspaceAccess.writable) {
+    throw new Error("target agent does not have writable workspace-only access.");
+  }
+  await assertCanonicalTaskfoldRootAccess(params.root, targetRuntime.workspaceAccess);
+}
+
+// src/backend/src/dispatcher.ts
+import path from "node:path";
+import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
+import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
+import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
+
 // src/backend/src/worker-prompt.ts
 var RECENT_ATTEMPTS = 8;
 var FAILED_ATTEMPT_DETAIL = 3;
@@ -2776,34 +2815,12 @@ async function createManagedTaskfoldWorktree(params) {
 function normalizePositiveInteger2(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
 }
-function sanitizeSessionSegment(value, fallback) {
-  const sanitized = (value ?? fallback).trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return (sanitized || fallback).slice(0, 96);
-}
 function cardIsArchived(card) {
   return Boolean(card.metadata?.archivedAt);
 }
 function cardHasActiveClaim(card, now) {
   const claim = card.metadata?.claim;
   return Boolean(claim && isFutureDateTimestampMs(claim.expiresAt, { nowMs: now }));
-}
-function buildSessionKey(card) {
-  const boardId = sanitizeSessionSegment(cardBoardId(card), "default");
-  const cardId = sanitizeSessionSegment(card.id, "card");
-  const suffix = `subagent:taskfold-${boardId}-${cardId}`;
-  return card.agentId ? `agent:${sanitizeSessionSegment(card.agentId, "agent")}:${suffix}` : suffix;
-}
-function buildExecution(params) {
-  return {
-    id: params.card.execution?.id ?? `${params.card.id}:agent-session`,
-    kind: "agent-session",
-    mode: "autonomous",
-    status: "running",
-    sessionKey: params.sessionKey,
-    runId: params.runId,
-    startedAt: params.now,
-    updatedAt: params.now
-  };
 }
 async function materializeWorkspace(params) {
   const workspace = params.card.metadata?.automation?.workspace;
@@ -2951,6 +2968,7 @@ async function runTaskfoldDispatch(params) {
     let materializedWorkspace;
     let implicitWorkspaceCwd;
     let runStarted = false;
+    let openedLaunch;
     const requestedWorkspace = card.metadata?.automation?.workspace;
     let workspaceAccess;
     let targetWorkspace;
@@ -3068,6 +3086,11 @@ async function runTaskfoldDispatch(params) {
       if (materializedWorkspace) {
         await params.store.update(card.id, { workspace: materializedWorkspace, workspaceAccess });
       }
+      const opened = await params.store.openExecutionLaunch(card.id, {
+        requestedSessionKey: sessionKey,
+        scope: { ownerId, token: claimValue }
+      });
+      openedLaunch = opened.launch;
       const run = await params.subagent.run({
         sessionKey,
         message: buildWorkerPrompt({
@@ -3090,29 +3113,39 @@ async function runTaskfoldDispatch(params) {
       runStarted = true;
       acceptedStarts += 1;
       startedOwners.add(ownerId);
-      const updated = await params.store.update(card.id, {
-        sessionKey,
+      const acceptedSessionKey = run.sessionKey ?? sessionKey;
+      const accepted = await params.store.acceptExecutionLaunch(card.id, {
+        expectedLaunch: openedLaunch,
+        // Fresh, not the batch-start `now`: `openExecutionLaunch` stamps
+        // `preparedAt` with its own `Date.now()` moments earlier in this same
+        // iteration, which the batch-start value can already lag behind.
+        acceptedAt: Date.now(),
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
-        execution: buildExecution({
-          card: claimed.card,
-          sessionKey,
-          runId: run.runId,
-          now
-        }),
-        ...materializedWorkspace ? { workspace: materializedWorkspace } : {}
+        ...run.runtime?.harness ? { engine: run.runtime.harness } : {},
+        ...run.runtime?.model ? { model: run.runtime.model } : {}
       });
+      if (!accepted) {
+        await params.store.addWorkerLog(card.id, {
+          level: "warning",
+          message: `Dispatcher started subagent run ${run.runId} but the prepared launch no longer matched the card; association was not recorded.`,
+          sessionKey: acceptedSessionKey,
+          runId: run.runId
+        }).catch(() => void 0);
+        continue;
+      }
       started.push({
-        cardId: updated.id,
-        title: updated.title,
-        sessionKey,
+        cardId: accepted.id,
+        title: accepted.title,
+        sessionKey: acceptedSessionKey,
         runId: run.runId
       });
       await params.store.addWorkerLog(
-        updated.id,
+        accepted.id,
         {
           level: "info",
           message: `Dispatcher started subagent run ${run.runId}.`,
-          sessionKey,
+          sessionKey: acceptedSessionKey,
           runId: run.runId
         },
         { ownerId, token: claimValue }
@@ -3134,20 +3167,27 @@ async function runTaskfoldDispatch(params) {
       }
       const message = formatErrorMessage(error);
       startFailures.push({ cardId: card.id, title: card.title, error: message });
-      if (!claimValue || runStarted) {
+      if (runStarted) {
         continue;
       }
-      try {
-        await params.store.block(
-          card.id,
-          {
-            ownerId,
-            token: claimValue,
-            reason: `Dispatcher could not start worker: ${message}`
-          },
-          { ownerId, token: claimValue }
-        );
-      } catch {
+      if (openedLaunch) {
+        await params.store.failExecutionLaunch(card.id, {
+          expectedLaunch: openedLaunch,
+          reason: `Dispatcher could not start worker: ${message}`
+        }).catch(() => void 0);
+      } else if (claimValue) {
+        try {
+          await params.store.block(
+            card.id,
+            {
+              ownerId,
+              token: claimValue,
+              reason: `Dispatcher could not start worker: ${message}`
+            },
+            { ownerId, token: claimValue }
+          );
+        } catch {
+        }
       }
     }
   }
@@ -3363,6 +3403,7 @@ async function startTaskfoldCardExecution(params) {
     let claimToken;
     let materializedWorkspace;
     let runStarted = false;
+    let openedLaunch;
     const previousWorkspace = latest.metadata?.automation?.workspace;
     try {
       const claimed = await params.store.claimExecution(latest.id, {
@@ -3415,6 +3456,11 @@ async function startTaskfoldCardExecution(params) {
       });
       const current = await resolveCard(params.store, latest.id);
       const context = await params.store.buildWorkerContext(current.id);
+      const opened = await params.store.openExecutionLaunch(current.id, {
+        requestedSessionKey: sessionKey,
+        scope: { ownerId, token: claimToken }
+      });
+      openedLaunch = opened.launch;
       const run = await params.options.runtime.subagent.run({
         sessionKey,
         message: buildWorkerPrompt({
@@ -3433,32 +3479,29 @@ async function startTaskfoldCardExecution(params) {
         cwd: worktreePath
       });
       runStarted = true;
-      const now = Date.now();
-      const updated = await params.store.update(current.id, {
-        sessionKey,
+      const acceptedSessionKey = run.sessionKey ?? sessionKey;
+      const accepted = await params.store.acceptExecutionLaunch(current.id, {
+        expectedLaunch: openedLaunch,
+        acceptedAt: Date.now(),
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
-        execution: buildExecution({
-          card: current,
-          sessionKey,
-          runId: run.runId,
-          now
-        }),
-        workspace: materializedWorkspace,
-        workspaceAccess: source.workspaceAccess
+        ...run.runtime?.harness ? { engine: run.runtime.harness } : {},
+        ...run.runtime?.model ? { model: run.runtime.model } : {}
       });
+      const updated = accepted ?? await resolveCard(params.store, current.id);
       await params.store.addWorkerLog(
         updated.id,
         {
-          level: "info",
-          message: `Card execution started subagent run ${run.runId}.`,
-          sessionKey,
+          level: accepted ? "info" : "warning",
+          message: accepted ? `Card execution started subagent run ${run.runId}.` : `Card execution started subagent run ${run.runId} but the prepared launch no longer matched the card; association was not recorded.`,
+          sessionKey: acceptedSessionKey,
           runId: run.runId
         },
-        { ownerId, token: claimToken }
+        accepted ? { ownerId, token: claimToken } : void 0
       ).catch(() => void 0);
       return {
         card: updated,
-        sessionKey,
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
         worktreePath,
         branch: worktree.branch
@@ -3475,7 +3518,12 @@ async function startTaskfoldCardExecution(params) {
         }).catch(() => false);
         await params.store.update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace }).catch(() => void 0);
       }
-      if (claimToken && !runStarted) {
+      if (!runStarted && openedLaunch) {
+        await params.store.failExecutionLaunch(latest.id, {
+          expectedLaunch: openedLaunch,
+          reason: formatErrorMessage2(error)
+        }).catch(() => void 0);
+      } else if (claimToken && !runStarted) {
         await params.store.releaseClaim(latest.id, { ownerId, token: claimToken }).catch(() => void 0);
       }
       throw error;
@@ -8192,14 +8240,28 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       });
     });
   }
+  /**
+   * Resolves a run's terminal outcome onto whichever card it belongs to
+   * (edge ⑪, 需求/15.7-会话生命周期设计.md §5). `runId` alone was sufficient
+   * before the launch state machine, when a card's `runId` was always the
+   * host's own. Now a card can still hold `openExecutionLaunch`'s provisional
+   * placeholder if a Gateway restart landed between `prepared` and
+   * `accepted` — a host-issued `runId` the card never recorded would then
+   * silently match nothing. `targetSessionKey` (see `session-link.ts`) is the
+   * fallback for exactly that case; at least one of the two is required.
+   */
   async finishExecutionForRun(runId, input = {}) {
     const normalizedRunId = normalizeOptionalString(runId);
-    if (!normalizedRunId) {
-      throw new Error("runId is required.");
+    const targetSessionKey = normalizeOptionalString(input.targetSessionKey);
+    if (!normalizedRunId && !targetSessionKey) {
+      throw new Error("runId or targetSessionKey is required.");
     }
     return await this.enqueueMutation(async () => {
       const existing = (await this.list()).find(
-        (candidate) => cardRunId(candidate) === normalizedRunId
+        (candidate) => taskfoldCardMatchesLifecycleLink(candidate, {
+          runId: normalizedRunId,
+          sessionKey: targetSessionKey
+        })
       );
       if (!existing) {
         return void 0;
@@ -11069,6 +11131,9 @@ function taskfoldRunEvidence(params) {
   if (!claimsRunning(card) || !cardSessionKey(card)) {
     return "unlinked";
   }
+  if (card.metadata?.automation?.launch?.phase === "prepared") {
+    return "launching";
+  }
   const executionStatus = card.execution?.status;
   if (executionStatus && TERMINAL_EXECUTION_STATUSES.has(executionStatus)) {
     return "finished";
@@ -11092,7 +11157,7 @@ function staleRunState(card, now) {
 function getTaskfoldLifecycle(params) {
   const { card, now } = params;
   const state = taskfoldRunEvidence({ card, now });
-  if (state === "unlinked") {
+  if (state === "unlinked" || state === "launching") {
     return { state };
   }
   const sourceUpdatedAt = taskfoldLastActivityAt(card);
@@ -11122,6 +11187,9 @@ function executionStatusForLifecycle(lifecycle) {
     // overwrite a real result (`done`) with a coarser one.
     case "finished":
     case "unlinked":
+    // A prepared launch's execution status is a placeholder the host has not
+    // accepted yet; there is no run outcome to reflect.
+    case "launching":
       return void 0;
   }
 }
@@ -11146,6 +11214,7 @@ function shouldSyncExecutionStatus(card, targetStatus) {
 
 // src/backend/src/reconciler.ts
 var RECONCILE_INTERVAL_MS = 15e3;
+var LAUNCH_ACCEPT_GRACE_MS = 10 * 60 * 1e3;
 function hasRunningAttempt(card) {
   return Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
@@ -11153,6 +11222,17 @@ function activeCards(cards) {
   return cards.filter(
     (card) => !card.metadata?.archivedAt && (card.status === "running" || card.execution?.status === "running" || hasRunningAttempt(card) || Boolean(card.metadata?.claim))
   );
+}
+async function failStaleLaunch(params) {
+  const { store, card, now } = params;
+  const launch = card.metadata?.automation?.launch;
+  if (launch?.phase !== "prepared" || now - launch.preparedAt <= LAUNCH_ACCEPT_GRACE_MS) {
+    return false;
+  }
+  return await store.failExecutionLaunch(card.id, {
+    expectedLaunch: launch,
+    reason: "Gateway did not accept this launch within the acceptance window."
+  });
 }
 async function applyLifecycle(params) {
   const { store, card, now } = params;
@@ -11209,11 +11289,16 @@ async function reconcileTaskfoldCards(params) {
     updated: 0,
     finished: 0,
     reclaimed: 0,
+    staleLaunches: 0,
     skipped: 0
   };
   for (const card of activeCards(await params.store.list())) {
     outcome.checked += 1;
     try {
+      if (await failStaleLaunch({ store: params.store, card, now })) {
+        outcome.staleLaunches += 1;
+        continue;
+      }
       if (await finishOrphanedRun({ ...params, card, now })) {
         outcome.finished += 1;
         continue;
@@ -11262,9 +11347,9 @@ function createTaskfoldReconcilerService(params) {
             )
           });
           lastFailure = "";
-          if (outcome.updated || outcome.finished || outcome.reclaimed) {
+          if (outcome.updated || outcome.finished || outcome.reclaimed || outcome.staleLaunches) {
             ctx.logger.info(
-              `taskfold reconciled ${outcome.checked} active cards: ${outcome.updated} updated, ${outcome.finished} orphaned runs closed, ${outcome.reclaimed} claims reclaimed, ${outcome.skipped} skipped.`
+              `taskfold reconciled ${outcome.checked} active cards: ${outcome.updated} updated, ${outcome.finished} orphaned runs closed, ${outcome.reclaimed} claims reclaimed, ${outcome.staleLaunches} stale launches failed, ${outcome.skipped} skipped.`
             );
           }
         } catch (error) {
@@ -16828,18 +16913,18 @@ var index_default = definePluginEntry({
     api.registerService(createTaskfoldChangeEventService(store));
     api.registerService(createTaskfoldReconcilerService({ store, runtime: api.runtime }));
     api.on("subagent_ended", async (event) => {
-      if (event.runId) {
-        await store.finishExecutionForRun(event.runId, {
-          outcome: event.outcome,
-          endedAt: event.endedAt,
-          reason: event.error ?? event.reason
-        });
-        await cleanupTaskfoldRunWorktree({
-          store,
-          worktrees: api.runtime.worktrees,
-          runId: event.runId
-        });
-      }
+      await store.finishExecutionForRun(event.runId, {
+        outcome: event.outcome,
+        endedAt: event.endedAt,
+        reason: event.error ?? event.reason,
+        targetSessionKey: event.targetSessionKey
+      });
+      await cleanupTaskfoldRunWorktree({
+        store,
+        worktrees: api.runtime.worktrees,
+        runId: event.runId,
+        targetSessionKey: event.targetSessionKey
+      });
     });
     api.registerCli(
       async ({ program }) => {

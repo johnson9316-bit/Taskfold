@@ -86,6 +86,19 @@ async function createRunningCard(
   });
 }
 
+/** A card mid-launch: claimed and holding a `prepared` launch, not yet accepted. */
+async function createPreparedLaunchCard(
+  store: TaskfoldStore,
+  sessionKey = "subagent:taskfold-default-launch",
+) {
+  const created = await store.create({ title: "Prepared launch", status: "ready" });
+  const claimed = await store.claimExecution(created.id, {
+    ownerId: "owner-a",
+    expectedRevision: created.revision,
+  });
+  return await store.openExecutionLaunch(claimed.card.id, { requestedSessionKey: sessionKey });
+}
+
 describe("Taskfold reconciler", () => {
   it("leaves a card alone while its worker is still heartbeating", async () => {
     const store = createStore();
@@ -223,6 +236,43 @@ describe("Taskfold reconciler", () => {
 
     expect(outcome.reclaimed).toBe(1);
     expect((await store.get(created.id))?.metadata?.claim).toBeUndefined();
+  });
+
+  it("fails a launch the host has not accepted within the acceptance grace window (regla R)", async () => {
+    const store = createStore();
+    const { card, launch } = await createPreparedLaunchCard(store);
+
+    const outcome = await reconcileTaskfoldCards({
+      store,
+      runtime: createRuntime(),
+      now: launch.preparedAt + 11 * 60 * 1000,
+    });
+
+    expect(outcome).toMatchObject({ checked: 1, staleLaunches: 1, finished: 0 });
+    const failed = await store.get(card.id);
+    expect(failed?.status).toBe("blocked");
+    expect(failed?.sessionKey).toBeUndefined();
+    expect(failed?.runId).toBeUndefined();
+    expect(failed?.execution).toBeUndefined();
+    expect(failed?.metadata?.claim).toBeUndefined();
+    expect(failed?.metadata?.automation?.launch).toMatchObject({ phase: "failed" });
+  });
+
+  it("leaves a launch inside the acceptance grace window untouched", async () => {
+    const store = createStore();
+    const { card, launch } = await createPreparedLaunchCard(store);
+
+    const outcome = await reconcileTaskfoldCards({
+      store,
+      runtime: createRuntime(),
+      now: launch.preparedAt + 9 * 60 * 1000,
+    });
+
+    expect(outcome.staleLaunches).toBe(0);
+    expect(outcome.finished).toBe(0);
+    const stillPrepared = await store.get(card.id);
+    expect(stillPrepared?.metadata?.automation?.launch).toMatchObject({ phase: "prepared" });
+    expect(stillPrepared?.metadata?.claim).toBeDefined();
   });
 
   it("does not close a run that never started one", async () => {

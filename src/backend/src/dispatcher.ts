@@ -18,13 +18,20 @@ import {
 import { cardBoardId } from "./store-card-helpers.js";
 import { buildWorkerPrompt } from "./worker-prompt.js";
 import { isTaskfoldClaimReclaimable } from "./store-constants.js";
+import { buildSessionKey } from "./session-link.js";
 import { TaskfoldStore, type TaskfoldDispatchResult } from "./store.js";
+import type { TaskfoldPreparedLaunch } from "./store-workflow.js";
 import {
   assertCanonicalTaskfoldRootAccess,
   assertTaskfoldWorkspaceSourceAccess,
   TASKFOLD_REQUIRED_WORKER_TOOLS,
   type TaskfoldWorkspaceAccess,
 } from "./workspace-access.js";
+
+// Re-exported for existing importers (test/host-contract.test.ts among them):
+// the derivation now lives in session-link.ts, centralized alongside the
+// matching logic that consumes it (需求/15.7 §7 步骤 5).
+export { buildSessionKey };
 
 const DEFAULT_DISPATCH_MAX_STARTS = 3;
 const DEFAULT_DISPATCH_OWNER = "taskfold-dispatcher";
@@ -94,15 +101,6 @@ function normalizePositiveInteger(value: number | undefined, fallback: number): 
     : fallback;
 }
 
-function sanitizeSessionSegment(value: string | undefined, fallback: string): string {
-  const sanitized = (value ?? fallback)
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return (sanitized || fallback).slice(0, 96);
-}
-
 function cardIsArchived(card: TaskfoldCard): boolean {
   return Boolean(card.metadata?.archivedAt);
 }
@@ -110,13 +108,6 @@ function cardIsArchived(card: TaskfoldCard): boolean {
 function cardHasActiveClaim(card: TaskfoldCard, now: number): boolean {
   const claim = card.metadata?.claim;
   return Boolean(claim && isFutureDateTimestampMs(claim.expiresAt, { nowMs: now }));
-}
-
-export function buildSessionKey(card: TaskfoldCard): string {
-  const boardId = sanitizeSessionSegment(cardBoardId(card), "default");
-  const cardId = sanitizeSessionSegment(card.id, "card");
-  const suffix = `subagent:taskfold-${boardId}-${cardId}`;
-  return card.agentId ? `agent:${sanitizeSessionSegment(card.agentId, "agent")}:${suffix}` : suffix;
 }
 
 export function buildExecution(params: {
@@ -336,6 +327,7 @@ async function runTaskfoldDispatch(
     let materializedWorkspace: TaskfoldWorkspace | undefined;
     let implicitWorkspaceCwd: string | undefined;
     let runStarted = false;
+    let openedLaunch: TaskfoldPreparedLaunch | undefined;
     const requestedWorkspace = card.metadata?.automation?.workspace;
     let workspaceAccess: TaskfoldWorkspaceAccess;
     let targetWorkspace: string | undefined;
@@ -460,6 +452,16 @@ async function runTaskfoldDispatch(
       if (materializedWorkspace) {
         await params.store.update(card.id, { workspace: materializedWorkspace, workspaceAccess });
       }
+      // Opens the launch window (需求/15.7-会话生命周期设计.md §5 边①) after the
+      // claim is won but before the host is asked to admit the run, so a
+      // process death in that window leaves durable evidence instead of a
+      // silently orphaned claim (see §2.4). Scoped to the claim we just won,
+      // matching every other claim-scoped mutator below.
+      const opened = await params.store.openExecutionLaunch(card.id, {
+        requestedSessionKey: sessionKey,
+        scope: { ownerId, token: claimValue },
+      });
+      openedLaunch = opened.launch;
       const run = await params.subagent.run({
         sessionKey,
         message: buildWorkerPrompt({
@@ -482,32 +484,52 @@ async function runTaskfoldDispatch(
       runStarted = true;
       acceptedStarts += 1;
       startedOwners.add(ownerId);
-      const updated = await params.store.update(card.id, {
-        sessionKey,
+      // §5 边②: `SubagentRunResult.sessionKey` is present at runtime on 2026.9.4
+      // but the 2026.7.1-2 type Taskfold compiles against only declares
+      // `{ runId }` (需求/15.7 §9 U2) — read it defensively rather than assume it.
+      const acceptedSessionKey = run.sessionKey ?? sessionKey;
+      const accepted = await params.store.acceptExecutionLaunch(card.id, {
+        expectedLaunch: openedLaunch,
+        // Fresh, not the batch-start `now`: `openExecutionLaunch` stamps
+        // `preparedAt` with its own `Date.now()` moments earlier in this same
+        // iteration, which the batch-start value can already lag behind.
+        acceptedAt: Date.now(),
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
-        execution: buildExecution({
-          card: claimed.card,
-          sessionKey,
-          runId: run.runId,
-          now,
-        }),
-        ...(materializedWorkspace ? { workspace: materializedWorkspace } : {}),
+        ...(run.runtime?.harness ? { engine: run.runtime.harness } : {}),
+        ...(run.runtime?.model ? { model: run.runtime.model } : {}),
       });
+      if (!accepted) {
+        // The prepared launch no longer matches the card by the time
+        // subagent.run() resolved — most likely reconciler's regla R
+        // (failStaleLaunch) already failed it while the run was in flight
+        // (§5 边④). The worker did start; do not resurrect the association or
+        // report a start failure for a run that did start.
+        await params.store
+          .addWorkerLog(card.id, {
+            level: "warning",
+            message: `Dispatcher started subagent run ${run.runId} but the prepared launch no longer matched the card; association was not recorded.`,
+            sessionKey: acceptedSessionKey,
+            runId: run.runId,
+          })
+          .catch(() => undefined);
+        continue;
+      }
       started.push({
-        cardId: updated.id,
-        title: updated.title,
-        sessionKey,
+        cardId: accepted.id,
+        title: accepted.title,
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
       });
       // A worker already accepted this run. Logging must never revoke its
       // claim, block live execution, or reopen the owner's capacity slot.
       await params.store
         .addWorkerLog(
-          updated.id,
+          accepted.id,
           {
             level: "info",
             message: `Dispatcher started subagent run ${run.runId}.`,
-            sessionKey,
+            sessionKey: acceptedSessionKey,
             runId: run.runId,
           },
           { ownerId, token: claimValue },
@@ -537,21 +559,33 @@ async function runTaskfoldDispatch(
       }
       const message = formatErrorMessage(error);
       startFailures.push({ cardId: card.id, title: card.title, error: message });
-      if (!claimValue || runStarted) {
+      if (runStarted) {
         continue;
       }
-      try {
-        await params.store.block(
-          card.id,
-          {
-            ownerId,
-            token: claimValue,
+      if (openedLaunch) {
+        // §5 边③: the launch was opened but subagent.run() itself rejected.
+        // failExecutionLaunch clears claim/sessionKey/runId/execution in one
+        // step, replacing the pre-launch block() path below.
+        await params.store
+          .failExecutionLaunch(card.id, {
+            expectedLaunch: openedLaunch,
             reason: `Dispatcher could not start worker: ${message}`,
-          },
-          { ownerId, token: claimValue },
-        );
-      } catch {
-        // Leave the original start failure visible; dispatch will diagnose stale claims later.
+          })
+          .catch(() => undefined);
+      } else if (claimValue) {
+        try {
+          await params.store.block(
+            card.id,
+            {
+              ownerId,
+              token: claimValue,
+              reason: `Dispatcher could not start worker: ${message}`,
+            },
+            { ownerId, token: claimValue },
+          );
+        } catch {
+          // Leave the original start failure visible; dispatch will diagnose stale claims later.
+        }
       }
     }
   }

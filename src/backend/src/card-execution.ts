@@ -9,14 +9,12 @@ import {
   managedWorktreeName,
   type ResolveAgentWorkspaceRuntime,
 } from "./dispatcher-workspace.js";
-import {
-  buildExecution,
-  buildSessionKey,
-  createManagedTaskfoldWorktree,
-} from "./dispatcher.js";
+import { createManagedTaskfoldWorktree } from "./dispatcher.js";
+import { buildSessionKey } from "./session-link.js";
 import { buildWorkerPrompt } from "./worker-prompt.js";
 import { cardBoardId, isRequirementCard } from "./store-card-helpers.js";
 import { TaskfoldStore } from "./store.js";
+import type { TaskfoldPreparedLaunch } from "./store-workflow.js";
 import {
   assertTaskfoldWorkspaceSourceAccess,
   canonicalizeTaskfoldWorkspaceAccess,
@@ -302,6 +300,7 @@ export async function startTaskfoldCardExecution(params: {
     let claimToken: string | undefined;
     let materializedWorkspace: TaskfoldWorkspace | undefined;
     let runStarted = false;
+    let openedLaunch: TaskfoldPreparedLaunch | undefined;
     const previousWorkspace = latest.metadata?.automation?.workspace;
     try {
       const claimed = await params.store.claimExecution(latest.id, {
@@ -356,6 +355,14 @@ export async function startTaskfoldCardExecution(params: {
       });
       const current = await resolveCard(params.store, latest.id);
       const context = await params.store.buildWorkerContext(current.id);
+      // Opens the launch window (需求/15.7-会话生命周期设计.md §5 边①) after the
+      // claim is won but before the host is asked to admit the run — the same
+      // edge dispatcher.ts opens, scoped to the claim this call just won.
+      const opened = await params.store.openExecutionLaunch(current.id, {
+        requestedSessionKey: sessionKey,
+        scope: { ownerId, token: claimToken },
+      });
+      openedLaunch = opened.launch;
       const run = await params.options.runtime.subagent.run({
         sessionKey,
         message: buildWorkerPrompt({
@@ -374,34 +381,40 @@ export async function startTaskfoldCardExecution(params: {
         cwd: worktreePath,
       });
       runStarted = true;
-      const now = Date.now();
-      const updated = await params.store.update(current.id, {
-        sessionKey,
+      // §5 边②: `SubagentRunResult.sessionKey` is present at runtime on
+      // 2026.9.4 but the 2026.7.1-2 type Taskfold compiles against only
+      // declares `{ runId }` (需求/15.7 §9 U2) — read it defensively.
+      const acceptedSessionKey = run.sessionKey ?? sessionKey;
+      const accepted = await params.store.acceptExecutionLaunch(current.id, {
+        expectedLaunch: openedLaunch,
+        acceptedAt: Date.now(),
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
-        execution: buildExecution({
-          card: current,
-          sessionKey,
-          runId: run.runId,
-          now,
-        }),
-        workspace: materializedWorkspace,
-        workspaceAccess: source.workspaceAccess,
+        ...(run.runtime?.harness ? { engine: run.runtime.harness } : {}),
+        ...(run.runtime?.model ? { model: run.runtime.model } : {}),
       });
+      // Falls back to the latest card when the prepared launch no longer
+      // matched (an unlikely concurrent-redispatch race, §5 边④/⑥): the worker
+      // did start, so this must return a result rather than throw and trigger
+      // the cleanup below for a run that is actually live.
+      const updated = accepted ?? (await resolveCard(params.store, current.id));
       await params.store
         .addWorkerLog(
           updated.id,
           {
-            level: "info",
-            message: `Card execution started subagent run ${run.runId}.`,
-            sessionKey,
+            level: accepted ? "info" : "warning",
+            message: accepted
+              ? `Card execution started subagent run ${run.runId}.`
+              : `Card execution started subagent run ${run.runId} but the prepared launch no longer matched the card; association was not recorded.`,
+            sessionKey: acceptedSessionKey,
             runId: run.runId,
           },
-          { ownerId, token: claimToken },
+          accepted ? { ownerId, token: claimToken } : undefined,
         )
         .catch(() => undefined);
       return {
         card: updated,
-        sessionKey,
+        sessionKey: acceptedSessionKey,
         runId: run.runId,
         worktreePath,
         branch: worktree.branch,
@@ -422,7 +435,18 @@ export async function startTaskfoldCardExecution(params: {
           .update(latest.id, { workspace: previousWorkspace ?? source.sourceWorkspace })
           .catch(() => undefined);
       }
-      if (claimToken && !runStarted) {
+      if (!runStarted && openedLaunch) {
+        // §5 边③: the launch was opened but subagent.run() itself rejected.
+        // failExecutionLaunch clears the claim along with
+        // sessionKey/runId/execution, replacing the pre-launch releaseClaim()
+        // path below.
+        await params.store
+          .failExecutionLaunch(latest.id, {
+            expectedLaunch: openedLaunch,
+            reason: formatErrorMessage(error),
+          })
+          .catch(() => undefined);
+      } else if (claimToken && !runStarted) {
         await params.store
           .releaseClaim(latest.id, { ownerId, token: claimToken })
           .catch(() => undefined);

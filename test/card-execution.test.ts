@@ -210,9 +210,14 @@ describe("Taskfold native card execution", () => {
             path: started.worktreePath,
             sourcePath: checkout,
           },
+          // Accepted through the launch state machine (需求/15.7 步骤 3), not a
+          // direct store.update() of sessionKey/runId/execution.
+          launch: { phase: "accepted", acceptedRunId: "run-1" },
         },
       },
     });
+    // Rekeyed the provisional attempt in place rather than adding a second one.
+    expect(started.card.metadata?.attempts).toHaveLength(1);
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({
         cwd: started.worktreePath,
@@ -275,6 +280,50 @@ describe("Taskfold native card execution", () => {
       status: "stopped",
       runId: "run-2",
     });
+  });
+
+  it("fails the launch and clears the execution association when subagent.run() rejects after prepare", async () => {
+    const store = createStore();
+    const checkout = createGitCheckout();
+    const card = await createProjectCard(store, checkout);
+    const run = vi.fn(async () => {
+      throw new Error("host refused admission");
+    });
+    const options = executionOptions({
+      worktreeRoot: path.join(checkout, ".taskfold-worktrees"),
+      run,
+      taskRunId: () => "run-unused",
+    });
+    const prepared = await prepareTaskfoldCardExecution({ store, id: card.id, options });
+
+    await expect(
+      startTaskfoldCardExecution({
+        store,
+        id: card.id,
+        expectedRevision: prepared.expectedRevision,
+        options,
+      }),
+    ).rejects.toThrow("host refused admission");
+
+    const failed = await store.get(card.id);
+    // failExecutionLaunch (需求/15.7 §5 边③) always drives the card to `blocked`,
+    // even here where it started from `done` — a known, flagged consequence of
+    // wiring the same launch-failure edge into this ad-hoc re-run surface; see
+    // the task report for 需求/15.7 步骤 3.
+    expect(failed?.status).toBe("blocked");
+    expect(failed?.sessionKey).toBeUndefined();
+    expect(failed?.runId).toBeUndefined();
+    expect(failed?.execution).toBeUndefined();
+    expect(failed?.metadata?.claim).toBeUndefined();
+    expect(failed?.metadata?.attempts?.at(-1)).toMatchObject({ status: "blocked" });
+    expect(failed?.metadata?.automation?.launch).toMatchObject({
+      phase: "failed",
+      reason: expect.stringContaining("host refused admission"),
+    });
+    // The managed worktree created before the launch was opened must not leak.
+    expect(
+      (options.runtime.worktrees.removeIfLossless as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBeGreaterThan(0);
   });
 
   it("finishes a native run without inferring a Card status change", async () => {
