@@ -430,3 +430,65 @@ supported access path today. Longer-term, `需求/15-上游2026.9.4差异评估.
 item 9 (migrate to native `controlUi` injection) would remove the need to open
 a second connection under a borrowed client id at all, rather than relying on
 the `buildId: "dev"` exemption to keep it working.
+
+## Native Control UI injection admitted for a non-bundled plugin — September 18, 2026
+
+Live-host verification of the first implementation step of the Control UI
+migration (see `需求/15.9-ControlUI注入调查.md`). Host: OpenClaw `2026.9.4`
+(`3a9d69d`), Taskfold loaded from `plugins.load.paths`, `origin="config"`,
+trust `reason=record-missing`.
+
+The question this answered: a non-bundled plugin cannot obtain the `bundled`
+origin, so does native Control UI injection admit it at all? The gate is one
+line — `isControlUiPluginAllowed()` in `github-user-identity-D1LIz6kl.mjs:42-44`:
+
+```js
+return plugin.origin === "bundled"
+  || getRuntimeConfigSnapshot()?.gateway?.controlUi?.experimental?.customPlugins === true;
+```
+
+Steps taken: backed up `~/.openclaw/openclaw.json`, merged
+`gateway.controlUi.experimental.customPlugins: true` into the existing
+`gateway.controlUi` block **without removing `embedSandbox: "trusted"`** (the
+iframe path stays usable as a fallback), restarted the Gateway. The host
+detected the change on its own and logged `[reload] config change requires
+gateway restart (gateway.controlUi.experimental) — deferring until 2 gateway
+request(s) complete`, confirming this key is restart-scoped, not hot-reloadable.
+
+Results:
+
+- `openclaw plugins inspect taskfold --runtime` reports `Status: loaded` with
+  only the expected `record-missing` trust WARN. Tools, CLI commands and
+  gateway methods are all still listed — which independently proves the new
+  `controlUi` manifest field passed validation, because a rejected `controlUi`
+  makes `loadPluginManifest()` return `{ok:false}` and discards the **entire**
+  manifest (`manifest-BRq2TbZH.mjs:1198-1203`,
+  `discovery-DqH5VASi.mjs:773-777`) rather than degrading gracefully.
+- `--json` output carries `controlUi = {"entry":"dist/control-ui/index.js"}`.
+- `GET /__openclaw__/control-ui-config.json` lists Taskfold **alongside the
+  bundled workboard, in identical form**:
+  `{"pluginId":"taskfold","path":"/__openclaw__/plugins/control-ui/taskfold/","match":"prefix"}`.
+  That array is produced by filtering plugins through
+  `isControlUiPluginAllowed()`, so Taskfold's presence in it is the direct
+  evidence that admission succeeded. `pluginAssetsRequireAuth` is `true`.
+- Gateway log carries no rejection (no `Custom plugin UI is disabled`).
+
+Conclusion: native injection **does** admit a non-bundled plugin, but only
+behind that global experimental switch. So the migration trades
+`embedSandbox: "trusted"` for `gateway.controlUi.experimental.customPlugins` —
+it does not remove the need for user-side configuration, contrary to what
+`需求/15` originally assumed. Asset serving still requires auth, and the host
+caps native Control UI at `MAX_CONTROL_UI_PLUGINS = 64` active plugins.
+
+Not yet verified: the browser-side visual confirmation that the skeleton page
+actually renders. The skeleton shows "Taskfold（原生注入骨架）" plus a card
+count fetched through `host.request("taskfold.cards.list")` — text that exists
+only in `browser/index.ts`, so seeing it distinguishes native injection from
+the old iframe SPA (which renders the real board UI). A `<iframe>` in the panel
+region under DevTools means the old path is still serving.
+
+Rollback: delete the `experimental` key (or set `customPlugins: false`) and
+restart. The `controlUi.entry` manifest field is inert once the switch is off —
+the host falls back to the `registerControlUiDescriptor` iframe path — so no
+Taskfold code change is needed to revert. Backup kept at
+`~/.openclaw/openclaw.json.bak-before-controlui-experiment`.
