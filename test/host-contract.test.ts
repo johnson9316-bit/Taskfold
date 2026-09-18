@@ -1,4 +1,4 @@
-import type { TaskRunView } from "openclaw/plugin-sdk";
+import type { TaskRunView } from "../src/backend/src/host-task-types.js";
 import { describe, expect, it } from "vitest";
 import type { TaskfoldCard } from "../src/contract/index.js";
 import { buildSessionKey } from "../src/backend/src/dispatcher.js";
