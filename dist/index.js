@@ -8190,10 +8190,11 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           failedAt,
           reason
         };
+        const nextStatus = existing.status === "running" ? "blocked" : existing.status;
         await this.updateCard(
           id,
           {
-            status: "blocked",
+            status: nextStatus,
             sessionKey: null,
             runId: null,
             execution: null,

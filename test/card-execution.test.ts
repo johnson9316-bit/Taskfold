@@ -306,11 +306,15 @@ describe("Taskfold native card execution", () => {
     ).rejects.toThrow("host refused admission");
 
     const failed = await store.get(card.id);
-    // failExecutionLaunch (需求/15.7 §5 边③) always drives the card to `blocked`,
-    // even here where it started from `done` — a known, flagged consequence of
-    // wiring the same launch-failure edge into this ad-hoc re-run surface; see
-    // the task report for 需求/15.7 步骤 3.
-    expect(failed?.status).toBe("blocked");
+    // failExecutionLaunch (需求/15.7 §5 边③) only forces the card to `blocked`
+    // when it was already `running` at the moment of failure — 需求
+    // /8.4-执行调度与Run控制台.md「Run 与 Card 状态分离」映射表里「启动失败 -> blocked」
+    // 那一行，前提是同一张表首行「todo/ready 可启动」描述的调度路径（dispatcher.ts 的
+    // claim() 把状态推成 running 后才 openExecutionLaunch）。这里走的是
+    // startTaskfoldCardExecution 对任意状态卡片重跑执行的路径（claimExecution() 不改
+    // status），卡片进入时就是 `done`，且这条路径明确不改变卡片业务状态，所以启动失败
+    // 也必须保持 `done`，不能被一次 Run 的失败冒充成 Card 状态。
+    expect(failed?.status).toBe("done");
     expect(failed?.sessionKey).toBeUndefined();
     expect(failed?.runId).toBeUndefined();
     expect(failed?.execution).toBeUndefined();

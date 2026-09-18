@@ -250,7 +250,12 @@ describe("Taskfold reconciler", () => {
 
     expect(outcome).toMatchObject({ checked: 1, staleLaunches: 1, finished: 0 });
     const failed = await store.get(card.id);
-    expect(failed?.status).toBe("blocked");
+    // createPreparedLaunchCard claims via claimExecution()（不改 status），卡片
+    // 一直是创建时的 `ready`。failExecutionLaunch 只在卡片当前是 `running` 时才把
+    // 失败推成 `blocked`（需求/8.4「Run 与 Card 状态分离」映射表：该行前提是
+    // dispatcher 的 claim() 已把状态推成 running 的调度路径），所以这里保持
+    // `ready` 不变，regla R 的清理（清 claim/关联、attempt 收成 blocked）照常发生。
+    expect(failed?.status).toBe("ready");
     expect(failed?.sessionKey).toBeUndefined();
     expect(failed?.runId).toBeUndefined();
     expect(failed?.execution).toBeUndefined();

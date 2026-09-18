@@ -288,7 +288,12 @@ describe("Taskfold launch state", () => {
       expect(result).toBe(true);
 
       const failedCard = await store.get(claimed.card.id);
-      expect(failedCard?.status).toBe("blocked");
+      // claimFreshCard uses claimExecution()（card-execution.ts 的路径），它不改
+      // status，卡片一直是创建时的 `ready`。failExecutionLaunch 只在卡片当前是
+      // `running` 时才把失败推成 `blocked`（需求/8.4「Run 与 Card 状态分离」
+      // 映射表：该行前提是 dispatcher 的 claim() 已把状态推成 running 的调度路径），
+      // 所以这里保持 `ready` 不变。
+      expect(failedCard?.status).toBe("ready");
       expect(failedCard?.sessionKey).toBeUndefined();
       expect(failedCard?.runId).toBeUndefined();
       expect(failedCard?.execution).toBeUndefined();

@@ -480,10 +480,21 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           failedAt,
           reason,
         };
+        // 需求/8.4-执行调度与Run控制台.md「Run 与 Card 状态分离」: Card 的 status 是
+        // 需求生命周期，Run 的 status 是执行会话生命周期，二者不得互相冒充。映射表里
+        // 「启动失败/失败/人工终止 -> blocked」这一行，前提是同一张表首行的
+        // 「todo/ready 可启动；宿主接受后更新为 running」——即该行说的是从可启动状态
+        // 发起、已被 claim() 推成 running 的那条调度路径（dispatcher.ts）。
+        // card-execution.ts 的 startTaskfoldCardExecution 走的是另一条路：它用
+        // claimExecution()（不改 status）对任意状态的卡片重跑执行，明确不改变卡片
+        // 业务状态；那条路径下 openExecutionLaunch 之后卡片 status 仍是原状态，不会
+        // 是 running。因此只在当前 status 已经是 running 时才把失败推成 blocked，
+        // 其余状态原样保留，避免一次 Run 的失败冒充/覆盖 Card 自己的生命周期状态。
+        const nextStatus = existing.status === "running" ? "blocked" : existing.status;
         await this.updateCard(
           id,
           {
-            status: "blocked",
+            status: nextStatus,
             sessionKey: null,
             runId: null,
             execution: null,
