@@ -52,4 +52,13 @@ export type TaskfoldKeyedStore<T = PersistedTaskfoldCard> = {
    * read-compare-write guarded only by the in-process mutation queue.
    */
   compareAndSwap?(key: string, expectedRevision: number, value: T): Promise<boolean>;
+  /**
+   * Conditional insert: persist `value` only if no row exists for `key`, and
+   * report whether it did. Backends that implement this must perform the
+   * existence check and the write in one atomic unit so concurrent processes
+   * racing to create the same key (for example, a deterministic id derived
+   * from a session key) converge on one row instead of both winning. Optional:
+   * callers fall back to an unconditional `register`.
+   */
+  registerIfAbsent?(key: string, value: T): Promise<boolean>;
 };

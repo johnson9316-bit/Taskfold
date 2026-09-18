@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   TaskfoldBoardMetadata,
   TaskfoldChange,
@@ -23,6 +23,7 @@ import {
   cardBoardId,
   cardParentIds,
   cardRequirementId,
+  cardSessionKey,
   compareCards,
   isRequirementCard,
   isActiveDependencyTarget,
@@ -120,7 +121,30 @@ function stampCardRevisions(store: TaskfoldKeyedStore): TaskfoldKeyedStore {
             await store.compareAndSwap!(key, expectedRevision, stamp(value)),
         }
       : {}),
+    ...(store.registerIfAbsent
+      ? {
+          registerIfAbsent: async (key: string, value) =>
+            await store.registerIfAbsent!(key, stamp(value)),
+        }
+      : {}),
   };
+}
+
+/**
+ * Deterministic RFC 9562 version-8 UUID derived from a session key, so that
+ * two processes racing to capture the same brand-new session converge on the
+ * same card id (and therefore the same `registerIfAbsent` row) instead of
+ * each creating their own card.
+ */
+function sessionCaptureCardId(sessionKey: string): string {
+  const digest = createHash("sha256")
+    .update("openclaw.taskfold.session-capture.v1\0")
+    .update(sessionKey)
+    .digest();
+  digest.writeUInt8((digest.readUInt8(6) & 0x0f) | 0x80, 6);
+  digest.writeUInt8((digest.readUInt8(8) & 0x3f) | 0x80, 8);
+  const hex = digest.toString("hex", 0, 16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export class TaskfoldCoreStore {
@@ -445,6 +469,7 @@ export class TaskfoldCoreStore {
   protected async createDirect(
     input: TaskfoldLinkedCreateInput,
     scope?: TaskfoldMutationScope,
+    options: { cardId?: string; insertIfAbsent?: boolean } = {},
   ): Promise<TaskfoldCard> {
     const now = Date.now();
     const requestedStatus = normalizeStatus(input.status, "todo");
@@ -537,7 +562,7 @@ export class TaskfoldCoreStore {
             .map((card) => card.position),
         ) + POSITION_STEP;
     let card: TaskfoldCard = {
-      id: randomUUID(),
+      id: options.cardId ?? randomUUID(),
       title: normalizeTitle(input.title),
       ...(kind === "requirement" ? { kind } : {}),
       status,
@@ -571,7 +596,18 @@ export class TaskfoldCoreStore {
       ...(completedAt ? { completedAt } : {}),
       ...(!metadataIsEmpty(syncedMetadata) ? { metadata: syncedMetadata } : {}),
     };
-    await this.store.register(card.id, { version: 1, card });
+    if (options.insertIfAbsent && this.store.registerIfAbsent) {
+      const inserted = await this.store.registerIfAbsent(card.id, { version: 1, card });
+      if (!inserted) {
+        const winner = await this.get(card.id);
+        if (!winner) {
+          throw new Error("captured session card disappeared during creation.");
+        }
+        return winner;
+      }
+    } else {
+      await this.store.register(card.id, { version: 1, card });
+    }
     try {
       if (kind === "requirement" && parentCards.length > 0) {
         throw new Error("requirement cards cannot be child cards.");
@@ -591,6 +627,54 @@ export class TaskfoldCoreStore {
       throw error;
     }
     return card;
+  }
+
+  /**
+   * Turn an already-running session into a card, once. Idempotent by
+   * `sessionKey`: a second call for the same key returns the existing card
+   * unchanged, or restores it first if it was archived, instead of creating a
+   * duplicate.
+   */
+  async captureSession(input: TaskfoldLinkedCreateInput): Promise<TaskfoldCard> {
+    return await this.retryOnRevisionConflict(async () => await this.captureSessionOnce(input));
+  }
+
+  private async captureSessionOnce(input: TaskfoldLinkedCreateInput): Promise<TaskfoldCard> {
+    return await this.enqueueMutation(async () => {
+      const sessionKey = normalizeOptionalString(input.sessionKey);
+      if (!sessionKey) {
+        throw new Error("sessionKey is required.");
+      }
+      const boardId = normalizeBoardId(input.boardId) ?? "default";
+      const matches = (await this.list())
+        .filter((card) => cardSessionKey(card) === sessionKey)
+        .toSorted((left, right) => right.updatedAt - left.updatedAt);
+      const existing =
+        matches.find((card) => !card.metadata?.archivedAt) ??
+        matches.find((card) => Boolean(card.metadata?.archivedAt));
+      if (existing) {
+        if (!existing.metadata?.archivedAt) {
+          return existing;
+        }
+        if (cardSessionKey(existing) !== sessionKey) {
+          throw new Error("captured session identity collision.");
+        }
+        return await this.updateCard(
+          existing.id,
+          { metadata: { ...existing.metadata, archivedAt: 0 } },
+          { expectedRevision: existing.revision },
+        );
+      }
+      const winner = await this.createDirect(
+        { ...input, boardId, parents: undefined },
+        undefined,
+        { cardId: sessionCaptureCardId(sessionKey), insertIfAbsent: true },
+      );
+      if (cardSessionKey(winner) !== sessionKey) {
+        throw new Error("captured session identity collision.");
+      }
+      return winner;
+    });
   }
 
   async update(

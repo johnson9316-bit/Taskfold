@@ -68,6 +68,30 @@ export function registerTaskfoldWorkspaceCardMethods(params: WorkspaceGatewayMet
   );
 
   api.registerGatewayMethod(
+    "taskfold.cards.captureSession",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const input = withoutTaskfoldWorkspaceAccess(requestParams);
+        const project = await store.getProject(input.boardId);
+        const inputWithProjectWorkspace =
+          input.workspace === undefined && project.board.defaultWorkspace
+            ? { ...input, workspace: project.board.defaultWorkspace }
+            : input;
+        const access = await resolveGatewayWorkspaceMutationAccess(request, inputWithProjectWorkspace);
+        respond(true, {
+          card: redactCard(
+            await store.captureSession(withTaskfoldWorkspaceAccess(inputWithProjectWorkspace, access)),
+          ),
+        });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
+  );
+
+  api.registerGatewayMethod(
     "taskfold.cards.update",
     async (request) => {
       const { params: requestParams, respond } = request;

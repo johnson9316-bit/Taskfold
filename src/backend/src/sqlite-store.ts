@@ -1550,6 +1550,22 @@ class TaskfoldSqliteCardStore implements TaskfoldKeyedStore {
     });
   }
 
+  async registerIfAbsent(key: string, value: PersistedTaskfoldCard): Promise<boolean> {
+    if (value.version !== 1 || value.card.id !== key) {
+      throw new Error("invalid taskfold card payload");
+    }
+    // BEGIN IMMEDIATE takes the write lock before the existence check, so a
+    // concurrent process in another Gateway cannot pass the same check.
+    return runTransaction(this.db, () => {
+      const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
+      if (row) {
+        return false;
+      }
+      insertCard(this.db, value.card);
+      return true;
+    });
+  }
+
   async lookup(key: string): Promise<PersistedTaskfoldCard | undefined> {
     const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key) as
       | Row

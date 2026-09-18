@@ -1020,6 +1020,7 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
   protected override async createDirect(
     input: TaskfoldLinkedCreateInput,
     scope?: TaskfoldMutationScope,
+    options?: { cardId?: string; insertIfAbsent?: boolean },
   ): Promise<TaskfoldCard> {
     const parentId =
       normalizeOptionalString(input.createdByCardId) ??
@@ -1052,6 +1053,7 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
         ...(!input.workspace && board.defaultWorkspace ? { workspace: board.defaultWorkspace } : {}),
       },
       scope,
+      options,
     );
   }
 }

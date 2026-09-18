@@ -68,6 +68,17 @@ export class TaskfoldChangeTracker {
             },
           }
         : {}),
+      ...(store.registerIfAbsent
+        ? {
+            registerIfAbsent: async (key: string, value: T) => {
+              const inserted = await store.registerIfAbsent!(key, value);
+              if (inserted) {
+                this.mutationRevision += 1;
+              }
+              return inserted;
+            },
+          }
+        : {}),
     };
   }
 
