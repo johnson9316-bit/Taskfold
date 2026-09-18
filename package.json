@@ -26,7 +26,6 @@
   ],
   "files": [
     "dist/",
-    "ui/dist/",
     "docs/CLAW_HUB_PUBLISHING.md",
     "LICENSE",
     "README.md",
@@ -35,12 +34,10 @@
     "openclaw.plugin.json"
   ],
   "scripts": {
-    "build": "npm run build:backend && npm run build:ui",
+    "build": "npm run build:backend && npm run build:control-ui",
     "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/*",
-    "build:ui": "vite build --config ui/vite.config.ts",
     "build:control-ui": "node scripts/build-control-ui.mjs",
     "check:public-names": "node scripts/check-public-names.mjs",
-    "dev": "vite --config ui/vite.config.ts --host 127.0.0.1",
     "pack:check": "npm pack --dry-run",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"

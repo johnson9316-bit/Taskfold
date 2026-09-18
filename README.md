@@ -54,7 +54,8 @@ connected client's cursor.
 
 - OpenClaw `>=2026.7.1 <2027.0.0`
 - Node.js `>=22`
-- A trusted Control UI embedding configuration for the authenticated plugin UI
+- The Control UI **Custom plugin UI** Labs setting enabled (see
+  [Control UI Security](#control-ui-security))
 
 Taskfold runs inside the same Gateway as the Control UI. It does not start a
 separate web server.
@@ -86,22 +87,33 @@ restarted.
 
 ## Control UI Security
 
-The Control UI uses the browser identity already paired with the same-origin
-Gateway. Configure the embedding sandbox as trusted only when the Gateway and
-its installed plugins are trusted:
+Taskfold's panel is a native Control UI module: the Gateway loads it directly
+into the Control UI shell, not through an iframe. Loading native browser code
+from any user-installed plugin requires the Gateway's **Custom plugin UI**
+Labs setting, which defaults to off:
 
 ```json5
 {
   gateway: {
     controlUi: {
-      embedSandbox: "trusted",
+      experimental: { customPlugins: true },
     },
   },
 }
 ```
 
-The default `scripts` sandbox is origin-isolated and cannot access that paired
-identity, so it cannot provide the complete Taskfold UI.
+Toggle it from **Settings → Agents & Tools → Labs → Custom plugin UI** in the
+Control UI, or set `gateway.controlUi.experimental.customPlugins` directly.
+Either way, restart the Gateway and reload any already-open Control UI browser
+tabs afterward; a tab loaded before the change keeps running without the
+panel.
+
+This gate is not specific to Taskfold: it governs native browser code from
+*every* user-installed plugin, and native UI shipped with enabled bundled
+plugins (such as Workboard) stays available regardless of it. It only gates
+the browser panel — turning it off does not uninstall Taskfold or affect its
+backend; its tools, CLI commands, and Gateway RPC methods keep working
+normally either way.
 
 ## Data and Execution
 
@@ -150,9 +162,13 @@ openclaw plugins inspect taskfold --runtime
 openclaw plugins doctor
 ```
 
-`npm run dev` starts a Vite server for visual development only. It cannot
-exercise Gateway authentication or the paired browser identity; verify those
-flows through the Gateway-hosted Control UI.
+After changing `browser/` sources, rebuild the Control UI bundle and reload it
+in the running Gateway without a full restart:
+
+```bash
+npm run build:control-ui
+openclaw gateway call plugins.controlUi.reload --params '{"pluginId":"taskfold"}'
+```
 
 ## Release and Publishing
 

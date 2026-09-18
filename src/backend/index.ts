@@ -7,7 +7,6 @@ import { cleanupTaskfoldRunWorktree } from "./src/dispatcher-workspace.js";
 import { createTaskfoldReconcilerService } from "./src/reconciler.js";
 import { TaskfoldStore } from "./src/store.js";
 import { createTaskfoldTools } from "./src/tools.js";
-import { createTaskfoldStaticUiHandler } from "../ui-static.js";
 import {
   guardTaskfoldToolsForWorkspaceAccess,
   TASKFOLD_TOOL_NAMES,
@@ -41,14 +40,7 @@ export default definePluginEntry({
       description: "Gateway-local board for agent-owned work.",
       icon: "kanban",
       group: "control",
-      path: "/plugins/taskfold/",
       requiredScopes: ["operator.write"],
-    });
-    api.registerHttpRoute({
-      path: "/plugins/taskfold/",
-      auth: "plugin",
-      match: "prefix",
-      handler: createTaskfoldStaticUiHandler(),
     });
     registerTaskfoldGatewayMethods({ api, store });
     registerTaskfoldCommand({ api, store });
