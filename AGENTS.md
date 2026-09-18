@@ -36,6 +36,25 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 
 结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点与**当前进展**见该文档「实施进展」一节（1/2/3/5 已落地，4 经核实本来就不需要做，7/8 已出设计文档 [[需求/15.7-会话生命周期设计]]／[[需求/15.8-并发与补偿设计]]，9 进行中见 [[需求/15.9-ControlUI注入调查]]）。**第 6 项经核实不可行**（不是技术难度，是架构前提）：上游触发 cron 的唯一调用点走 `runtime.gateway.request`，而那道信任门只认 `origin="bundled"` 或 `trustedOfficialInstall`，Taskfold 走本地路径加载（`origin="config"`）拿不到。**这道门已经咬过三次**（`b7abc5c` 的 sessions.list 对账、第 7 项路线 A、第 6 项），已固化成一条筛选规则记在该文档「信任门」一节——以后评估任何上游机制，先 grep 它的实现里有没有 `gateway.request`，有就直接判不可行。反向推论：hook（`api.on(...)`）不走这道门，「宿主事件→插件」方向一直可用。**另两项有意挂起**：并行执行方案（[[需求/15.10-并发执行模型调查]]，四选一待定，等实际使用一段时间再决定）与第 8 项的 owner slot 子项（与前者动同一段代码）——查明上游 stock workboard 同样是串行，而并行零代码即可开启（给卡填不同 `agentId`）。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
 
+## Control UI 的本机验证方法
+
+Control UI 已迁到宿主原生注入（`browser/` → `dist/control-ui/`，见 [[需求/15.9-ControlUI注入调查]]）。验证面板要注意四件事，前两件是环境坑、后两件是机制：
+
+1. **地址是 `https://openclaw.local/`**（hosts 映射到 `127.0.0.1`，443 端口有反向代理转发到 Gateway 的 18789），自签证书。
+2. **必须绕过代理**：本机有 `HTTP_PROXY` 指向 `127.0.0.1:7897`，curl 和 Playwright 都会走它然后失败。curl 加 `--noproxy '*'`；Playwright 要在脚本里 `os.environ.pop()` 掉 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 及其小写形式，并给 chromium 传 `args=["--no-proxy-server","--proxy-bypass-list=*"]`，光靠 `proxy={"server":"direct://"}` 挡不住。再加 `ignore_https_errors=True`。
+3. **改了前端产物必须显式刷新宿主缓存**，否则浏览器拿到的还是旧产物（宿主的 `browserCatalogs` 初始化后不再感知磁盘变化）：
+
+   ```bash
+   npm run build:control-ui
+   openclaw gateway call plugins.controlUi.reload --params '{"pluginId":"taskfold"}'
+   ```
+
+   这是 UI-only 刷新（宿主源码注释原文 "never imports or replaces backend plugin code"），不重启 Gateway、不重载后端。
+
+4. **原生注入依赖一个实验开关**，本机已开启：`~/.openclaw/openclaw.json` 的 `gateway.controlUi.experimental.customPlugins: true`（对应 Settings → Agents & Tools → Labs → Custom plugin UI）。这是**所有 user-installed 插件的统一门槛**，不是 Taskfold 特有——只有 `origin: bundled` 的插件豁免。改这个键需要重启 Gateway 并刷新已打开的标签页。开关关掉后 `controlUi.entry` 字段变惰性，但旧 iframe 管线已删除，所以关掉就没有面板了（后端工具/CLI/网关方法不受影响）。
+
+登录用 Gateway token（`gateway.auth.token`）填进页面的「Gateway 密钥」框（`#login-gate-credential`）。判断原生注入是否生效：侧边栏 Taskfold 项指向 `/plugin?plugin=taskfold&id=taskfold`（旧 iframe 是 `/plugins/taskfold/`），面板区域应该**零 `<iframe>`**。
+
 ## 四份历史数据库
 
 `Flowboard → Taskfold` 改名迁移已经跑完，`~/.openclaw/plugins/` 下留有四份历史数据：
