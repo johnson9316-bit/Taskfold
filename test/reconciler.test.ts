@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TaskfoldCard } from "../src/contract/index.js";
+import { taskfoldLastActivityAt } from "../src/backend/src/store-card-helpers.js";
 import type {
   TaskfoldKeyedStore,
   PersistedTaskfoldAttachment,
@@ -134,7 +135,12 @@ describe("Taskfold reconciler", () => {
   it("flags a quiet run stale without closing it, and clears the flag when it reports in", async () => {
     const store = createStore();
     const card = await createRunningCard(store);
-    const quietSince = (await store.get(card.id))!.metadata!.claim!.lastHeartbeatAt;
+    // Not claim.lastHeartbeatAt: createRunningCard's final store.update() lands
+    // after the claim, so card.updatedAt is >= the heartbeat and the reconciler
+    // reports the max of the three. Reading claim time alone made this assertion
+    // fail whenever card creation happened to straddle a millisecond boundary
+    // (~15% of runs).
+    const quietSince = taskfoldLastActivityAt((await store.get(card.id))!);
 
     const outcome = await reconcileTaskfoldCards({
       store,
