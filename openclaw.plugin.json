@@ -241,6 +241,7 @@
     "properties": {}
   },
   "controlUi": {
-    "entry": "dist/control-ui/index.js"
+    "entry": "dist/control-ui/index.js",
+    "styles": ["dist/control-ui/index.css"]
   }
 }
