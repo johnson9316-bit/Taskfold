@@ -492,6 +492,22 @@ function ensureTaskfoldSchema(db: DatabaseSync): void {
       ON taskfold_cards(board_id, milestone_id, position);
     CREATE INDEX IF NOT EXISTS taskfold_cards_claim_owner_idx
       ON taskfold_cards(claim_owner_id, status);
+    CREATE INDEX IF NOT EXISTS taskfold_card_events_card_idx
+      ON taskfold_card_events(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_attempts_card_idx
+      ON taskfold_card_attempts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_comments_card_idx
+      ON taskfold_card_comments(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_links_card_idx
+      ON taskfold_card_links(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_proof_card_idx
+      ON taskfold_card_proof(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_artifacts_card_idx
+      ON taskfold_card_artifacts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_notifications_card_idx
+      ON taskfold_card_notifications(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_worker_logs_card_idx
+      ON taskfold_worker_logs(card_id, ordinal);
   `);
   const migrationId = `schema-${SCHEMA_VERSION}`;
   const current = db
