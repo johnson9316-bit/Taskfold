@@ -4,9 +4,13 @@ import type {
   TaskfoldArtifact,
   TaskfoldCard,
   TaskfoldClaim,
+  TaskfoldExecution,
+  TaskfoldLaunchState,
+  TaskfoldMetadata,
   TaskfoldNotification,
   TaskfoldRunAttempt,
 } from "../../contract/index.js";
+import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
 import {
@@ -32,6 +36,7 @@ import {
 } from "./store-constants.js";
 import type {
   TaskfoldBlockInput,
+  TaskfoldCardPatch,
   TaskfoldClaimInput,
   TaskfoldClaimOptions,
   TaskfoldCompleteInput,
@@ -69,6 +74,115 @@ function assertClaimIdentity(claim: TaskfoldClaim, input: TaskfoldHeartbeatInput
   if (!token && ownerId && ownerId !== claim.ownerId) {
     throw new Error("claim owner does not match.");
   }
+}
+
+/**
+ * Process-local instance id stamped on every `prepared` launch as
+ * `preparedBy`. It is forensic only — a `sqlite3 json_extract(...)` can answer
+ * "which Gateway process opened this launch" — and must never gate liveness:
+ * the same SQLite file can be opened by more than one Gateway process at
+ * once, so regla R (step 4) judges a stale launch by elapsed time alone (需求
+ * /15.7-会话生命周期设计.md §4.2). `resolveGlobalSingleton`, rather than a
+ * module-level constant, keeps the id stable across a plugin hot reload
+ * within the same process.
+ */
+function taskfoldInstanceId(): string {
+  return resolveGlobalSingleton(Symbol.for("taskfold.instanceId"), () => randomUUID());
+}
+
+type TaskfoldPreparedLaunch = Extract<TaskfoldLaunchState, { phase: "prepared" }>;
+
+/**
+ * Isomorphic port of `preparedLaunchMatchesCard` from the extension this
+ * codebase was adapted from (see UPSTREAM.md; exact source location cited in
+ * 需求/15.7-会话生命周期设计.md §2.1). Confirms the card's `sessionKey` /
+ * `runId` / `execution` identity still matches the `prepared` launch a caller
+ * captured earlier — i.e. nothing (a concurrent redispatch, a manual edit)
+ * moved the card on since. `expected.preparedBy` is compared for identity
+ * only, never as a liveness signal (see {@link taskfoldInstanceId}).
+ */
+function preparedLaunchMatchesCard(card: TaskfoldCard, expected: TaskfoldPreparedLaunch): boolean {
+  const launch = card.metadata?.automation?.launch;
+  return (
+    launch?.phase === "prepared" &&
+    launch.requestedSessionKey === expected.requestedSessionKey &&
+    launch.provisionalRunId === expected.provisionalRunId &&
+    launch.preparedAt === expected.preparedAt &&
+    launch.preparedBy === expected.preparedBy &&
+    card.sessionKey === expected.requestedSessionKey &&
+    card.runId === expected.provisionalRunId &&
+    card.execution?.sessionKey === expected.requestedSessionKey &&
+    card.execution?.runId === expected.provisionalRunId
+  );
+}
+
+type TaskfoldExecutionAssociationInput = {
+  expectedSessionKey?: string;
+  expectedRunId?: string;
+  sessionKey: string;
+  runId?: string;
+  execution: TaskfoldExecution;
+  launch?: TaskfoldLaunchState;
+};
+type TaskfoldExecutionAssociationPatch = TaskfoldCardPatch & { metadata?: TaskfoldMetadata };
+
+/**
+ * Isomorphic port of `executionAssociationPatch` from the extension this
+ * codebase was adapted from (see UPSTREAM.md; exact source location cited in
+ * 需求/15.7-会话生命周期设计.md §2.1). Builds the card patch that moves a
+ * `sessionKey`/`runId`/`execution` association forward. Its key job: when a
+ * running attempt already exists under the *expected* (old) identity, it
+ * rewrites that same attempt's id/sessionKey/runId in place rather than
+ * leaving it for `syncExecutionAttemptMetadata` to key a second attempt under
+ * the *new* identity — that in-place rewrite is what keeps `accept` from
+ * doubling up the running attempt list.
+ */
+function executionAssociationPatch(
+  card: TaskfoldCard,
+  input: TaskfoldExecutionAssociationInput,
+): TaskfoldExecutionAssociationPatch | undefined {
+  if (
+    cardSessionKey(card) !== input.expectedSessionKey ||
+    cardRunId(card) !== input.expectedRunId
+  ) {
+    return undefined;
+  }
+  const attempts = [...(card.metadata?.attempts ?? [])];
+  const attemptIndex = attempts.findLastIndex(
+    (attempt) =>
+      attempt.status === "running" &&
+      ((input.expectedRunId && attempt.runId === input.expectedRunId) ||
+        (!input.expectedRunId &&
+          input.expectedSessionKey &&
+          attempt.sessionKey === input.expectedSessionKey)),
+  );
+  if (attemptIndex >= 0) {
+    const attempt = attempts[attemptIndex];
+    if (attempt) {
+      attempts[attemptIndex] = {
+        ...attempt,
+        id: input.runId ?? attempt.id,
+        sessionKey: input.sessionKey,
+        ...(input.runId ? { runId: input.runId } : {}),
+      };
+    }
+  }
+  const metadata =
+    attemptIndex >= 0 || input.launch
+      ? {
+          ...card.metadata,
+          ...(attemptIndex >= 0 ? { attempts } : {}),
+          ...(input.launch
+            ? { automation: { ...card.metadata?.automation, launch: input.launch } }
+            : {}),
+        }
+      : undefined;
+  return {
+    sessionKey: input.sessionKey,
+    ...(input.runId ? { runId: input.runId } : {}),
+    execution: input.execution,
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
@@ -138,6 +252,250 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         { expectedRevision },
       );
       return { card, token };
+    });
+  }
+
+  /**
+   * Opens the `absent -> prepared` edge of the launch state machine (需求
+   * /15.7-会话生命周期设计.md §5, edge ①): writes the requested
+   * `sessionKey`/`runId`/`execution` before the dispatcher hands the card to
+   * `subagent.run()`, so a process death in that window leaves durable
+   * evidence instead of a silently orphaned claim. Named `openExecutionLaunch`
+   * rather than `prepareExecutionLaunch`, as the extension this codebase was
+   * adapted from names the equivalent method (see UPSTREAM.md), because Taskfold
+   * already has `prepareTaskfoldCardExecution` (card-execution.ts) for a
+   * read-only, non-writing preflight — two differently-behaved `prepare*`
+   * names on the same card would mislead readers (需求/15.7 §7 步骤 2).
+   *
+   * Admission is claim scope (`assertCanMutateClaimedCard`), not revision CAS
+   * — matching the other claim-scoped mutators in this file (`stopExecution`,
+   * `block`, `reclaim`, ...) rather than the CAS-guarded `claimExecution`/
+   * `claim`, because the thing being admitted here is "does the caller still
+   * hold the claim", not "did the caller win a race for it".
+   */
+  async openExecutionLaunch(
+    id: string,
+    input: { requestedSessionKey: unknown; scope?: TaskfoldMutationScope | null },
+  ): Promise<{ card: TaskfoldCard; launch: TaskfoldPreparedLaunch }> {
+    const requestedSessionKey = normalizeBoundedString(
+      input.requestedSessionKey,
+      undefined,
+      240,
+      "requested session key",
+    );
+    if (!requestedSessionKey) {
+      throw new Error("requestedSessionKey is required.");
+    }
+    return await this.enqueueMutation(async () => {
+      const existing = await this.get(id);
+      if (!existing) {
+        throw new Error(`card not found: ${id}`);
+      }
+      assertCanMutateClaimedCard(existing, input.scope === null ? undefined : input.scope);
+      const claimToken = existing.metadata?.claim?.token;
+      if (!claimToken) {
+        throw new Error("card must be claimed before opening an execution launch.");
+      }
+      const now = Date.now();
+      // Same construction as the idempotency key the dispatcher already sends
+      // `subagent.run()` (dispatcher.ts:473): keyed on the winning claim token,
+      // which is minted once per claim, so it identifies exactly this dispatch
+      // attempt without colliding across attempts the way a timestamp could.
+      const provisionalRunId = `taskfold:${existing.id}:${claimToken}`;
+      const launch: TaskfoldPreparedLaunch = {
+        phase: "prepared",
+        requestedSessionKey,
+        provisionalRunId,
+        preparedAt: now,
+        preparedBy: taskfoldInstanceId(),
+      };
+      const execution: TaskfoldExecution = {
+        id: existing.execution?.id ?? `${existing.id}:agent-session`,
+        kind: "agent-session",
+        mode: existing.execution?.mode ?? "autonomous",
+        status: "running",
+        ...(existing.execution?.engine ? { engine: existing.execution.engine } : {}),
+        ...(existing.execution?.model ? { model: existing.execution.model } : {}),
+        sessionKey: requestedSessionKey,
+        runId: provisionalRunId,
+        startedAt: existing.execution?.startedAt ?? existing.startedAt ?? now,
+        updatedAt: now,
+      };
+      const card = await this.updateCard(
+        id,
+        {
+          sessionKey: requestedSessionKey,
+          runId: provisionalRunId,
+          execution,
+          metadata: {
+            ...existing.metadata,
+            automation: { ...existing.metadata?.automation, launch },
+          },
+        },
+        { allowAutomationLaunch: true },
+      );
+      const persisted = card.metadata?.automation?.launch;
+      if (persisted?.phase !== "prepared") {
+        throw new Error("prepared execution launch was not persisted.");
+      }
+      return { card, launch: persisted };
+    });
+  }
+
+  /**
+   * Advances a `prepared` launch to `accepted` (§5 edge ②) once
+   * `subagent.run()` resolves. Rejects — returns `undefined`, does not throw —
+   * when `input.expectedLaunch` no longer matches the card's current launch
+   * identity, which is the expected, race-driven outcome of a concurrent
+   * redispatch (or a duplicate/late accept call) having already moved the
+   * card on; mirrors this file's existing `finishExecutionForRun` precedent of
+   * signalling "no longer applicable" through the return value rather than an
+   * exception. Guarded with `retryOnRevisionConflict` because the identity
+   * check must be re-run against the latest card on every compare-and-swap
+   * retry, not just the first read (same reasoning as `claim`/`claimOnce`).
+   */
+  async acceptExecutionLaunch(
+    id: string,
+    input: {
+      expectedLaunch: TaskfoldPreparedLaunch;
+      acceptedAt: unknown;
+      sessionKey: unknown;
+      runId?: unknown;
+      engine?: unknown;
+      model?: unknown;
+    },
+  ): Promise<TaskfoldCard | undefined> {
+    const acceptedAt =
+      typeof input.acceptedAt === "number" &&
+      Number.isFinite(input.acceptedAt) &&
+      input.acceptedAt >= 0
+        ? Math.trunc(input.acceptedAt)
+        : undefined;
+    if (acceptedAt === undefined) {
+      throw new Error("acceptedAt is required.");
+    }
+    const sessionKey = normalizeBoundedString(
+      input.sessionKey,
+      undefined,
+      240,
+      "accepted session key",
+    );
+    if (!sessionKey) {
+      throw new Error("sessionKey is required.");
+    }
+    const runId = normalizeBoundedString(input.runId, undefined, 160, "accepted run id");
+    const engine = normalizeBoundedString(input.engine, undefined, 160, "accepted engine");
+    const model = normalizeBoundedString(input.model, undefined, 160, "accepted model");
+    const expectedLaunch = input.expectedLaunch;
+    return await this.retryOnRevisionConflict(async () => {
+      return await this.enqueueMutation(async () => {
+        const existing = await this.get(id);
+        if (!existing) {
+          throw new Error(`card not found: ${id}`);
+        }
+        if (
+          !preparedLaunchMatchesCard(existing, expectedLaunch) ||
+          acceptedAt < expectedLaunch.preparedAt
+        ) {
+          return undefined;
+        }
+        const now = Date.now();
+        const nextEngine = engine ?? existing.execution?.engine;
+        const nextModel = model ?? existing.execution?.model;
+        const execution: TaskfoldExecution = {
+          id: existing.execution?.id ?? `${existing.id}:agent-session`,
+          kind: "agent-session",
+          mode: existing.execution?.mode ?? "autonomous",
+          status: "running",
+          ...(nextEngine ? { engine: nextEngine } : {}),
+          ...(nextModel ? { model: nextModel } : {}),
+          sessionKey,
+          ...(runId ? { runId } : {}),
+          startedAt: existing.execution?.startedAt ?? existing.startedAt ?? now,
+          updatedAt: now,
+        };
+        const launch: TaskfoldLaunchState = {
+          ...expectedLaunch,
+          phase: "accepted",
+          acceptedAt,
+          acceptedSessionKey: sessionKey,
+          ...(runId ? { acceptedRunId: runId } : {}),
+        };
+        const patch = executionAssociationPatch(existing, {
+          expectedSessionKey: expectedLaunch.requestedSessionKey,
+          expectedRunId: expectedLaunch.provisionalRunId,
+          sessionKey,
+          runId,
+          execution,
+          launch,
+        });
+        if (!patch) {
+          return undefined;
+        }
+        return await this.updateCard(id, patch, {
+          allowAutomationLaunch: true,
+          expectedRevision: existing.revision,
+        });
+      });
+    });
+  }
+
+  /**
+   * Advances a `prepared` launch to `failed` (§5 edge ③/④) and fully clears
+   * the execution association — `sessionKey`/`runId`/`execution` all go to
+   * `null`, not merely to a "blocked" status — because a `prepared` run never
+   * actually started on the host: leaving a stale sessionKey/runId behind
+   * would let a later, unrelated host event appear to match this card. Like
+   * {@link acceptExecutionLaunch}, a stale `expectedLaunch` resolves to `false`
+   * rather than throwing, for the same concurrent-redispatch reason.
+   */
+  async failExecutionLaunch(
+    id: string,
+    input: { expectedLaunch: TaskfoldPreparedLaunch; reason?: unknown; failedAt?: unknown },
+  ): Promise<boolean> {
+    const reason =
+      normalizeBoundedString(input.reason, undefined, 800, "launch failure reason") ??
+      "Prepared launch failed.";
+    const failedAtInput =
+      typeof input.failedAt === "number" && Number.isFinite(input.failedAt) && input.failedAt >= 0
+        ? Math.trunc(input.failedAt)
+        : Date.now();
+    const expectedLaunch = input.expectedLaunch;
+    return await this.retryOnRevisionConflict(async () => {
+      return await this.enqueueMutation(async () => {
+        const existing = await this.get(id);
+        if (!existing) {
+          throw new Error(`card not found: ${id}`);
+        }
+        if (!preparedLaunchMatchesCard(existing, expectedLaunch)) {
+          return false;
+        }
+        const failedAt = Math.max(failedAtInput, expectedLaunch.preparedAt);
+        const metadata = existing.metadata ?? {};
+        const launch: TaskfoldLaunchState = {
+          ...expectedLaunch,
+          phase: "failed",
+          failedAt,
+          reason,
+        };
+        await this.updateCard(
+          id,
+          {
+            status: "blocked",
+            sessionKey: null,
+            runId: null,
+            execution: null,
+            metadata: {
+              ...metadata,
+              claim: undefined,
+              attempts: closeRunningAttempts(metadata.attempts, failedAt, "blocked", reason),
+              automation: { ...metadata.automation, launch },
+            },
+          },
+          { allowAutomationLaunch: true, expectedRevision: existing.revision },
+        );
+        return true;
+      });
     });
   }
 

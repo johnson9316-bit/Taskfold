@@ -337,6 +337,47 @@ export type TaskfoldWorkspaceAccess =
   | { unrestricted: true }
   | { unrestricted: false; roots: string[]; writable: boolean };
 
+export const TASKFOLD_LAUNCH_PHASES = ["prepared", "accepted", "failed"] as const;
+export type TaskfoldLaunchPhase = (typeof TASKFOLD_LAUNCH_PHASES)[number];
+
+/**
+ * Identity shared by every phase of a launch. This also carries `preparedBy` —
+ * the process instance id that opened the launch — which the extension this
+ * codebase was adapted from (see UPSTREAM.md) does not track. It exists
+ * purely for `sqlite3 json_extract(...)` forensics (which Gateway process
+ * started this run) and must never be used to judge liveness: the same
+ * SQLite file can be opened by more than one Gateway process at once, so
+ * "not my instance id" does not mean "that process died" (see 需求
+ * /15.7-会话生命周期设计.md §4.2).
+ */
+type TaskfoldLaunchIdentity = {
+  requestedSessionKey: string;
+  provisionalRunId: string;
+  preparedAt: number;
+  preparedBy: string;
+};
+
+/**
+ * `prepared -> accepted -> failed` launch-window state machine (路线 C, see
+ * 需求/15.7-会话生命周期设计.md). It answers only "did the host accept this
+ * dispatch attempt" for the window between winning a claim and `subagent.run()`
+ * returning; it does not replace `reconciler.ts` / `lifecycle.ts`'s local-evidence
+ * liveness judgment for a run the host already accepted.
+ */
+export type TaskfoldLaunchState =
+  | (TaskfoldLaunchIdentity & { phase: "prepared" })
+  | (TaskfoldLaunchIdentity & {
+      phase: "accepted";
+      acceptedAt: number;
+      acceptedSessionKey: string;
+      acceptedRunId?: string;
+    })
+  | (TaskfoldLaunchIdentity & {
+      phase: "failed";
+      failedAt: number;
+      reason: string;
+    });
+
 export type TaskfoldAutomation = {
   tenant?: string;
   boardId?: string;
@@ -352,6 +393,7 @@ export type TaskfoldAutomation = {
   createdCardIds?: string[];
   dispatchCount?: number;
   lastDispatchAt?: number;
+  launch?: TaskfoldLaunchState;
 };
 
 export type TaskfoldBoardMetadata = {

@@ -45,6 +45,7 @@ import {
   type TaskfoldExecution,
   type TaskfoldExecutionMode,
   type TaskfoldExecutionStatus,
+  type TaskfoldLaunchState,
   type TaskfoldLink,
   type TaskfoldLinkType,
   type TaskfoldMetadata,
@@ -622,6 +623,7 @@ function normalizeWorkspace(
 export function normalizeAutomation(
   value: unknown,
   fallback: TaskfoldAutomation = {},
+  options: { allowLaunchState?: boolean } = {},
 ): TaskfoldAutomation | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return Object.keys(fallback).length ? fallback : undefined;
@@ -670,6 +672,15 @@ export function normalizeAutomation(
     : fallback.workspace;
   // Raw metadata preserves host-issued authority but cannot mint or widen it.
   const workspaceAccess = fallback.workspaceAccess;
+  // Trust gate for launch state: only the internal write paths that pass
+  // `allowLaunchState: true` (store-core.ts's `updateCard`, gated in turn by
+  // `allowAutomationLaunch`) may set `launch` from the incoming record. Every
+  // other caller — including the public `store.update()` gateway/tool entry
+  // point — silently carries the existing value forward instead, so an
+  // external write can never mint or clobber a launch phase (需求/15.7 §4.1).
+  const launch = normalizeLaunchState(
+    options.allowLaunchState && Object.hasOwn(record, "launch") ? record.launch : fallback.launch,
+  );
   const next = removeUndefinedAutomationFields({
     ...(tenant ? { tenant } : {}),
     ...(boardId ? { boardId } : {}),
@@ -685,8 +696,67 @@ export function normalizeAutomation(
     ...(createdCardIds?.length ? { createdCardIds } : {}),
     ...(dispatchCount ? { dispatchCount } : {}),
     ...(lastDispatchAt ? { lastDispatchAt } : {}),
+    ...(launch ? { launch } : {}),
   });
   return Object.keys(next).length ? next : undefined;
+}
+
+function normalizeLaunchTimestamp(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : undefined;
+}
+
+function normalizeLaunchString(value: unknown, maxLength: number): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.length <= maxLength ? normalized : undefined;
+}
+
+/**
+ * Normalizes `card.metadata.automation.launch` (需求/15.7 §4.1). A malformed
+ * payload for any phase normalizes to `undefined` rather than throwing —
+ * launch state is trusted-internal-writer-only (see the trust gate in
+ * {@link normalizeAutomation}), so a bad payload here means a bug in that
+ * writer, not a hostile external input worth surfacing as a thrown error.
+ */
+function normalizeLaunchState(value: unknown): TaskfoldLaunchState | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const requestedSessionKey = normalizeLaunchString(record.requestedSessionKey, 240);
+  const provisionalRunId = normalizeLaunchString(record.provisionalRunId, 160);
+  const preparedAt = normalizeLaunchTimestamp(record.preparedAt);
+  const preparedBy = normalizeLaunchString(record.preparedBy, 160);
+  if (!requestedSessionKey || !provisionalRunId || preparedAt === undefined || !preparedBy) {
+    return undefined;
+  }
+  const identity = { requestedSessionKey, provisionalRunId, preparedAt, preparedBy };
+  if (record.phase === "prepared") {
+    return { phase: "prepared", ...identity };
+  }
+  if (record.phase === "accepted") {
+    const acceptedAt = normalizeLaunchTimestamp(record.acceptedAt);
+    const acceptedSessionKey = normalizeLaunchString(record.acceptedSessionKey, 240);
+    const acceptedRunId = normalizeLaunchString(record.acceptedRunId, 160);
+    return acceptedAt === undefined || !acceptedSessionKey
+      ? undefined
+      : {
+          phase: "accepted",
+          ...identity,
+          acceptedAt,
+          acceptedSessionKey,
+          ...(acceptedRunId ? { acceptedRunId } : {}),
+        };
+  }
+  if (record.phase === "failed") {
+    const failedAt = normalizeLaunchTimestamp(record.failedAt);
+    const reason = normalizeLaunchString(record.reason, 800);
+    return failedAt === undefined || !reason
+      ? undefined
+      : { phase: "failed", ...identity, failedAt, reason };
+  }
+  return undefined;
 }
 
 export function deriveChildIdempotencyKey(
@@ -1266,7 +1336,12 @@ export function appendCompletionProof(
 export function normalizeMetadata(
   value: unknown,
   fallback: TaskfoldMetadata = {},
-  options: { allowDependencyLinks?: boolean; preserveProofId?: string } = {},
+  options: {
+    allowDependencyLinks?: boolean;
+    preserveProofId?: string;
+    /** See {@link normalizeAutomation}'s trust gate for `automation.launch`. */
+    allowAutomationLaunch?: boolean;
+  } = {},
 ): TaskfoldMetadata {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return trimMetadataToBudget(fallback, options);
@@ -1339,7 +1414,9 @@ export function normalizeMetadata(
       ? normalizeWorkerProtocol(record.workerProtocol, fallback.workerProtocol)
       : fallback.workerProtocol,
     automation: Object.hasOwn(record, "automation")
-      ? normalizeAutomation(record.automation, fallback.automation)
+      ? normalizeAutomation(record.automation, fallback.automation, {
+          allowLaunchState: options.allowAutomationLaunch,
+        })
       : fallback.automation,
     claim: Object.hasOwn(record, "claim")
       ? record.claim
@@ -1466,6 +1543,7 @@ function removeUndefinedAutomationFields(automation: TaskfoldAutomation): Taskfo
     "createdCardIds",
     "dispatchCount",
     "lastDispatchAt",
+    "launch",
   ] as const) {
     const value = next[key];
     if (

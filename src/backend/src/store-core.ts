@@ -712,6 +712,13 @@ export class TaskfoldCoreStore {
        * correct across processes rather than only within this one.
        */
       expectedRevision?: number;
+      /**
+       * Trust gate for `metadata.automation.launch` (需求/15.7 §4.1). Only the
+       * internal launch-state writers in store-workflow.ts pass this; the
+       * public {@link update} entry point never exposes it, so a public/gateway
+       * write can never mint or clobber a launch phase.
+       */
+      allowAutomationLaunch?: boolean;
     } = {},
   ): Promise<TaskfoldCard> {
     const existing = await this.get(id);
@@ -774,6 +781,7 @@ export class TaskfoldCoreStore {
     let metadata = normalizeMetadata(effectivePatch.metadata, existing.metadata, {
       allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
       preserveProofId: options.preserveProofId,
+      allowAutomationLaunch: options.allowAutomationLaunch,
     });
     if (status !== existing.status && !hasFreshLifecycleStatusSource) {
       // Status patches often spread existing metadata. Only a newly supplied

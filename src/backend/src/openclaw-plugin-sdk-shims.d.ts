@@ -60,6 +60,24 @@ declare module "openclaw/plugin-sdk/number-runtime" {
   ): number | undefined;
 }
 
+// "openclaw/plugin-sdk/global-singleton": signature confirmed against
+// node_modules/openclaw/dist/plugin-sdk/memory-core-host-engine-foundation.d.ts,
+// which still declares `resolveGlobalSingleton` for the identical
+// global-singleton.js implementation this subpath re-exports — only this
+// subpath's own `types` export was dropped.
+declare module "openclaw/plugin-sdk/global-singleton" {
+  type GlobalSingletonLifecycle = "close-and-restart" | "close-only" | "plugin-registry";
+  type GlobalSingletonReset<T> = (value: T) => void | Promise<void>;
+
+  /** Resolves a process-local singleton for caches and registries that tolerate helper lookup. */
+  export function resolveGlobalSingleton<T>(
+    key: symbol,
+    create: () => T,
+    reset?: GlobalSingletonReset<T>,
+    lifecycle?: GlobalSingletonLifecycle,
+  ): T;
+}
+
 // "openclaw/plugin-sdk/plugin-state-runtime": signature confirmed against
 // node_modules/openclaw/dist/sqlite-wal-*.mjs. The returned maintenance
 // handle's `close`/`checkpoint` internals depend on host WAL-scheduling
