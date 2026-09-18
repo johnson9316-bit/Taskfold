@@ -1343,7 +1343,7 @@ function normalizeWorkspace(value, fallback) {
     ...kind === "worktree" && sourceBranch ? { sourceBranch } : {}
   };
 }
-function normalizeAutomation(value, fallback = {}) {
+function normalizeAutomation(value, fallback = {}, options = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return Object.keys(fallback).length ? fallback : void 0;
   }
@@ -1372,6 +1372,9 @@ function normalizeAutomation(value, fallback = {}) {
   const lastDispatchAt = Object.hasOwn(record, "lastDispatchAt") ? normalizeTimestamp(record.lastDispatchAt, 0) || void 0 : fallback.lastDispatchAt;
   const workspace = Object.hasOwn(record, "workspace") ? normalizeWorkspace(record.workspace, fallback.workspace) : fallback.workspace;
   const workspaceAccess = fallback.workspaceAccess;
+  const launch = normalizeLaunchState(
+    options.allowLaunchState && Object.hasOwn(record, "launch") ? record.launch : fallback.launch
+  );
   const next = removeUndefinedAutomationFields({
     ...tenant ? { tenant } : {},
     ...boardId ? { boardId } : {},
@@ -1386,9 +1389,52 @@ function normalizeAutomation(value, fallback = {}) {
     ...summary ? { summary } : {},
     ...createdCardIds?.length ? { createdCardIds } : {},
     ...dispatchCount ? { dispatchCount } : {},
-    ...lastDispatchAt ? { lastDispatchAt } : {}
+    ...lastDispatchAt ? { lastDispatchAt } : {},
+    ...launch ? { launch } : {}
   });
   return Object.keys(next).length ? next : void 0;
+}
+function normalizeLaunchTimestamp(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : void 0;
+}
+function normalizeLaunchString(value, maxLength) {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.length <= maxLength ? normalized : void 0;
+}
+function normalizeLaunchState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const record = value;
+  const requestedSessionKey = normalizeLaunchString(record.requestedSessionKey, 240);
+  const provisionalRunId = normalizeLaunchString(record.provisionalRunId, 160);
+  const preparedAt = normalizeLaunchTimestamp(record.preparedAt);
+  const preparedBy = normalizeLaunchString(record.preparedBy, 160);
+  if (!requestedSessionKey || !provisionalRunId || preparedAt === void 0 || !preparedBy) {
+    return void 0;
+  }
+  const identity = { requestedSessionKey, provisionalRunId, preparedAt, preparedBy };
+  if (record.phase === "prepared") {
+    return { phase: "prepared", ...identity };
+  }
+  if (record.phase === "accepted") {
+    const acceptedAt = normalizeLaunchTimestamp(record.acceptedAt);
+    const acceptedSessionKey = normalizeLaunchString(record.acceptedSessionKey, 240);
+    const acceptedRunId = normalizeLaunchString(record.acceptedRunId, 160);
+    return acceptedAt === void 0 || !acceptedSessionKey ? void 0 : {
+      phase: "accepted",
+      ...identity,
+      acceptedAt,
+      acceptedSessionKey,
+      ...acceptedRunId ? { acceptedRunId } : {}
+    };
+  }
+  if (record.phase === "failed") {
+    const failedAt = normalizeLaunchTimestamp(record.failedAt);
+    const reason = normalizeLaunchString(record.reason, 800);
+    return failedAt === void 0 || !reason ? void 0 : { phase: "failed", ...identity, failedAt, reason };
+  }
+  return void 0;
 }
 function deriveChildIdempotencyKey(parentKey, index) {
   if (!parentKey) {
@@ -1853,7 +1899,9 @@ function normalizeMetadata(value, fallback = {}, options = {}) {
     attachments: Array.isArray(record.attachments) ? record.attachments.map(normalizeAttachment).filter((attachment) => attachment !== null).slice(-MAX_CARD_ATTACHMENTS) : fallback.attachments,
     workerLogs: Array.isArray(record.workerLogs) ? record.workerLogs.map(normalizeWorkerLog).filter((log) => log !== null).slice(-MAX_CARD_WORKER_LOGS) : fallback.workerLogs,
     workerProtocol: Object.hasOwn(record, "workerProtocol") ? normalizeWorkerProtocol(record.workerProtocol, fallback.workerProtocol) : fallback.workerProtocol,
-    automation: Object.hasOwn(record, "automation") ? normalizeAutomation(record.automation, fallback.automation) : fallback.automation,
+    automation: Object.hasOwn(record, "automation") ? normalizeAutomation(record.automation, fallback.automation, {
+      allowLaunchState: options.allowAutomationLaunch
+    }) : fallback.automation,
     claim: Object.hasOwn(record, "claim") ? record.claim ? normalizeClaim(record.claim, fallback.claim) : void 0 : fallback.claim,
     diagnostics: Array.isArray(record.diagnostics) ? record.diagnostics.map(normalizeDiagnostic).filter(
       (diagnosticLocal) => diagnosticLocal !== null
@@ -1943,7 +1991,8 @@ function removeUndefinedAutomationFields(automation) {
     "summary",
     "createdCardIds",
     "dispatchCount",
-    "lastDispatchAt"
+    "lastDispatchAt",
+    "launch"
   ]) {
     const value = next[key];
     if (value === void 0 || Array.isArray(value) && value.length === 0 || typeof value === "object" && value !== null && Object.keys(value).length === 0) {
@@ -3125,9 +3174,9 @@ function readOptionalString(value, maxLength = 4e3) {
 function activeExecution(card) {
   return card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
-async function gitCheckout(path6) {
+async function gitCheckout(path5) {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", path6, "rev-parse", "--show-toplevel"], {
+    const { stdout } = await execFileAsync("git", ["-C", path5, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       maxBuffer: 16 * 1024
     });
@@ -4324,7 +4373,8 @@ var TaskfoldCoreStore = class {
     const execution = effectivePatch.execution === void 0 ? effectivePatch.sessionKey === void 0 ? existing.execution : syncExecutionSessionKey(existing.execution, sessionKey) : normalizeExecution(effectivePatch.execution);
     let metadata = normalizeMetadata(effectivePatch.metadata, existing.metadata, {
       allowDependencyLinks: options.allowMetadataDependencyLinks !== false,
-      preserveProofId: options.preserveProofId
+      preserveProofId: options.preserveProofId,
+      allowAutomationLaunch: options.allowAutomationLaunch
     });
     if (status !== existing.status && !hasFreshLifecycleStatusSource) {
       metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: void 0 };
@@ -7513,6 +7563,7 @@ import { stat } from "node:fs/promises";
 // src/backend/src/store-workflow.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
@@ -7813,6 +7864,44 @@ function assertClaimIdentity(claim, input) {
     throw new Error("claim owner does not match.");
   }
 }
+function taskfoldInstanceId() {
+  return resolveGlobalSingleton(Symbol.for("taskfold.instanceId"), () => randomUUID9());
+}
+function preparedLaunchMatchesCard(card, expected) {
+  const launch = card.metadata?.automation?.launch;
+  return launch?.phase === "prepared" && launch.requestedSessionKey === expected.requestedSessionKey && launch.provisionalRunId === expected.provisionalRunId && launch.preparedAt === expected.preparedAt && launch.preparedBy === expected.preparedBy && card.sessionKey === expected.requestedSessionKey && card.runId === expected.provisionalRunId && card.execution?.sessionKey === expected.requestedSessionKey && card.execution?.runId === expected.provisionalRunId;
+}
+function executionAssociationPatch(card, input) {
+  if (cardSessionKey(card) !== input.expectedSessionKey || cardRunId(card) !== input.expectedRunId) {
+    return void 0;
+  }
+  const attempts = [...card.metadata?.attempts ?? []];
+  const attemptIndex = attempts.findLastIndex(
+    (attempt) => attempt.status === "running" && (input.expectedRunId && attempt.runId === input.expectedRunId || !input.expectedRunId && input.expectedSessionKey && attempt.sessionKey === input.expectedSessionKey)
+  );
+  if (attemptIndex >= 0) {
+    const attempt = attempts[attemptIndex];
+    if (attempt) {
+      attempts[attemptIndex] = {
+        ...attempt,
+        id: input.runId ?? attempt.id,
+        sessionKey: input.sessionKey,
+        ...input.runId ? { runId: input.runId } : {}
+      };
+    }
+  }
+  const metadata = attemptIndex >= 0 || input.launch ? {
+    ...card.metadata,
+    ...attemptIndex >= 0 ? { attempts } : {},
+    ...input.launch ? { automation: { ...card.metadata?.automation, launch: input.launch } } : {}
+  } : void 0;
+  return {
+    sessionKey: input.sessionKey,
+    ...input.runId ? { runId: input.runId } : {},
+    execution: input.execution,
+    ...metadata ? { metadata } : {}
+  };
+}
 var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
   async claimExecution(id, input) {
     const ownerId = normalizeBoundedString(input.ownerId, void 0, 120, "claim owner");
@@ -7863,6 +7952,214 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         { expectedRevision }
       );
       return { card, token };
+    });
+  }
+  /**
+   * Opens the `absent -> prepared` edge of the launch state machine (需求
+   * /15.7-会话生命周期设计.md §5, edge ①): writes the requested
+   * `sessionKey`/`runId`/`execution` before the dispatcher hands the card to
+   * `subagent.run()`, so a process death in that window leaves durable
+   * evidence instead of a silently orphaned claim. Named `openExecutionLaunch`
+   * rather than `prepareExecutionLaunch`, as the extension this codebase was
+   * adapted from names the equivalent method (see UPSTREAM.md), because Taskfold
+   * already has `prepareTaskfoldCardExecution` (card-execution.ts) for a
+   * read-only, non-writing preflight — two differently-behaved `prepare*`
+   * names on the same card would mislead readers (需求/15.7 §7 步骤 2).
+   *
+   * Admission is claim scope (`assertCanMutateClaimedCard`), not revision CAS
+   * — matching the other claim-scoped mutators in this file (`stopExecution`,
+   * `block`, `reclaim`, ...) rather than the CAS-guarded `claimExecution`/
+   * `claim`, because the thing being admitted here is "does the caller still
+   * hold the claim", not "did the caller win a race for it".
+   */
+  async openExecutionLaunch(id, input) {
+    const requestedSessionKey = normalizeBoundedString(
+      input.requestedSessionKey,
+      void 0,
+      240,
+      "requested session key"
+    );
+    if (!requestedSessionKey) {
+      throw new Error("requestedSessionKey is required.");
+    }
+    return await this.enqueueMutation(async () => {
+      const existing = await this.get(id);
+      if (!existing) {
+        throw new Error(`card not found: ${id}`);
+      }
+      assertCanMutateClaimedCard(existing, input.scope === null ? void 0 : input.scope);
+      const claimToken = existing.metadata?.claim?.token;
+      if (!claimToken) {
+        throw new Error("card must be claimed before opening an execution launch.");
+      }
+      const now = Date.now();
+      const provisionalRunId = `taskfold:${existing.id}:${claimToken}`;
+      const launch = {
+        phase: "prepared",
+        requestedSessionKey,
+        provisionalRunId,
+        preparedAt: now,
+        preparedBy: taskfoldInstanceId()
+      };
+      const execution = {
+        id: existing.execution?.id ?? `${existing.id}:agent-session`,
+        kind: "agent-session",
+        mode: existing.execution?.mode ?? "autonomous",
+        status: "running",
+        ...existing.execution?.engine ? { engine: existing.execution.engine } : {},
+        ...existing.execution?.model ? { model: existing.execution.model } : {},
+        sessionKey: requestedSessionKey,
+        runId: provisionalRunId,
+        startedAt: existing.execution?.startedAt ?? existing.startedAt ?? now,
+        updatedAt: now
+      };
+      const card = await this.updateCard(
+        id,
+        {
+          sessionKey: requestedSessionKey,
+          runId: provisionalRunId,
+          execution,
+          metadata: {
+            ...existing.metadata,
+            automation: { ...existing.metadata?.automation, launch }
+          }
+        },
+        { allowAutomationLaunch: true }
+      );
+      const persisted = card.metadata?.automation?.launch;
+      if (persisted?.phase !== "prepared") {
+        throw new Error("prepared execution launch was not persisted.");
+      }
+      return { card, launch: persisted };
+    });
+  }
+  /**
+   * Advances a `prepared` launch to `accepted` (§5 edge ②) once
+   * `subagent.run()` resolves. Rejects — returns `undefined`, does not throw —
+   * when `input.expectedLaunch` no longer matches the card's current launch
+   * identity, which is the expected, race-driven outcome of a concurrent
+   * redispatch (or a duplicate/late accept call) having already moved the
+   * card on; mirrors this file's existing `finishExecutionForRun` precedent of
+   * signalling "no longer applicable" through the return value rather than an
+   * exception. Guarded with `retryOnRevisionConflict` because the identity
+   * check must be re-run against the latest card on every compare-and-swap
+   * retry, not just the first read (same reasoning as `claim`/`claimOnce`).
+   */
+  async acceptExecutionLaunch(id, input) {
+    const acceptedAt = typeof input.acceptedAt === "number" && Number.isFinite(input.acceptedAt) && input.acceptedAt >= 0 ? Math.trunc(input.acceptedAt) : void 0;
+    if (acceptedAt === void 0) {
+      throw new Error("acceptedAt is required.");
+    }
+    const sessionKey = normalizeBoundedString(
+      input.sessionKey,
+      void 0,
+      240,
+      "accepted session key"
+    );
+    if (!sessionKey) {
+      throw new Error("sessionKey is required.");
+    }
+    const runId = normalizeBoundedString(input.runId, void 0, 160, "accepted run id");
+    const engine = normalizeBoundedString(input.engine, void 0, 160, "accepted engine");
+    const model = normalizeBoundedString(input.model, void 0, 160, "accepted model");
+    const expectedLaunch = input.expectedLaunch;
+    return await this.retryOnRevisionConflict(async () => {
+      return await this.enqueueMutation(async () => {
+        const existing = await this.get(id);
+        if (!existing) {
+          throw new Error(`card not found: ${id}`);
+        }
+        if (!preparedLaunchMatchesCard(existing, expectedLaunch) || acceptedAt < expectedLaunch.preparedAt) {
+          return void 0;
+        }
+        const now = Date.now();
+        const nextEngine = engine ?? existing.execution?.engine;
+        const nextModel = model ?? existing.execution?.model;
+        const execution = {
+          id: existing.execution?.id ?? `${existing.id}:agent-session`,
+          kind: "agent-session",
+          mode: existing.execution?.mode ?? "autonomous",
+          status: "running",
+          ...nextEngine ? { engine: nextEngine } : {},
+          ...nextModel ? { model: nextModel } : {},
+          sessionKey,
+          ...runId ? { runId } : {},
+          startedAt: existing.execution?.startedAt ?? existing.startedAt ?? now,
+          updatedAt: now
+        };
+        const launch = {
+          ...expectedLaunch,
+          phase: "accepted",
+          acceptedAt,
+          acceptedSessionKey: sessionKey,
+          ...runId ? { acceptedRunId: runId } : {}
+        };
+        const patch = executionAssociationPatch(existing, {
+          expectedSessionKey: expectedLaunch.requestedSessionKey,
+          expectedRunId: expectedLaunch.provisionalRunId,
+          sessionKey,
+          runId,
+          execution,
+          launch
+        });
+        if (!patch) {
+          return void 0;
+        }
+        return await this.updateCard(id, patch, {
+          allowAutomationLaunch: true,
+          expectedRevision: existing.revision
+        });
+      });
+    });
+  }
+  /**
+   * Advances a `prepared` launch to `failed` (§5 edge ③/④) and fully clears
+   * the execution association — `sessionKey`/`runId`/`execution` all go to
+   * `null`, not merely to a "blocked" status — because a `prepared` run never
+   * actually started on the host: leaving a stale sessionKey/runId behind
+   * would let a later, unrelated host event appear to match this card. Like
+   * {@link acceptExecutionLaunch}, a stale `expectedLaunch` resolves to `false`
+   * rather than throwing, for the same concurrent-redispatch reason.
+   */
+  async failExecutionLaunch(id, input) {
+    const reason = normalizeBoundedString(input.reason, void 0, 800, "launch failure reason") ?? "Prepared launch failed.";
+    const failedAtInput = typeof input.failedAt === "number" && Number.isFinite(input.failedAt) && input.failedAt >= 0 ? Math.trunc(input.failedAt) : Date.now();
+    const expectedLaunch = input.expectedLaunch;
+    return await this.retryOnRevisionConflict(async () => {
+      return await this.enqueueMutation(async () => {
+        const existing = await this.get(id);
+        if (!existing) {
+          throw new Error(`card not found: ${id}`);
+        }
+        if (!preparedLaunchMatchesCard(existing, expectedLaunch)) {
+          return false;
+        }
+        const failedAt = Math.max(failedAtInput, expectedLaunch.preparedAt);
+        const metadata = existing.metadata ?? {};
+        const launch = {
+          ...expectedLaunch,
+          phase: "failed",
+          failedAt,
+          reason
+        };
+        await this.updateCard(
+          id,
+          {
+            status: "blocked",
+            sessionKey: null,
+            runId: null,
+            execution: null,
+            metadata: {
+              ...metadata,
+              claim: void 0,
+              attempts: closeRunningAttempts(metadata.attempts, failedAt, "blocked", reason),
+              automation: { ...metadata.automation, launch }
+            }
+          },
+          { allowAutomationLaunch: true, expectedRevision: existing.revision }
+        );
+        return true;
+      });
     });
   }
   async stopExecution(id, input = {}) {
@@ -16496,99 +16793,6 @@ function createTaskfoldTools(params) {
   ];
 }
 
-// src/ui-static.ts
-import fs4 from "node:fs";
-import path5 from "node:path";
-import { fileURLToPath } from "node:url";
-var UI_PREFIX = "/plugins/taskfold/";
-var MIME_TYPES = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".ico": "image/x-icon",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".woff2": "font/woff2"
-};
-function send(req, res, status, headers, body) {
-  res.writeHead(status, headers);
-  if (req.method !== "HEAD" && body) {
-    res.end(body);
-    return;
-  }
-  res.end();
-}
-function isWithinRoot(root, candidate) {
-  const relative = path5.relative(root, candidate);
-  return relative === "" || !relative.startsWith(`..${path5.sep}`) && relative !== "..";
-}
-function resolveUiFile(root, requestPath) {
-  let decodedPath;
-  try {
-    decodedPath = decodeURIComponent(requestPath);
-  } catch {
-    return null;
-  }
-  if (decodedPath.includes("\0") || decodedPath.includes("\\")) {
-    return null;
-  }
-  const relativePath = decodedPath.slice(UI_PREFIX.length).replace(/^\/+/, "");
-  const candidate = path5.resolve(root, relativePath || "index.html");
-  if (!isWithinRoot(root, candidate)) {
-    return null;
-  }
-  if (fs4.existsSync(candidate) && fs4.statSync(candidate).isFile()) {
-    return { filePath: candidate, fallback: false };
-  }
-  if (path5.extname(relativePath) === "") {
-    return { filePath: path5.join(root, "index.html"), fallback: true };
-  }
-  return null;
-}
-function createTaskfoldStaticUiHandler(uiRoot) {
-  const root = path5.resolve(
-    uiRoot ?? fileURLToPath(new URL("../ui/dist/", import.meta.url))
-  );
-  return (req, res) => {
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      send(req, res, 405, { Allow: "GET, HEAD" });
-      return true;
-    }
-    const pathname = new URL(req.url ?? UI_PREFIX, "http://taskfold.local").pathname;
-    if (!pathname.startsWith(UI_PREFIX)) {
-      send(req, res, 404, {});
-      return true;
-    }
-    const resolved = resolveUiFile(root, pathname);
-    if (!resolved) {
-      send(req, res, 404, { "Content-Type": "text/plain; charset=utf-8" }, Buffer.from("Not found"));
-      return true;
-    }
-    try {
-      const content = fs4.readFileSync(resolved.filePath);
-      const extension = path5.extname(resolved.filePath).toLowerCase();
-      const immutableAsset = pathname.includes("/assets/") && !resolved.fallback;
-      send(
-        req,
-        res,
-        200,
-        {
-          "Cache-Control": immutableAsset ? "public, max-age=31536000, immutable" : "no-cache",
-          "Content-Type": MIME_TYPES[extension] ?? "application/octet-stream",
-          "X-Content-Type-Options": "nosniff"
-        },
-        content
-      );
-    } catch {
-      send(req, res, 404, { "Content-Type": "text/plain; charset=utf-8" }, Buffer.from("Not found"));
-    }
-    return true;
-  };
-}
-
 // src/backend/index.ts
 var TASKFOLD_CLI_OPTIONS = {
   descriptors: [
@@ -16617,14 +16821,7 @@ var index_default = definePluginEntry({
       description: "Gateway-local board for agent-owned work.",
       icon: "kanban",
       group: "control",
-      path: "/plugins/taskfold/",
       requiredScopes: ["operator.write"]
-    });
-    api.registerHttpRoute({
-      path: "/plugins/taskfold/",
-      auth: "plugin",
-      match: "prefix",
-      handler: createTaskfoldStaticUiHandler()
     });
     registerTaskfoldGatewayMethods({ api, store });
     registerTaskfoldCommand({ api, store });
