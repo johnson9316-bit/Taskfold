@@ -480,12 +480,33 @@ it does not remove the need for user-side configuration, contrary to what
 `需求/15` originally assumed. Asset serving still requires auth, and the host
 caps native Control UI at `MAX_CONTROL_UI_PLUGINS = 64` active plugins.
 
-Not yet verified: the browser-side visual confirmation that the skeleton page
-actually renders. The skeleton shows "Taskfold（原生注入骨架）" plus a card
-count fetched through `host.request("taskfold.cards.list")` — text that exists
-only in `browser/index.ts`, so seeing it distinguishes native injection from
-the old iframe SPA (which renders the real board UI). A `<iframe>` in the panel
-region under DevTools means the old path is still serving.
+Browser-side confirmation (driven with Playwright against
+`https://openclaw.local/`, the reverse proxy in front of the Gateway):
+
+- The sidebar lists **Taskfold** pointing at `/plugin?plugin=taskfold&id=taskfold`
+  with `data-sidebar-entry="plugin:taskfold/taskfold"` — the native plugin-page
+  route, not the old `/plugins/taskfold/` iframe route. Stock Workboard sits
+  right below it.
+- The panel renders "Taskfold（原生注入骨架）" plus "数据通道已连通：当前共有
+  102 张卡片。" — text that exists only in `browser/index.ts`. The count proves
+  `host.request("taskfold.cards.list")` reaches the plugin over the shell's own
+  authenticated connection; 102 matches the card count read directly from
+  `taskfold.sqlite`.
+- The host serves the bundle from
+  `/__openclaw__/plugins/control-ui/taskfold/<sha256>/index.js`, alongside
+  workboard's own bundle under the same route shape.
+- Following the real user path (home → click the Taskfold nav item): **zero
+  iframes on the page, zero requests to `/plugins/taskfold/`**, and no console
+  errors attributable to Taskfold.
+
+One caveat worth recording: opening `/plugin?plugin=taskfold&id=taskfold`
+directly by URL (cold, without the shell's router state) *does* make the host
+additionally fetch the legacy `/plugins/taskfold/` iframe and log
+`Blocked script execution … frame is sandboxed and the 'allow-scripts'
+permission is not set` plus CORS failures for its assets. Harmless — the native
+panel still renders — but it is dead weight produced by the still-registered
+`registerControlUiDescriptor` iframe path, and it is one more reason to do the
+step-5 cleanup rather than leave both paths registered indefinitely.
 
 Rollback: delete the `experimental` key (or set `customPlugins: false`) and
 restart. The `controlUi.entry` manifest field is inert once the switch is off —
