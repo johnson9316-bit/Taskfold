@@ -12,6 +12,7 @@ import type {
   PersistedTaskfoldProjectDocument,
 } from "../src/backend/src/persistence-types.js";
 import { createTaskfoldSqliteStores } from "../src/backend/src/sqlite-store.js";
+import { createTaskfoldFileStores } from "../src/backend/src/file-store.js";
 import { normalizeAutomation } from "../src/backend/src/store-normalizers.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
 
@@ -184,6 +185,50 @@ describe("Taskfold launch state", () => {
         preparedAt: launch.preparedAt,
         preparedBy: launch.preparedBy,
       });
+    });
+
+    /**
+     * 需求/16 第八节第 1 期退出条件：字段映射层的验收点。
+     *
+     * 上面那例证明 `metadata.automation.launch` 能经 SQLite 的 `automation_json` 列往返。
+     * 这一例是它在文件后端上的等价物：同一条业务流程（create → claim → openExecutionLaunch
+     * → 关闭 → 重开），断言这套嵌套结构经 **Markdown + frontmatter 序列化**后同样不丢。
+     *
+     * 为什么这条值得单独测，而不是靠格式层自己的 round-trip 用例：`automation` 在 SQLite
+     * 里是主表的一个 JSON 列，在文件方案里落进 `<!-- SECTION:TASKFOLD -->` 区块；它是
+     * **嵌套最深、且带 `preparedAt` 时间戳与 `provisionalRunId` 这类精确值**的字段之一，
+     * 正好压住 R6（区分「字段缺失」与「值为 null」、数字不能变字符串）最容易出问题的地方。
+     * 走完整业务路径而不是直接喂造好的对象，才能覆盖 normalizer 与 codec 的接缝。
+     */
+    it("round-trips metadata.automation.launch through the Markdown file store", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "taskfold-launch-state-file-"));
+      roots.push(root);
+      const dataDir = path.join(root, "repo", ".taskfold");
+      const pluginDir = path.join(root, "plugin-state", "plugins", "taskfold");
+
+      const store = TaskfoldStore.fromStores(createTaskfoldFileStores({ dataDir, pluginDir }));
+      const card = await store.create({ title: "File store round trip", status: "ready" });
+      const claimed = await store.claimExecution(card.id, {
+        ownerId: "owner-a",
+        expectedRevision: card.revision,
+      });
+      const { launch } = await store.openExecutionLaunch(claimed.card.id, {
+        requestedSessionKey: "subagent:taskfold-default-roundtrip",
+      });
+
+      // 重开一个完全独立的 store 实例，确保读到的是磁盘内容而不是任何进程内残留。
+      const reopenedStore = TaskfoldStore.fromStores(createTaskfoldFileStores({ dataDir, pluginDir }));
+      const reloaded = await reopenedStore.get(card.id);
+
+      expect(reloaded?.metadata?.automation?.launch).toMatchObject({
+        phase: "prepared",
+        requestedSessionKey: "subagent:taskfold-default-roundtrip",
+        provisionalRunId: launch.provisionalRunId,
+        preparedAt: launch.preparedAt,
+        preparedBy: launch.preparedBy,
+      });
+      // preparedAt 是 epoch 毫秒：确认它没有在 YAML/JSON 往返中退化成字符串。
+      expect(typeof reloaded?.metadata?.automation?.launch?.preparedAt).toBe("number");
     });
   });
 

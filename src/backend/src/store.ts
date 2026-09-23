@@ -45,6 +45,34 @@ import { TaskfoldProjectStore } from "./store-projects.js";
 
 export type { TaskfoldDispatchResult } from "./store-inputs.js";
 
+/**
+ * Shape every storage backend factory must return to plug into {@link TaskfoldStore}.
+ * `createTaskfoldSqliteStores` (sqlite-store.ts) and `createTaskfoldFileStores`
+ * (file-store.ts) both satisfy this structurally -- neither needs to import it, since
+ * this is the "single wiring point" 需求/16 集成任务书 refers to, not a base class either
+ * backend extends. Extracted from what `fromSqliteStores` below always destructured out
+ * of `createTaskfoldSqliteStores`'s return value, so `fromStores` can accept either
+ * backend without depending on SQLite.
+ */
+export type TaskfoldBackendStores = {
+  cards: TaskfoldKeyedStore;
+  boards: TaskfoldKeyedStore<PersistedTaskfoldBoard>;
+  milestones: TaskfoldKeyedStore<PersistedTaskfoldMilestone>;
+  documents: TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>;
+  subscriptions: TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>;
+  attachments: TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+  dataVersion?: () => number;
+  changeEpoch?: string;
+  reserveChangeRevisions?: (count: number) => number;
+  /**
+   * ⚠️ Present for shape parity with both factories' return values, but neither
+   * `fromStores` below nor `fromSqliteStores` ever calls it -- a known, already-recorded
+   * gap (需求/15-上游2026.9.4差异评估), not something this change fixes: the production
+   * path has no way to flush/close a backend on process exit. Out of scope here.
+   */
+  close?: () => void;
+};
+
 // Capability layers split review boundaries only; the core still owns persistence and mutation order.
 export class TaskfoldStore extends TaskfoldProjectStore {
   private async shouldAutoOrchestrate(card: TaskfoldCard): Promise<boolean> {
@@ -309,10 +337,14 @@ export class TaskfoldStore extends TaskfoldProjectStore {
   }
 
   /**
-   * Single wiring point from SQLite stores to a card store. Tests use this too,
-   * so a newly added capability cannot be silently missing under test only.
+   * Single wiring point from any backend factory's KV stores to a card store --
+   * `createTaskfoldSqliteStores` and `createTaskfoldFileStores` both satisfy
+   * {@link TaskfoldBackendStores} structurally, despite neither depending on the other.
+   * `fromSqliteStores` below is kept only for backward compatibility with its existing
+   * call sites (production's `openSqlite`, and every test that already names it) and
+   * now just delegates here.
    */
-  static fromSqliteStores(stores: ReturnType<typeof createTaskfoldSqliteStores>) {
+  static fromStores(stores: TaskfoldBackendStores) {
     return new TaskfoldStore(stores.cards, {
       boards: stores.boards,
       milestones: stores.milestones,
@@ -323,5 +355,13 @@ export class TaskfoldStore extends TaskfoldProjectStore {
       changeEpoch: stores.changeEpoch,
       reserveChangeRevisions: stores.reserveChangeRevisions,
     });
+  }
+
+  /**
+   * Tests use this too (as well as `fromStores` directly for the file backend), so a
+   * newly added capability cannot be silently missing under test only.
+   */
+  static fromSqliteStores(stores: ReturnType<typeof createTaskfoldSqliteStores>) {
+    return TaskfoldStore.fromStores(stores);
   }
 }
