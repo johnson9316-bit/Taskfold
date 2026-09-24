@@ -51,6 +51,8 @@ export type TaskfoldFileStoreLayout = {
   attachmentsDir: string;
   /** `<repo>/.taskfold/.locks`：跨进程锁文件（需求/18 §3.4），由 `<repo>/.taskfold/.gitignore` 忽略。 */
   locksDir: string;
+  /** `<repo>/.taskfold/.runtime/cards`：卡片运行态文件（需求/18 §3.7），`.runtime/` 由 `<repo>/.taskfold/.gitignore` 忽略。 */
+  runtimeCardsDir: string;
   /** `~/.openclaw/plugins/taskfold` */
   pluginDir: string;
   projectsJsonPath: string;
@@ -81,6 +83,7 @@ export function resolveTaskfoldFileStoreLayout(options: {
     documentsDir: path.join(dataDir, "documents"),
     attachmentsDir: path.join(dataDir, "attachments"),
     locksDir: path.join(dataDir, ".locks"),
+    runtimeCardsDir: path.join(dataDir, ".runtime", "cards"),
     pluginDir,
     projectsJsonPath: path.join(pluginDir, "projects.json"),
     changesLogPath: path.join(pluginDir, "changes.log"),
@@ -105,10 +108,11 @@ function ensureHardenedDir(dir: string): void {
   chmodIfExists(dir, TASKFOLD_FILE_STORE_DIR_MODE);
 }
 
-const LOCKS_GITIGNORE_ENTRY = ".locks/";
+/** `.taskfold/` 纳入 Git，但锁文件（`.locks/`）与卡片运行态（`.runtime/`）是纯运行时产物。 */
+const RUNTIME_GITIGNORE_ENTRIES = [".locks/", ".runtime/"] as const;
 
-/** `.taskfold/` 纳入 Git，但锁文件是纯运行时产物：确保 `.taskfold/.gitignore` 里有 `.locks/`。 */
-function ensureLocksGitignored(dataDir: string): void {
+/** 确保 `.taskfold/.gitignore` 里有 {@link RUNTIME_GITIGNORE_ENTRIES} 的每一项，缺哪项补哪项。 */
+function ensureRuntimeGitignored(dataDir: string): void {
   const gitignorePath = path.join(dataDir, ".gitignore");
   let existing: string | undefined;
   try {
@@ -118,15 +122,18 @@ function ensureLocksGitignored(dataDir: string): void {
       throw err;
     }
   }
-  if (existing === undefined) {
-    fs.writeFileSync(gitignorePath, `${LOCKS_GITIGNORE_ENTRY}\n`);
+  const presentLines = new Set((existing ?? "").split(/\r?\n/).map((line) => line.trim()));
+  const missing = RUNTIME_GITIGNORE_ENTRIES.filter((entry) => !presentLines.has(entry));
+  if (missing.length === 0) {
     return;
   }
-  if (existing.split(/\r?\n/).some((line) => line.trim() === LOCKS_GITIGNORE_ENTRY)) {
+  const text = missing.map((entry) => `${entry}\n`).join("");
+  if (existing === undefined) {
+    fs.writeFileSync(gitignorePath, text);
     return;
   }
   const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
-  fs.appendFileSync(gitignorePath, `${separator}${LOCKS_GITIGNORE_ENTRY}\n`);
+  fs.appendFileSync(gitignorePath, `${separator}${text}`);
 }
 
 /**
@@ -147,7 +154,8 @@ export function ensureTaskfoldFileStoreDirectories(layout: TaskfoldFileStoreLayo
   ensureHardenedDir(layout.documentsDir);
   ensureHardenedDir(layout.attachmentsDir);
   ensureHardenedDir(layout.locksDir);
-  ensureLocksGitignored(layout.dataDir);
+  ensureHardenedDir(layout.runtimeCardsDir);
+  ensureRuntimeGitignored(layout.dataDir);
   ensureHardenedDir(layout.pluginDir);
   ensureHardenedDir(layout.subscriptionsDir);
 }

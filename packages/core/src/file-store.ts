@@ -77,6 +77,8 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
   // 真正落地的地方。
   const externalChangeReconciler = createTaskfoldExternalChangeReconciler({
     cardsDir: layout.cardsDir,
+    runtimeCardsDir: layout.runtimeCardsDir,
+    locksDir: layout.locksDir,
     codec: cardCodec,
   });
 
@@ -85,8 +87,8 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     archiveCardsDir: layout.archiveCardsDir,
     attachmentsDir: layout.attachmentsDir,
     codec: cardCodec,
-    onWrite: externalChangeReconciler.noteOwnWrite,
     locksDir: layout.locksDir,
+    runtimeCardsDir: layout.runtimeCardsDir,
   });
   const boards = createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
   const milestones = createTaskfoldFileMilestoneStore({

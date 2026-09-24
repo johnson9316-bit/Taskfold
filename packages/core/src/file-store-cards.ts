@@ -17,6 +17,17 @@ import {
 } from "./file-store-atomic.js";
 import { allocateNextTaskfoldCardId } from "./file-store-card-id.js";
 import {
+  cardRuntimePath,
+  hashCardFileContent,
+  mergeCardRuntime,
+  readCardRuntime,
+  removeCardRuntime,
+  resolveCardRuntime,
+  splitCardRuntime,
+  writeCardRuntime,
+  type TaskfoldCardRuntime,
+} from "./file-store-card-runtime.js";
+import {
   isTaskfoldLockConflictError,
   withTaskfoldCardLock,
   withTaskfoldGlobalLock,
@@ -92,9 +103,41 @@ function allocateNewCardFile(
   return { path: path.join(cardsDir, cardFileName(displayIdText, card.title)), displayId };
 }
 
-function readCardAt(filePath: string, codec: TaskfoldCardCodec): TaskfoldCard | undefined {
+/** 一张卡此刻在磁盘上的完整状态：md 原文、合并了运行态之后的整卡、当前应生效的运行态
+ * （`runtimeChanged` 为 true 表示它与运行态文件不同——运行态缺失或 md 被外部改过，
+ * 持卡锁的调用方应当写回，见 file-store-card-runtime.ts 的 `resolveCardRuntime`）。 */
+type CardState = {
+  content: string;
+  card: TaskfoldCard;
+  runtime: TaskfoldCardRuntime;
+  runtimeChanged: boolean;
+};
+
+function readCardStateFromContent(
+  content: string,
+  codec: TaskfoldCardCodec,
+  runtimeCardsDir: string,
+  key?: string,
+): CardState {
+  const parsed = codec.parse(content);
+  const stored = readCardRuntime(cardRuntimePath(runtimeCardsDir, key ?? parsed.id));
+  const { runtime, changed } = resolveCardRuntime(content, parsed, stored);
+  return {
+    content,
+    card: mergeCardRuntime(parsed, stored, runtime.revision),
+    runtime,
+    runtimeChanged: changed,
+  };
+}
+
+function readCardState(
+  filePath: string,
+  codec: TaskfoldCardCodec,
+  runtimeCardsDir: string,
+  key: string,
+): CardState | undefined {
   const content = readFileIfExists(filePath);
-  return content === undefined ? undefined : codec.parse(content);
+  return content === undefined ? undefined : readCardStateFromContent(content, codec, runtimeCardsDir, key);
 }
 
 /** Writes `value` either to its existing file (`existingPath`) or, for a genuinely new
@@ -119,33 +162,57 @@ function readCardAt(filePath: string, codec: TaskfoldCardCodec): TaskfoldCard | 
  * allocated `displayIdHint` (see `allocateNewCardFile`) so the frontmatter `id` and the
  * filename agree, instead of falling back to the codec's placeholder "CARD-0". */
 /**
- * Returns the path written to plus the exact serialized string that landed on disk (not
- * `value.card` itself): 需求/16 R4 的外部改动探测器（file-store-reconcile.ts）需要一份
- * "跟未来重新读这个文件、重新 parse 出来的结果保证一致"的基线去算内容哈希。`value.card`
- * 是序列化*之前*的对象——如果 codec 的 serialize/parse 在某个字段上不是完全对称的
- * round-trip（例如 R6 提到的某些边界情况），直接哈希 `value.card` 就可能跟"下一次扫描时
- * 重新读+重新 parse 出来的结果"不一致，从而把这次自己的写误判成外部改动。返回刚写下的
- * 字符串,让调用方对*同一份字符串*调用 `codec.parse`,从根源上消除这个假设。
+ * Returns the path written to plus the exact md string now on disk (unchanged baseline
+ * when only runtime fields changed).
+ * 运行态文件里的 `contentHash` 就是对这份字符串算的（需求/18 §3.7），调用方不必再读回。
  */
 function writeCard(
   cardsDir: string,
   archiveCardsDir: string,
+  runtimeCardsDir: string,
   value: PersistedTaskfoldCard,
   codec: TaskfoldCardCodec,
   existingPath: string | undefined,
   guard: TaskfoldLockGuard,
   previousContent?: string,
 ): { path: string; content: string } {
+  // 需求/18 §3.7：运行态字段与 revision 不进 md。先写 md、后写运行态（顺序见
+  // file-store-card-runtime.ts 模块头）；两次都是 tmp + rename，rename 前复查锁。
+  const { mdCard, fields } = splitCardRuntime(value.card);
+  let written: { path: string; content: string };
   if (existingPath) {
     const baseline = previousContent ?? readFileIfExists(existingPath);
-    const content = codec.serialize(value.card, baseline);
-    writeFileAtomic(existingPath, content, undefined, guard.assertHeld);
-    return { path: existingPath, content };
+    // 只改了运行态字段的写入（claim、heartbeat、execution、events……）不改写 md：沿用 md
+    // 里原来的 updatedAt 序列化一遍，与磁盘字节相同就说明 md 字段没变，md 一个字节都不动；
+    // 最后写入时间记在运行态的 updatedAt 里，读取时取两者较大者。
+    const unchanged =
+      baseline !== undefined &&
+      codec.serialize({ ...mdCard, updatedAt: codec.parse(baseline).updatedAt }, baseline) === baseline;
+    if (unchanged) {
+      written = { path: existingPath, content: baseline };
+    } else {
+      const content = codec.serialize(mdCard, baseline);
+      writeFileAtomic(existingPath, content, undefined, guard.assertHeld);
+      written = { path: existingPath, content };
+    }
+  } else {
+    const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
+    const content = codec.serialize(mdCard, previousContent, displayId);
+    writeFileAtomic(newPath, content, undefined, guard.assertHeld);
+    written = { path: newPath, content };
   }
-  const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
-  const content = codec.serialize(value.card, previousContent, displayId);
-  writeFileAtomic(newPath, content, undefined, guard.assertHeld);
-  return { path: newPath, content };
+  writeCardRuntime(
+    cardRuntimePath(runtimeCardsDir, value.card.id),
+    {
+      version: 1,
+      revision: value.card.revision,
+      contentHash: hashCardFileContent(written.content),
+      updatedAt: value.card.updatedAt,
+      fields,
+    },
+    guard.assertHeld,
+  );
+  return written;
 }
 
 export function createTaskfoldFileCardStore(options: {
@@ -155,24 +222,25 @@ export function createTaskfoldFileCardStore(options: {
   archiveCardsDir: string;
   attachmentsDir: string;
   codec: TaskfoldCardCodec;
-  /**
-   * 需求/16 R4：每一次成功的自己写（`card` 是刚落盘、又原样 parse 回来的内容，`filePath`
-   * 是落盘的确切路径）或成功的删除（`card` 为 `undefined`，`filePath` 是被删的路径）都要
-   * 调用一次，供 file-store-reconcile.ts 的外部改动探测器刷新它的基线——否则这次正常业
-   * 务写入会在下一轮扫描时被误判成"外部又改了一次"，被再重盖一次 revision。
-   */
-  onWrite?: (cardId: string, card: TaskfoldCard | undefined, filePath: string) => void;
   /** `<repo>/.taskfold/.locks`：两层跨进程锁的锁文件目录（file-store-locks.ts）。 */
   locksDir: string;
+  /** `<repo>/.taskfold/.runtime/cards`：卡片运行态文件目录（需求/18 §3.7，file-store-card-runtime.ts）。 */
+  runtimeCardsDir: string;
 }): TaskfoldKeyedStore<PersistedTaskfoldCard> {
-  const { cardsDir, archiveCardsDir, attachmentsDir, codec, onWrite, locksDir } = options;
+  const { cardsDir, archiveCardsDir, attachmentsDir, codec, locksDir, runtimeCardsDir } = options;
 
   /** 已有文件的卡：卡锁内无条件覆盖（register 语义是 last-writer-wins，但不能插进
-   * 别人 CAS 的「重读 → rename」中间把对方的写吞掉）。 */
+   * 别人 CAS 的「重读 → rename」中间把对方的写吞掉）。
+   * 写下的 revision 不低于「当前生效 revision + 1」（md 被外部改过时当前 revision 已被
+   * 抬高），保证 revision 单调；与 stampCardRevisions 一样原地改 `value.card.revision`，
+   * 让调用方手里的卡与落盘一致。 */
   async function overwriteExistingCard(key: string, filePath: string, value: PersistedTaskfoldCard) {
     await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
-      const written = writeCard(cardsDir, archiveCardsDir, value, codec, filePath, guard);
-      onWrite?.(key, codec.parse(written.content), written.path);
+      const current = readCardState(filePath, codec, runtimeCardsDir, key);
+      if (current) {
+        value.card.revision = Math.max(value.card.revision, current.runtime.revision + 1);
+      }
+      writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, filePath, guard, current?.content);
     });
   }
 
@@ -190,8 +258,7 @@ export function createTaskfoldFileCardStore(options: {
         if (raced) {
           return raced;
         }
-        const written = writeCard(cardsDir, archiveCardsDir, value, codec, undefined, guard);
-        onWrite?.(key, codec.parse(written.content), written.path);
+        writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, undefined, guard);
         return undefined;
       });
       if (racedPath) {
@@ -209,10 +276,12 @@ export function createTaskfoldFileCardStore(options: {
       if (!filePath) {
         return undefined;
       }
-      const card = readCardAt(filePath, codec);
+      // 运行态缺失或 md 被外部改过时，这里给出的 revision 与持锁写入方随后算出的一致
+      // （file-store-card-runtime.ts 的 resolveCardRuntime），只是不落盘。
+      const state = readCardState(filePath, codec, runtimeCardsDir, key);
       // A card can vanish between the directory scan and the read (a concurrent
       // delete); treat that exactly like "not found" rather than throwing (R8).
-      return card ? { version: 1, card } : undefined;
+      return state ? { version: 1, card: state.card } : undefined;
     },
 
     async delete(key) {
@@ -222,12 +291,12 @@ export function createTaskfoldFileCardStore(options: {
       }
       // 卡锁内删除：不能插进别人 CAS 的「重读 → rename」中间（否则被删的卡会被那次 CAS 写回来）。
       const card = await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
-        const current = readCardAt(filePath, codec);
+        const current = readCardState(filePath, codec, runtimeCardsDir, key)?.card;
         guard.assertHeld();
         if (!removeFileIfExists(filePath)) {
           return undefined;
         }
-        onWrite?.(key, undefined, filePath);
+        removeCardRuntime(cardRuntimePath(runtimeCardsDir, key));
         return { card: current };
       });
       if (!card) {
@@ -260,7 +329,7 @@ export function createTaskfoldFileCardStore(options: {
         }
         let card: TaskfoldCard;
         try {
-          card = codec.parse(content);
+          card = readCardStateFromContent(content, codec, runtimeCardsDir).card;
         } catch (error) {
           // 任务 3：一个坏文件不能拖垮整份列表——否则所有卡片一起"蒸发"，比
           // Backlog.md 的静默 catch-skip 更糟（那边至少只丢一张）。跳过它，但绝不
@@ -292,17 +361,21 @@ export function createTaskfoldFileCardStore(options: {
           // already has to read this file to check the revision, so passing it on saves
           // writeCard a second read. Re-read *inside* the lock: whatever was on disk before
           // the lock was taken may already be stale.
-          const previousContent = readFileIfExists(filePath);
-          if (previousContent === undefined) {
+          const current = readCardState(filePath, codec, runtimeCardsDir, key);
+          if (current === undefined) {
             return false;
           }
-          const current = codec.parse(previousContent);
-          if (current.revision !== expectedRevision) {
-            // R2: a stale/conflicting revision returns false, and nothing is written.
+          // 需求/18 §3.7：比对 revision 之前先做外部修改检测。md 的 hash 与运行态记录的
+          // 不一致（或运行态缺失）时，`current.runtime` 已是 revision +1 / 重新初始化之后的
+          // 值——先把它落盘，再拿它比对，持旧 revision 的写入方因此被判冲突。
+          if (current.runtimeChanged) {
+            writeCardRuntime(cardRuntimePath(runtimeCardsDir, key), current.runtime, guard.assertHeld);
+          }
+          if (current.runtime.revision !== expectedRevision) {
+            // R2: a stale/conflicting revision returns false, and the card itself is not written.
             return false;
           }
-          const written = writeCard(cardsDir, archiveCardsDir, value, codec, filePath, guard, previousContent);
-          onWrite?.(key, codec.parse(written.content), written.path);
+          writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, filePath, guard, current.content);
           return true;
         });
       } catch (error) {
@@ -329,7 +402,8 @@ export function createTaskfoldFileCardStore(options: {
           return false;
         }
         const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
-        const content = codec.serialize(value.card, undefined, displayId);
+        const { mdCard, fields } = splitCardRuntime(value.card);
+        const content = codec.serialize(mdCard, undefined, displayId);
         guard.assertHeld();
         // Exclusive create (O_EXCL) rather than the tmp+rename used elsewhere: this is the
         // one card write where "someone else already created this key" must fail loudly
@@ -337,7 +411,17 @@ export function createTaskfoldFileCardStore(options: {
         // file-store-atomic.ts's `createFileExclusive`.
         const created = createFileExclusive(newPath, content);
         if (created) {
-          onWrite?.(key, codec.parse(content), newPath);
+          writeCardRuntime(
+            cardRuntimePath(runtimeCardsDir, key),
+            {
+              version: 1,
+              revision: value.card.revision,
+              contentHash: hashCardFileContent(content),
+              updatedAt: value.card.updatedAt,
+              fields,
+            },
+            guard.assertHeld,
+          );
         }
         return created;
       });

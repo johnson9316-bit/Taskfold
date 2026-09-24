@@ -349,11 +349,12 @@ describe("createTaskfoldFileStores: Markdown codec 往返不丢用户内容（�
 
     const lookedUp = await stores.cards.lookup("CARD-1");
     expect(lookedUp?.card.status).toBe("backlog");
-    expect(lookedUp?.card.revision).toBe(1);
+    // 手写卡片是旧格式（TASKFOLD 区块带 revision 1）且没有运行态：保守初始化为 1 + 1（需求/18 §3.7）。
+    expect(lookedUp?.card.revision).toBe(2);
 
-    const swapped = await stores.cards.compareAndSwap!("CARD-1", 1, {
+    const swapped = await stores.cards.compareAndSwap!("CARD-1", 2, {
       version: 1,
-      card: { ...lookedUp!.card, status: "ready", revision: 2 },
+      card: { ...lookedUp!.card, status: "ready", revision: 3 },
     });
     expect(swapped).toBe(true);
 
@@ -373,7 +374,7 @@ describe("createTaskfoldFileStores: Markdown codec 往返不丢用户内容（�
     const afterCas = await stores.cards.lookup("CARD-1");
     await stores.cards.register("CARD-1", {
       version: 1,
-      card: { ...afterCas!.card, status: "done", revision: 3 },
+      card: { ...afterCas!.card, status: "done", revision: 4 },
     });
     const afterRegister = fs.readFileSync(filePath, "utf8");
     expect(afterRegister).toContain("status: done");

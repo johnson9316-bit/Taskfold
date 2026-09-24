@@ -179,9 +179,11 @@ export function withTaskfoldFileLockSync<T>(
   target: string,
   lockfilePath: string,
   section: (guard: TaskfoldLockGuard) => T,
+  /** 最多等多久（ms）；传 0 表示只试一次，锁被占用立即抛 {@link TaskfoldLockTimeoutError}。 */
+  waitMs: number = TASKFOLD_LOCK_WAIT_MS,
 ): T {
   const held = newHeldLock(lockfilePath);
-  const deadline = Date.now() + TASKFOLD_LOCK_WAIT_MS;
+  const deadline = Date.now() + waitMs;
   let release: () => void;
   for (;;) {
     try {
@@ -239,4 +241,18 @@ export async function withTaskfoldCardLock<T>(
   section: (guard: TaskfoldLockGuard) => T,
 ): Promise<T> {
   return await withTaskfoldFileLock(cardFilePath, taskfoldCardLockPath(locksDir, cardKey), section);
+}
+
+/**
+ * 卡锁的同步「只试一次」版：外部变更探测（file-store-reconcile.ts 的 `dataVersion()` 是
+ * 同步契约）用。锁被占用时立即抛 {@link TaskfoldLockTimeoutError}，不等待——同步等锁会阻塞
+ * 事件循环，而占着锁的可能正是本进程里一个等着异步放锁的写入，等下去只会白等满超时。
+ */
+export function tryWithTaskfoldCardLockSync<T>(
+  locksDir: string,
+  cardKey: string,
+  cardFilePath: string,
+  section: (guard: TaskfoldLockGuard) => T,
+): T {
+  return withTaskfoldFileLockSync(cardFilePath, taskfoldCardLockPath(locksDir, cardKey), section, 0);
 }

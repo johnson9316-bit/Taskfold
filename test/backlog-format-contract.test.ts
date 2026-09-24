@@ -38,6 +38,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { splitCardRuntime } from "@taskfold/core/file-store-card-runtime.js";
 import {
   buildCardFilename,
   findSectionFamilyBlock,
@@ -135,7 +136,9 @@ function baseCard(overrides: Partial<TaskfoldCard> = {}): TaskfoldCard {
   };
 }
 
-/** 用 Taskfold 真实的 serializeMarkdownCard() 生成一张卡片文件，写进临时 backlog 项目。 */
+/** 用 Taskfold 真实的 serializeMarkdownCard() 生成一张卡片文件，写进临时 backlog 项目。
+ * 与文件后端的写路径一致：先用 splitCardRuntime() 拆掉运行态字段与 revision（需求/18 §3.7，
+ * 它们放在 gitignore 的 `.runtime/` 里，不进卡片 md）。 */
 function writeTaskfoldCard(
   root: string,
   numericId: number,
@@ -144,7 +147,7 @@ function writeTaskfoldCard(
   const displayId: CardDisplayId = { prefix: "CARD", numericId };
   const card = baseCard(overrides.card);
   const doc: MarkdownCardDocument = {
-    card,
+    card: splitCardRuntime(card).mdCard,
     displayId,
     backlogOnly: {},
     descriptionBody: overrides.descriptionBody ?? "Taskfold 写的描述正文。",
@@ -154,6 +157,16 @@ function writeTaskfoldCard(
   const filePath = path.join(root, "backlog", "tasks", buildCardFilename(displayId, card.title));
   fs.writeFileSync(filePath, markdown, "utf8");
   return { filePath, markdown, displayId, card };
+}
+
+/** TASKFOLD 区块里的 JSON。revision 已移到运行态文件，契约改为断言它不在 md 里。 */
+function extractTaskfoldPayload(markdown: string): Record<string, unknown> {
+  const lines = markdown.split("\n");
+  const block = findSectionFamilyBlock(lines, "Taskfold", "TASKFOLD");
+  if (!block) {
+    throw new Error("测试断言失败：这份 markdown 里找不到 TASKFOLD 区块");
+  }
+  return JSON.parse(lines.slice(block.beginLineIndex + 1, block.endLineIndex).join("\n")) as Record<string, unknown>;
 }
 
 /** 提取 markdown 里的 TASKFOLD 区块原始文本（含 BEGIN/END 两行），不关心它在文件中的位置。 */
@@ -184,7 +197,7 @@ describe.skipIf(!HAS_BACKLOG)("Backlog.md 格式兼容契约（真实跑 backlog
     const parsed = parseMarkdownCard(edited);
     expect(parsed.card.status).toBe("blocked");
     expect(parsed.card.id).toBe(baseCard().id);
-    expect(parsed.card.revision).toBe(baseCard().revision);
+    expect(extractTaskfoldPayload(edited)).not.toHaveProperty("revision");
     expect(parsed.card.notes).toBe(baseCard().notes);
   });
 
@@ -205,7 +218,7 @@ describe.skipIf(!HAS_BACKLOG)("Backlog.md 格式兼容契约（真实跑 backlog
     // 往返：parseMarkdownCard 仍能正确解析，Taskfold 独有字段值不变。
     const parsed = parseMarkdownCard(edited);
     expect(parsed.card.id).toBe(card.id);
-    expect(parsed.card.revision).toBe(card.revision);
+    expect(extractTaskfoldPayload(edited)).not.toHaveProperty("revision");
     expect(parsed.card.notes).toBe(card.notes);
     expect(parsed.card.position).toBe(card.position);
     expect(parsed.card.agentId).toBe(card.agentId);
@@ -279,7 +292,7 @@ describe.skipIf(!HAS_BACKLOG)("Backlog.md 格式兼容契约（真实跑 backlog
     expect(parsed.descriptionBody).toBe("New description");
     expect(parsed.trailing).toBe(`## Random Notes\n${controlMarker}`);
     expect(parsed.card.id).toBe(baseCard().id);
-    expect(parsed.card.revision).toBe(baseCard().revision);
+    expect(extractTaskfoldPayload(edited)).not.toHaveProperty("revision");
   });
 
   it("往返：backlog 连续编辑多次后，parseMarkdownCard 仍正确解析，frontmatter 改动与 Taskfold 独有字段各自保持正确", () => {
@@ -302,7 +315,7 @@ describe.skipIf(!HAS_BACKLOG)("Backlog.md 格式兼容契约（真实跑 backlog
 
     // Taskfold 独有字段：backlog 完全不认识 TASKFOLD 区块内部的 JSON，值必须原样不变。
     expect(parsed.card.id).toBe(card.id);
-    expect(parsed.card.revision).toBe(card.revision);
+    expect(extractTaskfoldPayload(edited)).not.toHaveProperty("revision");
     expect(parsed.card.notes).toBe(card.notes);
     expect(parsed.card.position).toBe(card.position);
     expect(parsed.card.agentId).toBe(card.agentId);
