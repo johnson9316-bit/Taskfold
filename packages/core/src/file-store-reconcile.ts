@@ -21,6 +21,9 @@
 // file-store.ts 直接拿它替换掉原来接给 createTaskfoldFileStores() 的 mtime 探测器——
 // store-change-tracker.ts / change-events.ts / store-core.ts 一行都不需要改，SQLite
 // 后端的行为也完全不受影响（它有自己的 `PRAGMA data_version`，从不经过这个模块）。
+// （TASK-4 之后这个 `dataVersion()` 改由文件后端的 ChangeSource 消费——
+// file-store-change-cursor.ts 的 `createTaskfoldFileChangeSource`：它变了就往 changes.log
+// 记一笔，别的进程也能感知；契约本身不变。）
 //
 // 判据分两层：
 //   - "值不值得去扫一遍目录"：按每个文件的 (mtime, size) 做一次廉价的目录级指纹比对
@@ -127,18 +130,21 @@ export function createTaskfoldExternalChangeReconciler(options: {
   runtimeCardsDir: string;
   locksDir: string;
   codec: TaskfoldCardCodec;
+  /** false 时（格式版本高于本版 core，只读，需求/18 §3.9）只扫描、不重盖运行态。 */
+  canWrite?: () => boolean;
 }): {
   /**
    * 与旧的目录级 mtime 探测器同形状：一个不透明的、可能在调用期间顺带做一次
-   * 「扫描 + 重盖」的计数器。`createTaskfoldFileStores()` 直接把它接到
-   * `TaskfoldChangeTracker` 的 `dataVersion` 插槽上（见 store-change-tracker.ts）。
+   * 「扫描 + 重盖」的计数器。`createTaskfoldFileStores()` 把它接到文件后端 ChangeSource 的
+   * `dataVersion` 插槽上（file-store-change-cursor.ts）。
    */
   dataVersion: () => number;
 } {
   const { cardsDir, runtimeCardsDir, locksDir, codec } = options;
+  const canWrite = options.canWrite ?? (() => true);
   // 只在扫描确实发现外部改动时才递增（重盖/初始化了某张卡的运行态、坏文件新出现或被改、
-  // 带运行态的卡片文件被外部删掉），与外层 TaskfoldChangeTracker 用它是否变化来决定要不要
-  // emit() 的既有契约一致。自己的写入会同时写下匹配的 hash，不会让它递增。
+  // 带运行态的卡片文件被外部删掉），与外层 ChangeSource 用它是否变化来决定要不要记一笔、
+  // 广播一次的既有契约一致。自己的写入会同时写下匹配的 hash，不会让它递增。
   let version = 0;
   let mdSnapshot = new Map<string, MdSnapshotEntry>();
   let runtimeFingerprint = new Map<string, string>();
@@ -184,6 +190,7 @@ export function createTaskfoldExternalChangeReconciler(options: {
   function scanAndRestamp(): boolean {
     let external = false;
     let incomplete = false;
+    let writable: boolean | undefined;
     const nextSnapshot = new Map<string, MdSnapshotEntry>();
     for (const fileName of listFilesWithExtension(cardsDir, CARD_EXTENSION)) {
       const filePath = path.join(cardsDir, fileName);
@@ -204,6 +211,11 @@ export function createTaskfoldExternalChangeReconciler(options: {
       }
       const stored = readCardRuntime(cardRuntimePath(runtimeCardsDir, cardId));
       if (stored && stored.contentHash === hashCardFileContent(content)) {
+        continue;
+      }
+      // 只读模式不写运行态：这张卡留给能写的 core 去重盖。
+      writable ??= canWrite();
+      if (!writable) {
         continue;
       }
       // 运行态缺失或 hash 对不上：进卡锁重读后再判定（锁外看到的可能是别的写入方写完

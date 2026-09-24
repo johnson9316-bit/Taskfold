@@ -1,5 +1,5 @@
 // Taskfold plugin module: the file-backed `boards` KeyedStore
-// (`~/.openclaw/plugins/taskfold/projects.json`, 需求/16 第六节).
+// (`<pluginDir>/projects.json`，pluginDir 由宿主注入，需求/16 第六节、需求/18 §3.8).
 //
 // Unlike cards/milestones/documents (one file per entity), boards -- Taskfold's name
 // for what 需求/16 calls "projects" -- share a single aggregate JSON file, because that

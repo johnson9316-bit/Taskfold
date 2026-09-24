@@ -1,5 +1,5 @@
 // Taskfold plugin module: the file-backed `subscriptions` KeyedStore
-// (`~/.openclaw/plugins/taskfold/subscriptions/<id>.json`, 需求/16 第六节). Lives in the
+// (`<pluginDir>/subscriptions/<id>.json`，pluginDir 由宿主注入，需求/16 第六节). Lives in the
 // plugin directory, not the project repo, for the same reason runs/metrics do: a
 // subscription is host-side bookkeeping, not project data that should follow a git
 // branch. No CAS, matching sqlite-store.ts's TaskfoldSqliteSubscriptionStore.

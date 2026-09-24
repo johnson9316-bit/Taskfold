@@ -3918,30 +3918,44 @@ function normalizeAutomationPatch(patch, current) {
 // packages/core/src/store-change-tracker.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 var CHANGE_REVISION_BLOCK = 1e4;
+function createTaskfoldReservedChangeSource(options = {}) {
+  const { dataVersion } = options;
+  const epoch = options.epoch ?? randomUUID3();
+  const reserveRevisions = options.reserveRevisions ?? (() => 0);
+  let revision = reserveRevisions(CHANGE_REVISION_BLOCK);
+  let revisionCeiling = revision + CHANGE_REVISION_BLOCK;
+  let externalDataVersion = dataVersion?.();
+  const record = () => {
+    if (revision + 1 >= revisionCeiling) {
+      const base = Math.max(reserveRevisions(CHANGE_REVISION_BLOCK), revision);
+      revision = base;
+      revisionCeiling = base + CHANGE_REVISION_BLOCK;
+    }
+    return { epoch, revision: ++revision };
+  };
+  return {
+    announce: record,
+    record,
+    poll() {
+      if (!dataVersion) {
+        return void 0;
+      }
+      const current = dataVersion();
+      if (current === externalDataVersion) {
+        return void 0;
+      }
+      externalDataVersion = current;
+      return record();
+    }
+  };
+}
 var TaskfoldChangeTracker = class {
-  constructor(readDataVersion, epoch, reserveRevisions) {
-    this.readDataVersion = readDataVersion;
-    this.epoch = epoch ?? randomUUID3();
-    this.reserveRevisions = reserveRevisions ?? (() => 0);
-    this.revision = this.reserveRevisions(CHANGE_REVISION_BLOCK);
-    this.revisionCeiling = this.revision + CHANGE_REVISION_BLOCK;
-    this.externalDataVersion = readDataVersion?.();
-  }
-  epoch;
-  revision;
-  revisionCeiling;
+  source;
   latestChange;
   mutationRevision = 0;
-  externalDataVersion;
   listeners = /* @__PURE__ */ new Set();
-  reserveRevisions;
-  nextRevision() {
-    if (this.revision + 1 >= this.revisionCeiling) {
-      const base = Math.max(this.reserveRevisions(CHANGE_REVISION_BLOCK), this.revision);
-      this.revision = base;
-      this.revisionCeiling = base + CHANGE_REVISION_BLOCK;
-    }
-    return ++this.revision;
+  constructor(source = createTaskfoldReservedChangeSource()) {
+    this.source = source;
   }
   track(store) {
     return {
@@ -3983,21 +3997,21 @@ var TaskfoldChangeTracker = class {
     return () => this.listeners.delete(listener);
   }
   announceEpoch() {
-    this.emit();
+    this.publish(this.source.announce());
+  }
+  /** 记一次变化并广播（给不经 {@link track} 的调用方用，例如 OpenClaw 适配层的聚合游标）。 */
+  recordChange() {
+    this.publish(this.source.record());
   }
   current() {
     return this.latestChange;
   }
   reconcileExternalChanges() {
-    if (!this.readDataVersion) {
+    const change = this.source.poll();
+    if (!change) {
       return false;
     }
-    const current = this.readDataVersion();
-    if (current === this.externalDataVersion) {
-      return false;
-    }
-    this.externalDataVersion = current;
-    this.emit();
+    this.publish(change);
     return true;
   }
   async runMutation(run) {
@@ -4006,12 +4020,35 @@ var TaskfoldChangeTracker = class {
       return await run();
     } finally {
       if (this.mutationRevision !== initialRevision) {
-        this.emit();
+        this.publish(this.source.record());
       }
     }
   }
-  emit() {
-    const change = { epoch: this.epoch, revision: this.nextRevision() };
+  async waitForChange(after, timeoutMs) {
+    const isNewer = (change) => !after || change.epoch !== after.epoch || change.revision > after.revision;
+    const current = this.current();
+    if (current && isNewer(current)) {
+      return { change: current, timedOut: false };
+    }
+    return await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        resolve({ change: this.current(), timedOut: true });
+      }, timeoutMs);
+      const unsubscribe = this.subscribe((change) => {
+        if (!isNewer(change)) {
+          return;
+        }
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve({ change, timedOut: false });
+      });
+    });
+  }
+  publish(change) {
+    if (!change) {
+      return;
+    }
     this.latestChange = change;
     for (const listener of this.listeners) {
       try {
@@ -4213,9 +4250,11 @@ var TaskfoldCoreStore = class {
   attachmentStore;
   constructor(store, stores = {}) {
     this.changes = new TaskfoldChangeTracker(
-      stores.dataVersion,
-      stores.changeEpoch,
-      stores.reserveChangeRevisions
+      stores.changeSource ?? createTaskfoldReservedChangeSource({
+        dataVersion: stores.dataVersion,
+        epoch: stores.changeEpoch,
+        reserveRevisions: stores.reserveChangeRevisions
+      })
     );
     this.store = this.changes.track(stampCardRevisions(store));
     this.boardStore = this.changes.track(
@@ -4239,26 +4278,12 @@ var TaskfoldCoreStore = class {
   currentChange() {
     return this.changes.current();
   }
+  /** 每次这个 store 的变更游标前进（本进程写入、或 {@link reconcileExternalChanges} 轮询到别处的变化）都会回调。 */
+  subscribeChanges(listener) {
+    return this.changes.subscribe(listener);
+  }
   async waitForChange(after, timeoutMs) {
-    const isNewer = (change) => !after || change.epoch !== after.epoch || change.revision > after.revision;
-    const current = this.changes.current();
-    if (current && isNewer(current)) {
-      return { change: current, timedOut: false };
-    }
-    return await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        resolve({ change: this.changes.current(), timedOut: true });
-      }, timeoutMs);
-      const unsubscribe = this.changes.subscribe((change) => {
-        if (!isNewer(change)) {
-          return;
-        }
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve({ change, timedOut: false });
-      });
-    });
+    return await this.changes.waitForChange(after, timeoutMs);
   }
   async enqueueMutation(run) {
     const runAndNotify = async () => await this.changes.runMutation(run);
@@ -10429,7 +10454,8 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
       attachments: stores.attachments,
       dataVersion: stores.dataVersion,
       changeEpoch: stores.changeEpoch,
-      reserveChangeRevisions: stores.reserveChangeRevisions
+      reserveChangeRevisions: stores.reserveChangeRevisions,
+      changeSource: stores.changeSource
     });
   }
   /**
@@ -10478,6 +10504,7 @@ function redactDiagnosticsRows(result) {
 function registerTaskfoldGatewayMethods(params) {
   const { api } = params;
   const store = params.store ?? TaskfoldStore.openSqlite();
+  const changes = params.changes ?? store;
   const dispatchCards = createTaskfoldDispatchHandler({
     api,
     store,
@@ -10624,7 +10651,7 @@ function registerTaskfoldGatewayMethods(params) {
       try {
         respond(
           true,
-          await store.waitForChange(
+          await changes.waitForChange(
             readChangeCursor(requestParams.after),
             readChangeWaitTimeout(requestParams.timeoutMs)
           )

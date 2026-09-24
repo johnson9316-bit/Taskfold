@@ -2,13 +2,32 @@
 // / dataVersion) for the file-backed store, ported from sqlite-store.ts's
 // `ensureChangeEpoch` / `reserveChangeRevisions` / `PRAGMA data_version` wiring but backed
 // by `changes.log` (需求/16 分叉 E2) instead of a `taskfold_meta` table.
+//
+// 需求/18 §3.8 之后：changes.log 在每个项目主 checkout 的 `.taskfold/.runtime/changes.log`
+// （file-store-paths.ts），所有写入进程共用，每次追加都在**该项目**的全局锁内。
+// 本模块另外提供文件后端的 ChangeSource（store-change-tracker.ts 的端口）：每次本进程提交
+// 写入就在日志里记一条 reserve（revision = 新的 ceiling），别的进程轮询日志尾部，看到 ceiling
+// 前进就知道有人写过——跨进程的变更感知只靠这份日志，不靠任何进程的内存。
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { createFileExclusive, readFileIfExists } from "./file-store-atomic.js";
-import { withTaskfoldGlobalLockSync } from "./file-store-locks.js";
+import type { TaskfoldChange } from "./contract/index.js";
+import { readFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
+import {
+  isTaskfoldLockConflictError,
+  withTaskfoldGlobalLockSync,
+  type TaskfoldLockGuard,
+} from "./file-store-locks.js";
 import { TASKFOLD_FILE_STORE_FILE_MODE } from "./file-store-paths.js";
+import type { TaskfoldChangeSource } from "./store-change-tracker.js";
 
 type ChangeLogRecord = { type: "epoch"; epoch: string } | { type: "reserve"; ceiling: number };
+
+/**
+ * 日志超过这么多条记录，下一次追加时（全局锁内）压成「epoch + 最后一条 reserve」两行。
+ * 每次写入都记一条，不压缩的话日志无限增长，而轮询每秒都要整份读一遍。压缩只丢掉中间的
+ * 旧 ceiling，epoch 和最新 ceiling 不变，读者看到压缩前后的文件结论相同（tmp + rename，原子替换）。
+ */
+const CHANGE_LOG_COMPACT_THRESHOLD = 1000;
 
 function parseLines(content: string): ChangeLogRecord[] {
   const records: ChangeLogRecord[] = [];
@@ -42,32 +61,93 @@ function readChangeLogRecords(changesLogPath: string): ChangeLogRecord[] {
   return content ? parseLines(content) : [];
 }
 
+function firstEpoch(records: ChangeLogRecord[]): string | undefined {
+  return records.find((record): record is { type: "epoch"; epoch: string } => record.type === "epoch")?.epoch;
+}
+
+/** 最后一条合法 ceiling；缺失或损坏按 0 处理，从不给出负数或非整数的基数。 */
+function lastCeiling(records: ChangeLogRecord[]): number {
+  let base = 0;
+  for (const record of records) {
+    if (record.type === "reserve" && Number.isSafeInteger(record.ceiling) && record.ceiling > 0) {
+      base = record.ceiling;
+    }
+  }
+  return base;
+}
+
+function epochLine(epoch: string): string {
+  return `${JSON.stringify({ type: "epoch", epoch })}\n`;
+}
+
+function reserveLine(ceiling: number): string {
+  return `${JSON.stringify({ type: "reserve", ceiling })}\n`;
+}
+
+/**
+ * 全局锁内：读最后一个 ceiling → 追加新 ceiling `base + count`，返回日志的 epoch 与 `base`。
+ * 日志没有 epoch（首次使用，或 `.runtime/` 被删过）时连同新 epoch 整份重写；记录过多时顺带压缩。
+ */
+function reserveLocked(
+  changesLogPath: string,
+  count: number,
+  guard: TaskfoldLockGuard,
+): { epoch: string; base: number } {
+  const records = readChangeLogRecords(changesLogPath);
+  const base = lastCeiling(records);
+  const existingEpoch = firstEpoch(records);
+  guard.assertHeld();
+  if (existingEpoch === undefined || records.length >= CHANGE_LOG_COMPACT_THRESHOLD) {
+    const epoch = existingEpoch ?? randomUUID();
+    writeFileAtomic(
+      changesLogPath,
+      `${epochLine(epoch)}${reserveLine(base + count)}`,
+      TASKFOLD_FILE_STORE_FILE_MODE,
+      guard.assertHeld,
+    );
+    return { epoch, base };
+  }
+  fs.appendFileSync(changesLogPath, reserveLine(base + count), { mode: TASKFOLD_FILE_STORE_FILE_MODE });
+  return { epoch: existingEpoch, base };
+}
+
 /**
  * Reads the log-level epoch, creating it if this is the first time anyone has opened
- * this project's change log. `createFileExclusive` (open with O_EXCL) is the
- * insert-if-absent primitive here, playing the same role `INSERT OR IGNORE` plays for
- * sqlite-store.ts's `ensureChangeEpoch`: if two callers race to create the file, only
- * one create wins, and both re-read the file afterwards so the actual winner's epoch is
- * what everyone uses. The epoch must be scoped to the log file (not generated fresh per
- * process) so a Gateway restart does not invalidate every UI's long-poll cursor.
+ * this project's change log. The epoch must be scoped to the log file (not generated
+ * fresh per process) so a Gateway restart does not invalidate every UI's long-poll cursor.
+ * 创建在全局锁内（锁内重查一次），与 reserve 的整份重写互斥，不会出现两个 epoch。
+ * `canWrite` 为 false（格式版本高于本版 core，只读）时不创建，日志里没有 epoch 就给一个
+ * 不落盘的进程内 epoch——只读进程不往日志里写，这个值也不会被别人看到。
  */
-export function ensureFileChangeEpoch(changesLogPath: string): string {
-  const existing = readChangeLogRecords(changesLogPath).find(
-    (record): record is { type: "epoch"; epoch: string } => record.type === "epoch",
-  );
-  if (existing) {
-    return existing.epoch;
+export function ensureFileChangeEpoch(
+  changesLogPath: string,
+  locksDir: string,
+  canWrite: boolean = true,
+): string {
+  const existing = firstEpoch(readChangeLogRecords(changesLogPath));
+  if (existing !== undefined) {
+    return existing;
   }
-  const epoch = randomUUID();
-  const line = `${JSON.stringify({ type: "epoch", epoch })}\n`;
-  createFileExclusive(changesLogPath, line, TASKFOLD_FILE_STORE_FILE_MODE);
-  // Re-read regardless of whether this call won the create: a concurrent creator's
-  // value is the one that counts, exactly as sqlite-store.ts's comment notes for its
-  // own SELECT-after-INSERT-OR-IGNORE.
-  const stored = readChangeLogRecords(changesLogPath).find(
-    (record): record is { type: "epoch"; epoch: string } => record.type === "epoch",
-  );
-  return stored?.epoch ?? epoch;
+  if (!canWrite) {
+    return randomUUID();
+  }
+  return withTaskfoldGlobalLockSync(locksDir, (guard) => {
+    const records = readChangeLogRecords(changesLogPath);
+    const raced = firstEpoch(records);
+    if (raced !== undefined) {
+      return raced;
+    }
+    const epoch = randomUUID();
+    const ceiling = lastCeiling(records);
+    guard.assertHeld();
+    writeFileAtomic(
+      changesLogPath,
+      `${epochLine(epoch)}${ceiling > 0 ? reserveLine(ceiling) : ""}`,
+      TASKFOLD_FILE_STORE_FILE_MODE,
+      guard.assertHeld,
+    );
+    return epoch;
+  });
 }
 
 /**
@@ -79,20 +159,97 @@ export function ensureFileChangeEpoch(changesLogPath: string): string {
 export function reserveFileChangeRevisions(changesLogPath: string, count: number, locksDir: string): number {
   // 「读最后一个 ceiling → 追加新 ceiling」在全局锁内完成（需求/18 §3.3），否则两个进程会
   // 读到同一个 base、拿到重叠的 revision 区间。同步锁：调用链（store-change-tracker.ts）是同步的。
-  return withTaskfoldGlobalLockSync(locksDir, (guard) => {
-    const records = readChangeLogRecords(changesLogPath);
-    let base = 0;
-    for (const record of records) {
-      if (record.type === "reserve" && Number.isSafeInteger(record.ceiling) && record.ceiling > 0) {
-        base = record.ceiling;
-      }
-    }
-    const nextCeiling = base + count;
-    guard.assertHeld();
-    fs.appendFileSync(changesLogPath, `${JSON.stringify({ type: "reserve", ceiling: nextCeiling })}\n`, {
-      mode: TASKFOLD_FILE_STORE_FILE_MODE,
-    });
-    return base;
-  });
+  // 日志与锁同在一个项目的 `.taskfold/` 下，锁的范围正好就是这份日志的写入者。
+  return withTaskfoldGlobalLockSync(locksDir, (guard) => reserveLocked(changesLogPath, count, guard).base);
 }
 
+/** 日志当前的游标：epoch + 最后一个 ceiling。还没有任何 reserve（ceiling 为 0）时没有合法游标。 */
+function readFileChangeHead(changesLogPath: string): TaskfoldChange | undefined {
+  const records = readChangeLogRecords(changesLogPath);
+  const epoch = firstEpoch(records);
+  const revision = lastCeiling(records);
+  return epoch !== undefined && revision > 0 ? { epoch, revision } : undefined;
+}
+
+function isAhead(head: TaskfoldChange, seen: TaskfoldChange | undefined): boolean {
+  return !seen || head.epoch !== seen.epoch || head.revision > seen.revision;
+}
+
+/**
+ * 文件后端的 ChangeSource（需求/18 §3.3 第 6 行、§3.5 第 3 项）。游标就是日志本身：epoch 取日志
+ * 的 epoch，revision 取日志最后一个 ceiling，所以同一个项目的所有进程看到的是同一条单调序列。
+ *
+ * - `record()`：本进程提交了写入，全局锁内追加一条 reserve（+1），返回新游标。等锁超时
+ *   不 throw（写入本身已经成功，不能因为记日志失败而报错），记下「欠一条」，由下次 `poll()` 补记。
+ * - `poll()`：先看 `dataVersion`（file-store-reconcile.ts：人手改文件、`git checkout` 等绕过
+ *   core 的改动，探测到时已在卡锁内重盖了 revision），有就记一条，让别的进程也能从日志感知；
+ *   再看日志的 ceiling 有没有越过本进程上次见到的位置——越过了就是别的进程写过。
+ * - `announce()`：给出启动时的游标（日志已有游标就直接用，不追加）。
+ *
+ * `canWrite` 为 false（格式版本高于本版 core，只读）时不追加，只读别人写下的游标。
+ */
+export function createTaskfoldFileChangeSource(options: {
+  changesLogPath: string;
+  locksDir: string;
+  dataVersion?: () => number;
+  canWrite?: () => boolean;
+}): TaskfoldChangeSource {
+  const { changesLogPath, locksDir, dataVersion } = options;
+  const canWrite = options.canWrite ?? (() => true);
+  let seen = readFileChangeHead(changesLogPath);
+  let externalDataVersion = dataVersion?.();
+  let recordPending = false;
+
+  function record(): TaskfoldChange | undefined {
+    if (!canWrite()) {
+      return undefined;
+    }
+    try {
+      const { epoch, base } = withTaskfoldGlobalLockSync(locksDir, (guard) =>
+        reserveLocked(changesLogPath, 1, guard),
+      );
+      recordPending = false;
+      seen = { epoch, revision: base + 1 };
+      return seen;
+    } catch (error) {
+      if (isTaskfoldLockConflictError(error)) {
+        recordPending = true;
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  return {
+    announce() {
+      const head = readFileChangeHead(changesLogPath);
+      if (head) {
+        seen = head;
+        return head;
+      }
+      return record();
+    },
+    record,
+    poll() {
+      if (dataVersion) {
+        const current = dataVersion();
+        if (current !== externalDataVersion) {
+          externalDataVersion = current;
+          recordPending = true;
+        }
+      }
+      if (recordPending) {
+        const recorded = record();
+        if (recorded) {
+          return recorded;
+        }
+      }
+      const head = readFileChangeHead(changesLogPath);
+      if (head && isAhead(head, seen)) {
+        seen = head;
+        return head;
+      }
+      return undefined;
+    },
+  };
+}

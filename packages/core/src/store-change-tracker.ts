@@ -8,38 +8,81 @@ import type { TaskfoldKeyedStore } from "./persistence-types.js";
  */
 const CHANGE_REVISION_BLOCK = 10_000;
 
+/**
+ * ChangeSource 端口（需求/18 §3.5 第 3 项）：变更游标从哪来。{@link TaskfoldChangeTracker}
+ * 只负责把它给出的游标广播给等待者；本进程的写入、别的进程的写入、绕过 core 的文件改动
+ * 各自怎么变成游标，由实现决定。三个方法返回 `undefined` 都表示「这次没有新游标可广播」。
+ *
+ * - SQLite 与内存 store：{@link createTaskfoldReservedChangeSource}（按块预留 revision，
+ *   外部变化靠 `dataVersion`）。
+ * - 文件后端：file-store-change-cursor.ts 的 `createTaskfoldFileChangeSource`（跨进程靠
+ *   `.taskfold/.runtime/changes.log`）。
+ */
+export type TaskfoldChangeSource = {
+  /** 宿主启动时调一次，给等待者一个起始游标。 */
+  announce(): TaskfoldChange | undefined;
+  /** 本进程刚提交了写入。 */
+  record(): TaskfoldChange | undefined;
+  /** 宿主定期调用（OpenClaw 的 change-events.ts 每秒一次）：别处有没有变化。 */
+  poll(): TaskfoldChange | undefined;
+};
+
+/**
+ * 按块预留 revision 的 ChangeSource：SQLite 后端（`taskfold_meta` 里的持久计数器 + `PRAGMA
+ * data_version`）与内存 store（不传参数：进程级 epoch、从 0 起的内存计数）都用它。
+ * 行为与 ChangeSource 端口引入之前 TaskfoldChangeTracker 内置的逻辑完全一致。
+ */
+export function createTaskfoldReservedChangeSource(
+  options: {
+    dataVersion?: () => number;
+    epoch?: string;
+    reserveRevisions?: (count: number) => number;
+  } = {},
+): TaskfoldChangeSource {
+  const { dataVersion } = options;
+  // A database-scoped epoch plus restart-monotonic revisions keep a connected
+  // UI's long-wait cursor comparable across a Gateway restart. A per-process
+  // epoch invalidated every cursor on each restart and forced a full reload.
+  const epoch = options.epoch ?? randomUUID();
+  const reserveRevisions = options.reserveRevisions ?? (() => 0);
+  let revision = reserveRevisions(CHANGE_REVISION_BLOCK);
+  let revisionCeiling = revision + CHANGE_REVISION_BLOCK;
+  let externalDataVersion = dataVersion?.();
+
+  const record = (): TaskfoldChange => {
+    if (revision + 1 >= revisionCeiling) {
+      const base = Math.max(reserveRevisions(CHANGE_REVISION_BLOCK), revision);
+      revision = base;
+      revisionCeiling = base + CHANGE_REVISION_BLOCK;
+    }
+    return { epoch, revision: ++revision };
+  };
+
+  return {
+    announce: record,
+    record,
+    poll() {
+      if (!dataVersion) {
+        return undefined;
+      }
+      const current = dataVersion();
+      if (current === externalDataVersion) {
+        return undefined;
+      }
+      externalDataVersion = current;
+      return record();
+    },
+  };
+}
+
 export class TaskfoldChangeTracker {
-  private readonly epoch: string;
-  private revision: number;
-  private revisionCeiling: number;
+  private readonly source: TaskfoldChangeSource;
   private latestChange: TaskfoldChange | undefined;
   private mutationRevision = 0;
-  private externalDataVersion: number | undefined;
   private readonly listeners = new Set<(change: TaskfoldChange) => void>();
-  private readonly reserveRevisions: (count: number) => number;
 
-  constructor(
-    private readonly readDataVersion?: () => number,
-    epoch?: string,
-    reserveRevisions?: (count: number) => number,
-  ) {
-    // A database-scoped epoch plus restart-monotonic revisions keep a connected
-    // UI's long-wait cursor comparable across a Gateway restart. A per-process
-    // epoch invalidated every cursor on each restart and forced a full reload.
-    this.epoch = epoch ?? randomUUID();
-    this.reserveRevisions = reserveRevisions ?? (() => 0);
-    this.revision = this.reserveRevisions(CHANGE_REVISION_BLOCK);
-    this.revisionCeiling = this.revision + CHANGE_REVISION_BLOCK;
-    this.externalDataVersion = readDataVersion?.();
-  }
-
-  private nextRevision(): number {
-    if (this.revision + 1 >= this.revisionCeiling) {
-      const base = Math.max(this.reserveRevisions(CHANGE_REVISION_BLOCK), this.revision);
-      this.revision = base;
-      this.revisionCeiling = base + CHANGE_REVISION_BLOCK;
-    }
-    return ++this.revision;
+  constructor(source: TaskfoldChangeSource = createTaskfoldReservedChangeSource()) {
+    this.source = source;
   }
 
   track<T>(store: TaskfoldKeyedStore<T>): TaskfoldKeyedStore<T> {
@@ -91,7 +134,12 @@ export class TaskfoldChangeTracker {
   }
 
   announceEpoch(): void {
-    this.emit();
+    this.publish(this.source.announce());
+  }
+
+  /** 记一次变化并广播（给不经 {@link track} 的调用方用，例如 OpenClaw 适配层的聚合游标）。 */
+  recordChange(): void {
+    this.publish(this.source.record());
   }
 
   current(): TaskfoldChange | undefined {
@@ -99,15 +147,11 @@ export class TaskfoldChangeTracker {
   }
 
   reconcileExternalChanges(): boolean {
-    if (!this.readDataVersion) {
+    const change = this.source.poll();
+    if (!change) {
       return false;
     }
-    const current = this.readDataVersion();
-    if (current === this.externalDataVersion) {
-      return false;
-    }
-    this.externalDataVersion = current;
-    this.emit();
+    this.publish(change);
     return true;
   }
 
@@ -117,13 +161,42 @@ export class TaskfoldChangeTracker {
       return await run();
     } finally {
       if (this.mutationRevision !== initialRevision) {
-        this.emit();
+        this.publish(this.source.record());
       }
     }
   }
 
-  private emit(): void {
-    const change = { epoch: this.epoch, revision: this.nextRevision() };
+  async waitForChange(
+    after: TaskfoldChange | undefined,
+    timeoutMs: number,
+  ): Promise<{ change?: TaskfoldChange; timedOut: boolean }> {
+    const isNewer = (change: TaskfoldChange) =>
+      !after || change.epoch !== after.epoch || change.revision > after.revision;
+    const current = this.current();
+    if (current && isNewer(current)) {
+      return { change: current, timedOut: false };
+    }
+
+    return await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        resolve({ change: this.current(), timedOut: true });
+      }, timeoutMs);
+      const unsubscribe = this.subscribe((change) => {
+        if (!isNewer(change)) {
+          return;
+        }
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve({ change, timedOut: false });
+      });
+    });
+  }
+
+  private publish(change: TaskfoldChange | undefined): void {
+    if (!change) {
+      return;
+    }
     this.latestChange = change;
     for (const listener of this.listeners) {
       try {

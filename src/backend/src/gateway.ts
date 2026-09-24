@@ -82,9 +82,13 @@ function redactDiagnosticsRows(result: Awaited<ReturnType<TaskfoldStore["diagnos
 export function registerTaskfoldGatewayMethods(params: {
   api: OpenClawPluginApi;
   store?: TaskfoldStore;
+  /** `taskfold.changes.wait` 的游标来源。不传就是 `store` 自己（SQLite 生产路径，行为不变）；
+   * 文件后端传 change-aggregator.ts 的跨项目聚合游标，返回形状相同。 */
+  changes?: Pick<TaskfoldStore, "waitForChange">;
 }) {
   const { api } = params;
   const store = params.store ?? TaskfoldStore.openSqlite();
+  const changes = params.changes ?? store;
   const dispatchCards = createTaskfoldDispatchHandler({
     api,
     store,
@@ -252,7 +256,7 @@ export function registerTaskfoldGatewayMethods(params: {
       try {
         respond(
           true,
-          await store.waitForChange(
+          await changes.waitForChange(
             readChangeCursor(requestParams.after),
             readChangeWaitTimeout(requestParams.timeoutMs),
           ),

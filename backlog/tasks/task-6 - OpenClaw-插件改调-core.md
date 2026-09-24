@@ -4,7 +4,7 @@ title: OpenClaw 插件改调 core
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
-updated_date: '2026-09-24 10:43'
+updated_date: '2026-09-24 11:16'
 labels:
   - openclaw
 milestone: m-0
@@ -37,4 +37,6 @@ TASK-2 遗留：① persistence-types.ts 的 CAS 目前用条件类型「仅卡�
 18 §9 待验证：store-enrichment.ts:272-300 的「worker 停止判定 blocked」是否属于执行逻辑——改调 core 时一并判定它该留在 core 还是移到适配层。
 
 2026-09-24 验收口径：生产后端切文件存储在 TASK-10，本任务 AC#3「OpenClaw 与 CLI 同时写同一张卡」先用集成测试验（适配层进程内起文件后端 + CLI 子进程并发写），TASK-10 切换后再用真实 Gateway 复验。
+
+TASK-4 遗留（已知问题，非阻塞）：文件后端每次写入同步拿全局锁，锁争用时最多阻塞事件循环约 2 秒（Gateway 进程里影响最大）；另：只读模式（format_version 更高）下人手改文件不会在本进程广播。改调 core 时评估是否需要改成异步锁，结论写进备注。
 <!-- SECTION:NOTES:END -->

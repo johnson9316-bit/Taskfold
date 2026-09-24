@@ -4,7 +4,7 @@ title: CLI：卡片读写与状态流转 + --json 契约 + AI 指引
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
-updated_date: '2026-09-24 10:36'
+updated_date: '2026-09-24 11:16'
 labels:
   - cli
 milestone: m-0
@@ -34,4 +34,6 @@ ordinal: 5000
 
 <!-- SECTION:NOTES:BEGIN -->
 18 §9 待验证：WSL 的 drvfs（/mnt/c）与 \\wsl$ 路径下 proper-lockfile 会误判锁为 compromised，在 CLI 文档/skill 与 README 中写明不支持这类路径。
+
+TASK-4 遗留：core 工厂的 pluginDir 仍是必填参数。CLI 不能依赖 ~/.openclaw——本任务要让非 OpenClaw 宿主无需 pluginDir（改为可选或由宿主注入 .taskfold 内的路径），VS Code（TASK-8）同样受益。
 <!-- SECTION:NOTES:END -->

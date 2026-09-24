@@ -4,7 +4,7 @@ title: OpenClaw 生产后端切到文件存储 + SQLite 旧数据迁移
 status: To Do
 assignee: []
 created_date: '2026-09-24 10:36'
-updated_date: '2026-09-24 10:43'
+updated_date: '2026-09-24 11:16'
 labels:
   - openclaw
   - storage
@@ -37,4 +37,6 @@ ordinal: 10000
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-09-24 用户已授权真实迁移：先备份 taskfold.sqlite，把各项目数据写入各自仓库主 checkout 的 .taskfold/（其他仓库里只产生未跟踪文件，不在其他仓库 commit），按需重启 Gateway；回滚方法写进文档。追加验收：TASK-6 AC#3 用真实 Gateway + CLI 复验。
+
+TASK-4 遗留：适配层聚合游标 src/backend/src/change-aggregator.ts 还没接进 index.ts（gateway.ts 已加可选参数 changes），切文件后端时接上并验证 Control UI 跨项目刷新。
 <!-- SECTION:NOTES:END -->

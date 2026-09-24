@@ -35,7 +35,11 @@ import {
   updateEvent,
   appendEvent,
 } from "./store-card-helpers.js";
-import { TaskfoldChangeTracker } from "./store-change-tracker.js";
+import {
+  createTaskfoldReservedChangeSource,
+  TaskfoldChangeTracker,
+  type TaskfoldChangeSource,
+} from "./store-change-tracker.js";
 import {
   invertTaskfoldCardMutation,
   invertTaskfoldWorkspaceMutation,
@@ -170,12 +174,17 @@ export class TaskfoldCoreStore {
       dataVersion?: () => number;
       changeEpoch?: string;
       reserveChangeRevisions?: (count: number) => number;
+      /** 给了就用它驱动变更游标（文件后端），上面三项随之不用；不给按块预留（SQLite、内存）。 */
+      changeSource?: TaskfoldChangeSource;
     } = {},
   ) {
     this.changes = new TaskfoldChangeTracker(
-      stores.dataVersion,
-      stores.changeEpoch,
-      stores.reserveChangeRevisions,
+      stores.changeSource ??
+        createTaskfoldReservedChangeSource({
+          dataVersion: stores.dataVersion,
+          epoch: stores.changeEpoch,
+          reserveRevisions: stores.reserveChangeRevisions,
+        }),
     );
     this.store = this.changes.track(stampCardRevisions(store));
     this.boardStore = this.changes.track(
@@ -207,31 +216,16 @@ export class TaskfoldCoreStore {
     return this.changes.current();
   }
 
+  /** 每次这个 store 的变更游标前进（本进程写入、或 {@link reconcileExternalChanges} 轮询到别处的变化）都会回调。 */
+  subscribeChanges(listener: (change: TaskfoldChange) => void): () => void {
+    return this.changes.subscribe(listener);
+  }
+
   async waitForChange(
     after: TaskfoldChange | undefined,
     timeoutMs: number,
   ): Promise<{ change?: TaskfoldChange; timedOut: boolean }> {
-    const isNewer = (change: TaskfoldChange) =>
-      !after || change.epoch !== after.epoch || change.revision > after.revision;
-    const current = this.changes.current();
-    if (current && isNewer(current)) {
-      return { change: current, timedOut: false };
-    }
-
-    return await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        resolve({ change: this.changes.current(), timedOut: true });
-      }, timeoutMs);
-      const unsubscribe = this.changes.subscribe((change) => {
-        if (!isNewer(change)) {
-          return;
-        }
-        clearTimeout(timeout);
-        unsubscribe();
-        resolve({ change, timedOut: false });
-      });
-    });
+    return await this.changes.waitForChange(after, timeoutMs);
   }
 
   protected async enqueueMutation<T>(run: () => Promise<T>): Promise<T> {

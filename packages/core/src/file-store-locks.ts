@@ -17,6 +17,8 @@ import lockfile from "proper-lockfile";
 /**
  * 锁文件多久没刷新 mtime 就被视为 stale、可被别的进程抢走（ms）。所有宿主必须一致
  * （proper-lockfile 检测不到参数不一致），所以写死在这里、不开放配置。
+ * ⚠️ 改锁参数 stale/update 视为一次格式升级：同时把 file-store-format.ts 的
+ * `TASKFOLD_FORMAT_VERSION` +1，让还在用旧参数的 core 进入只读模式（需求/18 §3.9）。
  * 取库默认值 10s：远大于任何一次临界区（ms 级同步文件读写，2000 卡全量解析也只 164ms），
  * 又足够短，进程崩溃遗留的锁最多挡 10s。
  */
@@ -215,7 +217,7 @@ export function withTaskfoldFileLockSync<T>(
   return outcome.result as T;
 }
 
-/** 全局锁：ID 分配、新建卡片。 */
+/** 全局锁：ID 分配、新建卡片、changes.log 追加。 */
 export async function withTaskfoldGlobalLock<T>(
   locksDir: string,
   section: (guard: TaskfoldLockGuard) => T,
@@ -224,7 +226,7 @@ export async function withTaskfoldGlobalLock<T>(
   return await withTaskfoldFileLock(lockfilePath.slice(0, -".lock".length), lockfilePath, section);
 }
 
-/** 全局锁的同步版：change revision 预留。 */
+/** 全局锁的同步版：change revision 预留、changes.log 追加。 */
 export function withTaskfoldGlobalLockSync<T>(
   locksDir: string,
   section: (guard: TaskfoldLockGuard) => T,

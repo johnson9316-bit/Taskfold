@@ -42,6 +42,7 @@ import {
   trimMetadataToBudget,
 } from "@taskfold/core/store-normalizers.js";
 import { TaskfoldProjectStore } from "@taskfold/core/store-projects.js";
+import type { TaskfoldChangeSource } from "@taskfold/core/store-change-tracker.js";
 
 export type { TaskfoldDispatchResult } from "@taskfold/core/store-inputs.js";
 
@@ -64,6 +65,9 @@ export type TaskfoldBackendStores = {
   dataVersion?: () => number;
   changeEpoch?: string;
   reserveChangeRevisions?: (count: number) => number;
+  /** 文件后端给出（跨进程靠 `.taskfold/.runtime/changes.log`），有它时上面三项不再驱动变更游标；
+   * SQLite 后端不给，行为不变。 */
+  changeSource?: TaskfoldChangeSource;
   /**
    * ⚠️ Present for shape parity with both factories' return values, but neither
    * `fromStores` below nor `fromSqliteStores` ever calls it -- a known, already-recorded
@@ -354,6 +358,7 @@ export class TaskfoldStore extends TaskfoldProjectStore {
       dataVersion: stores.dataVersion,
       changeEpoch: stores.changeEpoch,
       reserveChangeRevisions: stores.reserveChangeRevisions,
+      changeSource: stores.changeSource,
     });
   }
 

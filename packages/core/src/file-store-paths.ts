@@ -33,9 +33,9 @@ export function resolveTaskfoldDataDir(workspace: TaskfoldWorkspace): string {
   return path.join(root, ".taskfold");
 }
 
-/** Resolves `~/.openclaw/plugins/taskfold/`, the plugin-level directory that holds the
- * project registry, the change log, and notification subscriptions -- everything that
- * must not disappear when a project's git branch is switched.
+/** Resolves the plugin-level directory under a host's state dir. 需求/18 §3.8 之后这里只放
+ * OpenClaw 专属的东西：项目注册表 `projects.json` 与通知订阅（changes.log 已移到每个项目的
+ * `.taskfold/.runtime/`）。
  * `stateDir` 由调用方注入（OpenClaw 适配层传 `resolveStateDir(env)` 的结果），core 不再依赖宿主 SDK。 */
 export function resolveTaskfoldPluginDir(stateDir: string): string {
   return path.join(stateDir, ...PLUGIN_RELATIVE_PATH);
@@ -53,10 +53,14 @@ export type TaskfoldFileStoreLayout = {
   locksDir: string;
   /** `<repo>/.taskfold/.runtime/cards`：卡片运行态文件（需求/18 §3.7），`.runtime/` 由 `<repo>/.taskfold/.gitignore` 忽略。 */
   runtimeCardsDir: string;
-  /** `~/.openclaw/plugins/taskfold` */
+  /** `<repo>/.taskfold/.runtime/changes.log`：本项目的变更日志（需求/18 §3.8），所有写入进程共用，
+   * 在本项目的全局锁内追加（file-store-change-cursor.ts）。 */
+  changesLogPath: string;
+  /** `<repo>/.taskfold/config.yml`：记录格式版本（需求/18 §3.9，file-store-format.ts），纳入 Git。 */
+  configPath: string;
+  /** 宿主注入的插件级目录（见 {@link resolveTaskfoldPluginDir}），只放 OpenClaw 专属数据。 */
   pluginDir: string;
   projectsJsonPath: string;
-  changesLogPath: string;
   subscriptionsDir: string;
   /**
    * Reserved by 需求/16 第六节 for the M4 execution ledger and M9 metrics time
@@ -84,9 +88,10 @@ export function resolveTaskfoldFileStoreLayout(options: {
     attachmentsDir: path.join(dataDir, "attachments"),
     locksDir: path.join(dataDir, ".locks"),
     runtimeCardsDir: path.join(dataDir, ".runtime", "cards"),
+    changesLogPath: path.join(dataDir, ".runtime", "changes.log"),
+    configPath: path.join(dataDir, "config.yml"),
     pluginDir,
     projectsJsonPath: path.join(pluginDir, "projects.json"),
-    changesLogPath: path.join(pluginDir, "changes.log"),
     subscriptionsDir: path.join(pluginDir, "subscriptions"),
     runsDir: path.join(pluginDir, "runs"),
     metricsDir: path.join(pluginDir, "metrics"),
@@ -137,13 +142,13 @@ function ensureRuntimeGitignored(dataDir: string): void {
 }
 
 /**
- * Creates every directory this skeleton actually writes to and tightens
- * permissions the same way sqlite-store.ts's `hardenTaskfoldDatabaseFiles` does
- * for the database file (dir 0700 / file 0600). Deliberately excludes
- * `runsDir`/`metricsDir`: those are reserved paths for unimplemented M4/M9
- * features, not directories this skeleton owns yet.
+ * Creates every directory this skeleton actually writes to under the project's
+ * `.taskfold/` and tightens permissions the same way sqlite-store.ts's
+ * `hardenTaskfoldDatabaseFiles` does for the database file (dir 0700 / file 0600).
+ * 会改动 `.taskfold/`，调用方须先确认格式版本可写（file-store-format.ts）；插件级目录见
+ * {@link ensureTaskfoldPluginDirectories}。
  */
-export function ensureTaskfoldFileStoreDirectories(layout: TaskfoldFileStoreLayout): void {
+export function ensureTaskfoldDataDirectories(layout: TaskfoldFileStoreLayout): void {
   // archiveCardsDir is deliberately not created here: nothing in the current
   // business layer moves a card file there yet (archive() only flips
   // metadata.archivedAt in place). It is still scanned by the id allocator
@@ -156,6 +161,11 @@ export function ensureTaskfoldFileStoreDirectories(layout: TaskfoldFileStoreLayo
   ensureHardenedDir(layout.locksDir);
   ensureHardenedDir(layout.runtimeCardsDir);
   ensureRuntimeGitignored(layout.dataDir);
+}
+
+/** 插件级目录（宿主注入的 `pluginDir`）。Deliberately excludes `runsDir`/`metricsDir`: those
+ * are reserved paths for unimplemented M4/M9 features, not directories this skeleton owns yet. */
+export function ensureTaskfoldPluginDirectories(layout: TaskfoldFileStoreLayout): void {
   ensureHardenedDir(layout.pluginDir);
   ensureHardenedDir(layout.subscriptionsDir);
 }
