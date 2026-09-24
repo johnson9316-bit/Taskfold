@@ -1,6 +1,6 @@
 // Taskfold 看板前端的宿主接口（`需求/18-多宿主架构.md` §5）。
 //
-// `browser/` 里的看板代码（`project-host.ts`、i18n）只经由这里的 `TaskfoldHost`
+// `packages/ui` 里的看板代码（`project-host.ts`、i18n）只经由这里的 `TaskfoldHost`
 // 与宿主打交道，不直接碰 OpenClaw 的 `ControlUiHost`、`window.confirm` 或
 // localStorage。第一个实现是 `openclaw-host.ts`（OpenClaw 原生 Control UI 注入），
 // VS Code Webview 是第二个。本文件不得依赖任何宿主专属模块。

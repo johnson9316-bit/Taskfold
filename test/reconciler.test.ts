@@ -12,8 +12,8 @@ import type {
 import {
   reconcileTaskfoldCards,
   type TaskfoldReconcilerRuntime,
-} from "../src/backend/src/reconciler.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+} from "../packages/openclaw/src/backend/src/reconciler.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 /** Silent long enough to be presumed gone: heartbeat-stale (20m) plus grace (10m). */

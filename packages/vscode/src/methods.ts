@@ -1,4 +1,4 @@
-// 扩展进程里的 method 映射：前端（browser/project-host.ts）按 method 名发请求，这里在进程内
+// 扩展进程里的 method 映射：前端（packages/ui/src/project-host.ts）按 method 名发请求，这里在进程内
 // 调用 core（backlog doc-2 的清单）。本文件不依赖 `vscode`：界面交互（确认框、冲突三选一、
 // diff、打开文件）都经 {@link TaskfoldVscodeUi} 注入，由 vscode-ui.ts 实现，单测用替身。
 //
@@ -8,7 +8,7 @@
 //   也就没有要校验的工作区权限（doc-2「workspace 权限检查」），新建卡片也不补 defaultWorkspace
 //   （VS Code 的 board 没有 defaultWorkspace，与 CLI 相同）；
 // - cards.update / move / moveMilestone 带 `expectedRevision` 时交给 core 做 CAS，冲突时弹
-//   Reload / Overwrite / View Diff，结果按 browser/host.ts 的 `TaskfoldCardWriteResult` 返回；
+//   Reload / Overwrite / View Diff，结果按 packages/ui/src/host.ts 的 `TaskfoldCardWriteResult` 返回；
 // - 项目管理、资料库、执行相关的 method 不实现，前端按能力开关不显示对应界面。
 import fs from "node:fs";
 import { toCliError } from "@taskfold/cli/errors.js";
@@ -26,7 +26,7 @@ import { createMarkdownCardCodec } from "@taskfold/core/file-store-codec.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import { normalizeDelivery } from "@taskfold/core/store-normalizers.js";
 import type { TaskfoldExtensionStrings } from "./l10n.js";
-import type { TaskfoldWebviewError } from "./protocol.js";
+import type { TaskfoldWebviewError } from "@taskfold/ui/protocol.js";
 import {
   projectRootDir,
   TaskfoldProjectNotFoundError,
@@ -53,7 +53,7 @@ export interface TaskfoldViewStateStore {
   update(key: string, value: unknown): PromiseLike<void>;
 }
 
-/** 与 browser/host.ts 的 `TaskfoldCardWriteResult` 同形状，另带写成后的卡片。 */
+/** 与 packages/ui/src/host.ts 的 `TaskfoldCardWriteResult` 同形状，另带写成后的卡片。 */
 export type TaskfoldCardWriteResponse = {
   card?: TaskfoldCard;
   conflict?: "overwritten" | "reloaded" | "cancelled";

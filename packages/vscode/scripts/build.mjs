@@ -2,7 +2,7 @@
 // - 扩展进程：src/extension.ts 连同 @taskfold/core、@taskfold/cli 里用到的部分、proper-lockfile
 //   打成一个自包含的 CommonJS 文件 dist/extension.js，只把 `vscode` 留作外部模块。装好的 .vsix
 //   不依赖仓库路径和 node_modules。
-// - Webview：browser/vscode-index.ts（复用 browser/ 的 Lit 看板）打成 media/webview.js 与
+// - Webview：packages/ui 的 src/vscode-index.ts（复用 packages/ui 的 Lit 看板）打成 media/webview.js 与
 //   media/webview.css。CSP 只允许扩展 media 目录下的样式和带 nonce 的脚本，所以产物必须是
 //   外链文件，不能内联。
 // - 顺带把仓库根的 LICENSE 复制过来，供 vsce 打进 .vsix。
@@ -34,7 +34,7 @@ await esbuild.build({
 });
 
 await esbuild.build({
-  entryPoints: { webview: path.join(ROOT_DIR, "browser", "vscode-index.ts") },
+  entryPoints: { webview: path.join(ROOT_DIR, "packages", "ui", "src", "vscode-index.ts") },
   outdir: MEDIA_DIR,
   bundle: true,
   platform: "browser",
@@ -42,7 +42,7 @@ await esbuild.build({
   target: "es2022",
   minify: true,
   legalComments: "none",
-  // 与 scripts/build-control-ui.mjs 一致。
+  // 与 packages/openclaw/scripts/build-control-ui.mjs 一致。
   tsconfigRaw: {
     compilerOptions: {
       experimentalDecorators: true,

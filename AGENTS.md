@@ -1,6 +1,6 @@
 # AGENTS.md
 
-面向 Claude Code / Codex 等 AI 开发者的本地环境事实。本文件**不随 ClawHub 包发布**（不在 `package.json` 的 `files` 白名单里），只服务于在这台机器上开发 Taskfold 的场景；面向外部用户的安装/开发说明仍以 `README.md` 为权威入口（见下方「文档地图」）。
+面向 Claude Code / Codex 等 AI 开发者的本地环境事实。本文件**不随 ClawHub 包发布**（不在 `packages/openclaw/package.json` 的 `files` 白名单里），只服务于在这台机器上开发 Taskfold 的场景；面向外部用户的安装/开发说明仍以 `README.md` 为权威入口（见下方「文档地图」）。
 
 ## 环境事实
 
@@ -11,9 +11,9 @@
 | OpenClaw CLI / Gateway 版本 | `2026.9.4` (`3a9d69d`)，均已核实一致 |
 | **Node 版本（易踩）** | 开发必须 `>=24.16.0`——`openclaw@2026.9.4` 的 `preinstall` 硬性要求（它自己的 `engines` 是 `>=24.16.0 <25 \|\| >=26.1.0`）。**本机默认 node 是 `v22.22.3`，直接跑 `npm install` 会当场失败。** 已加 `.nvmrc`（`24.21.0`，不进发布包）与 `engines.node`，先 `nvm use` 或 `export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"` 再跑任何 npm 命令 |
 | Gateway 运行方式 | systemd user service，`127.0.0.1:18789`，loopback-only |
-| Taskfold 加载方式 | `~/.openclaw/openclaw.json` 的 `plugins.load.paths` 指向本地 checkout，**不是**通过 npm/ClawHub 安装 |
-| 本地 checkout 路径 | `/home/john/src/personal/Taskfold` |
-| `enabledByDefault` | `false`（`openclaw.plugin.json`）—— 每次插件 id 改名（Flowboard → Taskfold）都要手动 `openclaw plugins enable taskfold`，宿主不会自动跟随 |
+| Taskfold 加载方式 | `~/.openclaw/openclaw.json` 的 `plugins.load.paths` 指向本地 checkout 里的插件包目录 `packages/openclaw`，**不是**通过 npm/ClawHub 安装。TASK-11 之前指向仓库根，切换步骤见「切换加载路径与回滚」 |
+| 本地 checkout 路径 | `/home/john/src/personal/Taskfold`（插件包目录 `/home/john/src/personal/Taskfold/packages/openclaw`） |
+| `enabledByDefault` | `false`（`packages/openclaw/openclaw.plugin.json`）—— 每次插件 id 改名（Flowboard → Taskfold）都要手动 `openclaw plugins enable taskfold`，宿主不会自动跟随 |
 | Capability shape | `non-capability` —— `enable` 不需要 `--accept-capabilities` |
 | Trust 状态 | `reason=record-missing`，本地路径加载会有一条 WARN「can't verify where this plugin came from」，属预期，不是错误 |
 | 数据库 | `~/.openclaw/plugins/taskfold/taskfold.sqlite` |
@@ -38,11 +38,11 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 
 ## Control UI 的本机验证方法
 
-Control UI 已迁到宿主原生注入（`browser/` → `dist/control-ui/`，见 [[需求/15.9-ControlUI注入调查]]）。验证面板要注意四件事，前两件是环境坑、后两件是机制：
+Control UI 已迁到宿主原生注入（前端源码 `packages/ui/src/` → 产物 `packages/openclaw/dist/control-ui/`，见 [[需求/15.9-ControlUI注入调查]]）。验证面板要注意四件事，前两件是环境坑、后两件是机制：
 
 1. **地址是 `https://openclaw.local/`**（hosts 映射到 `127.0.0.1`，443 端口有反向代理转发到 Gateway 的 18789），自签证书。
 2. **必须绕过代理**：本机有 `HTTP_PROXY` 指向 `127.0.0.1:7897`，curl 和 Playwright 都会走它然后失败。curl 加 `--noproxy '*'`；Playwright 要在脚本里 `os.environ.pop()` 掉 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 及其小写形式，并给 chromium 传 `args=["--no-proxy-server","--proxy-bypass-list=*"]`，光靠 `proxy={"server":"direct://"}` 挡不住。再加 `ignore_https_errors=True`。
-3. **改了前端产物必须显式刷新宿主缓存**，否则浏览器拿到的还是旧产物（宿主的 `browserCatalogs` 初始化后不再感知磁盘变化）：
+3. **改了前端产物必须显式刷新宿主缓存**，否则浏览器拿到的还是旧产物（宿主的 `browserCatalogs` 初始化后不再感知磁盘变化）。在仓库根执行（根脚本转发给 `packages/openclaw`）：
 
    ```bash
    npm run build:control-ui
@@ -71,14 +71,47 @@ Control UI 已迁到宿主原生注入（`browser/` → `dist/control-ui/`，见
 ## 本地安装与重载回路
 
 ```bash
-openclaw plugins install --link /home/john/src/personal/Taskfold
+openclaw plugins install --link /home/john/src/personal/Taskfold/packages/openclaw
 openclaw plugins enable taskfold
 openclaw gateway restart
 openclaw plugins inspect taskfold --runtime
 openclaw plugins doctor
 ```
 
-如果 checkout 已经在 `plugins.load.paths` 里（本机现状即是如此），跳过第一条 `install --link`，直接 `enable` + `restart` 即可。README「Development」一节的等价命令用的是占位路径，这里补上本机真实路径。
+如果插件包目录已经在 `plugins.load.paths` 里，跳过第一条 `install --link`，直接 `enable` + `restart` 即可。README「Development」一节的等价命令用的是占位路径，这里补上本机真实路径。
+
+## 切换加载路径与回滚
+
+TASK-11 把插件从仓库根迁到了 `packages/openclaw`，仓库根不再有 `openclaw.plugin.json`。合并之后 `plugins.load.paths` 必须同时切换，否则下次重启 Gateway 就加载不到 taskfold。`openclaw config set` 会**整体替换**数组；2026-09-24 核实时数组里只有 Taskfold 这一项，改之前先用 `get` 再确认一遍。
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"
+# 1. 备份
+cp -p ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak-$(date +%Y%m%d-%H%M%S)
+# 2. 确认现值，预期是 ["/home/john/src/personal/Taskfold"]
+openclaw config get plugins.load.paths --json
+# 3. 先校验再写入
+openclaw config set plugins.load.paths '["/home/john/src/personal/Taskfold/packages/openclaw"]' --strict-json --dry-run
+openclaw config set plugins.load.paths '["/home/john/src/personal/Taskfold/packages/openclaw"]' --strict-json
+# 4. 重启并验证：loaded，工具数不变（43）
+openclaw gateway restart
+openclaw plugins inspect taskfold --runtime
+openclaw plugins doctor
+openclaw gateway call plugins.controlUi.reload --params '{"pluginId":"taskfold"}'
+```
+
+`plugins.entries.taskfold` 按插件 id 记录，与路径无关，一般不需要重新 `enable`；如果 `inspect` 显示 disabled，再执行 `openclaw plugins enable taskfold`。
+
+**回滚**：只改回配置不够，因为合并后仓库根已经没有插件，代码也要一起退回迁移前：
+
+```bash
+git -C /home/john/src/personal/Taskfold revert --no-edit <TASK-11 的提交>
+openclaw config set plugins.load.paths '["/home/john/src/personal/Taskfold"]' --strict-json
+openclaw gateway restart
+openclaw plugins inspect taskfold --runtime
+```
+
+也可以用第 1 步的备份文件整个覆盖回去（`cp -p ~/.openclaw/openclaw.json.bak-<时间戳> ~/.openclaw/openclaw.json`），但备份之后对配置做的其他修改会一并丢失，所以优先用 `config set`。
 
 ## VS Code 扩展（packages/vscode）
 
@@ -100,9 +133,9 @@ code --install-extension /home/john/src/personal/Taskfold/packages/vscode/taskfo
 
 | 文档 | 定位 |
 | --- | --- |
-| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（会被打进 ClawHub 包，不要往里塞本机路径或临时排查结论） |
+| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（按设计要打进 ClawHub 包，不要往里塞本机路径或临时排查结论）。**当前 `npm pack -w packages/openclaw` 缺 README、LICENSE、THIRD-PARTY-NOTICES、UPSTREAM.md、docs/CLAW_HUB_PUBLISHING.md**：这几份文件留在仓库根，打包时从根目录拷贝的方案待 TASK-9 处理 |
 | `VERIFICATION.md` | 按日期只增的验证台账，历史快照性质，早期结论可能已被后文推翻 —— 不要拿它当「当前状态」用 |
-| `docs/CLAW_HUB_PUBLISHING.md` | ClawHub 发布流程 |
+| `docs/CLAW_HUB_PUBLISHING.md` | ClawHub 发布流程（尚未适配 monorepo，待 TASK-9） |
 | `需求/` | 中文规划文档体系，Obsidian 风格 `[[wiki-link]]` 互链，入口 `需求/README.md` |
 | `需求/6-OpenClaw集成.md` | 插件安装/运行/分发的规划记录（注意：其「已在 2026.7.1-2 验证」的记载已过期，本机现为 2026.9.4，尚待重新验证） |
 | `需求/15-上游2026.9.4差异评估.md` | 上游 workboard 版本差异评估，见上文 |

@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldSqliteStores } from "../src/backend/src/sqlite-store.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
 

@@ -6,7 +6,7 @@ import type { TaskfoldProjectDocument } from "@taskfold/core/contract/index.js";
 import {
   readTaskfoldProjectDocument,
   writeTaskfoldProjectDocumentPath,
-} from "../src/backend/src/project-document-reader.js";
+} from "../packages/openclaw/src/backend/src/project-document-reader.js";
 
 const roots: string[] = [];
 

@@ -1,7 +1,7 @@
 // `TaskfoldHost` 的 VS Code Webview 实现（需求/18 §5）。
 //
 // 所有请求经 postMessage 交给扩展进程（packages/vscode/src/panel.ts），由它在进程内调用
-// core；协议定义在 packages/vscode/src/protocol.ts，两端共用。
+// core；协议定义在同目录的 protocol.ts，两端共用。
 // - 始终「已连接」：没有 Gateway，扩展进程就是后端。
 // - `changes`：扩展进程的文件监听与定期全量重读推过来，只当刷新提示。
 // - 语言跟随 `vscode.env.language`（启动参数），不持久化——下次打开仍跟随编辑器。
@@ -13,7 +13,7 @@ import {
   isTaskfoldExtensionMessage,
   type TaskfoldWebviewBootstrap,
   type TaskfoldWebviewMessage,
-} from "../packages/vscode/src/protocol.ts";
+} from "./protocol.ts";
 
 /** `acquireVsCodeApi()` 的返回值里本实现用到的部分。 */
 export type TaskfoldVsCodeWebviewApi = {

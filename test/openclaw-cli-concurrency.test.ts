@@ -12,7 +12,7 @@ import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import type { TaskfoldKeyedStore } from "@taskfold/core/persistence-types.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { TASKFOLD_CLI_EXIT_CODES } from "@taskfold/cli/errors.js";
 import { buildCliBundle, cleanupTempDirs, makeTempGitRepo, runCliProcess, runJson } from "./helpers/cli-harness.js";
 

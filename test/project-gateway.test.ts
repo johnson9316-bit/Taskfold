@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawPluginApi } from "../src/backend/api.js";
+import type { OpenClawPluginApi } from "../packages/openclaw/src/backend/api.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -8,8 +8,8 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
 } from "@taskfold/core/persistence-types.js";
-import { registerTaskfoldGatewayMethods } from "../src/backend/src/gateway.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { registerTaskfoldGatewayMethods } from "../packages/openclaw/src/backend/src/gateway.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore(): TaskfoldStore {

@@ -40,7 +40,8 @@
   },
   "dependencies": {
     "@taskfold/cli": "0.2.0",
-    "@taskfold/core": "0.2.0"
+    "@taskfold/core": "0.2.0",
+    "@taskfold/ui": "0.2.0"
   },
   "devDependencies": {
     "@types/vscode": "~1.100.0",

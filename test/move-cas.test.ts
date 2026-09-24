@@ -2,7 +2,7 @@
 // 拖拽 CAS）。这里既验证「传了就严格比对、不重试」，也验证「不传时行为与原来一样」——包括
 // OpenClaw 网关那条路径：网关不转发这个参数，请求里就算带了 expectedRevision 也照旧成功。
 import { describe, expect, it } from "vitest";
-import type { OpenClawPluginApi } from "../src/backend/api.js";
+import type { OpenClawPluginApi } from "../packages/openclaw/src/backend/api.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -13,8 +13,8 @@ import type {
   TaskfoldKeyedStore,
 } from "@taskfold/core/persistence-types.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
-import { registerTaskfoldGatewayMethods } from "../src/backend/src/gateway.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { registerTaskfoldGatewayMethods } from "../packages/openclaw/src/backend/src/gateway.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 /** cards store：`arm()` 之后的下一次 compareAndSwap 之前，模拟另一个进程抢先写了这张卡。 */

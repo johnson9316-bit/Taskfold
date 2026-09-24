@@ -11,8 +11,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldProjectRoutedStores } from "../src/backend/src/project-routed-stores.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { createTaskfoldProjectRoutedStores } from "../packages/openclaw/src/backend/src/project-routed-stores.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
 const chmodRestore: string[] = [];

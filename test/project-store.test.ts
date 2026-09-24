@@ -10,7 +10,7 @@ import type {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore() {

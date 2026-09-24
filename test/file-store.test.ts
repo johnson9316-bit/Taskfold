@@ -7,7 +7,7 @@ import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { createMarkdownCardCodec } from "@taskfold/core/file-store-codec.js";
 import { allocateNextTaskfoldCardId } from "@taskfold/core/file-store-card-id.js";
 import { resolveTaskfoldDataDir } from "@taskfold/core/file-store-paths.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
 

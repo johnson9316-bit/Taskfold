@@ -1,0 +1,65 @@
+{
+  "name": "@johnson9316-bit/taskfold",
+  "version": "0.2.0",
+  "description": "Project, milestone, documentation, and execution boards for OpenClaw.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnson9316-bit/Taskfold.git",
+    "directory": "packages/openclaw"
+  },
+  "bugs": {
+    "url": "https://github.com/johnson9316-bit/Taskfold/issues"
+  },
+  "homepage": "https://github.com/johnson9316-bit/Taskfold#readme",
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "kanban",
+    "project-management",
+    "milestones",
+    "worktree"
+  ],
+  "files": [
+    "dist/",
+    "docs/CLAW_HUB_PUBLISHING.md",
+    "LICENSE",
+    "README.md",
+    "THIRD-PARTY-NOTICES",
+    "UPSTREAM.md",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "npm run build:backend && npm run build:control-ui",
+    "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/* '--banner:js=import { createRequire as __taskfoldCreateRequire } from \"node:module\"; const require = __taskfoldCreateRequire(import.meta.url);'",
+    "build:control-ui": "node scripts/build-control-ui.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^3.0.0",
+    "commander": "^13.1.0",
+    "typebox": "1.3.6"
+  },
+  "devDependencies": {
+    "openclaw": "2026.9.4"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.7.1 <2027.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.7.1"
+    },
+    "build": {
+      "openclawVersion": "2026.9.4"
+    }
+  }
+}

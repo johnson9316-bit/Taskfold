@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dispatchAndStartTaskfoldCards } from "../src/backend/src/dispatcher.js";
+import { dispatchAndStartTaskfoldCards } from "../packages/openclaw/src/backend/src/dispatcher.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -12,7 +12,7 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
 } from "@taskfold/core/persistence-types.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 const roots: string[] = [];

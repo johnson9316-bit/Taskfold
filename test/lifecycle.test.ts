@@ -8,7 +8,7 @@ import {
   shouldSyncCardStatus,
   shouldSyncExecutionStatus,
   staleRunState,
-} from "../src/backend/src/lifecycle.js";
+} from "../packages/openclaw/src/backend/src/lifecycle.js";
 
 const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;

@@ -2,17 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
+const pluginDir = "packages/openclaw";
+const backendDir = `${pluginDir}/src/backend`;
 const activeFiles = [
-  "openclaw.plugin.json",
-  "package.json",
-  "src/backend/index.ts",
-  "src/backend/api.ts",
-  "src/backend/runtime-api.ts",
-  "src/backend/doctor-contract-api.ts",
+  `${pluginDir}/openclaw.plugin.json`,
+  `${pluginDir}/package.json`,
+  `${backendDir}/index.ts`,
+  `${backendDir}/api.ts`,
+  `${backendDir}/runtime-api.ts`,
+  `${backendDir}/doctor-contract-api.ts`,
   ...fs
-    .readdirSync(path.join(root, "src/backend/src"), { recursive: true })
+    .readdirSync(path.join(root, backendDir, "src"), { recursive: true })
     .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
-    .map((entry) => path.join("src/backend/src", entry)),
+    .map((entry) => path.join(backendDir, "src", entry)),
   ...fs
     .readdirSync(path.join(root, "packages/core/src"), { recursive: true })
     .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
@@ -43,7 +45,7 @@ for (const relativePath of activeFiles) {
   }
 }
 
-const manifestPath = path.join(root, "openclaw.plugin.json");
+const manifestPath = path.join(root, pluginDir, "openclaw.plugin.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const manifestText = JSON.stringify(manifest);
 if (manifest.id !== "taskfold" || manifest.name !== "Taskfold") {
@@ -58,7 +60,7 @@ if (!manifestText.includes("taskfold.cards.list") || /\bworkboard[._]/i.test(man
 // check a tool can be advertised without existing, or exist without being
 // advertised, and nothing fails until runtime.
 const toolNamesSource = fs.readFileSync(
-  path.join(root, "src/backend/src/workspace-access.ts"),
+  path.join(root, backendDir, "src/workspace-access.ts"),
   "utf8",
 );
 const toolNamesBlock = toolNamesSource.match(
@@ -70,7 +72,7 @@ if (!toolNamesBlock) {
 const toolNames = toolNamesBlock ? [...toolNamesBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
 
 const implemented = new Set(
-  ["src/backend/src", "packages/core/src"].flatMap((dir) =>
+  [`${backendDir}/src`, "packages/core/src"].flatMap((dir) =>
     fs
       .readdirSync(path.join(root, dir), { recursive: true })
       .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))

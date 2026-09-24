@@ -1,5 +1,5 @@
 // Taskfold VS Code 扩展入口（需求/18 §5）：命令「Taskfold: 打开看板」在编辑器区域打开
-// WebviewPanel，看板前端复用 browser/ 的 Lit 组件，扩展进程内直接调用 @taskfold/core。
+// WebviewPanel，看板前端复用 packages/ui 的 Lit 组件，扩展进程内直接调用 @taskfold/core。
 import * as vscode from "vscode";
 import { resolveTaskfoldExtensionLocale, taskfoldExtensionStrings } from "./l10n.js";
 import { createTaskfoldVscodeMethods } from "./methods.js";

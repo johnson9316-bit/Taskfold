@@ -200,18 +200,22 @@ npm run check:public-names
 npm run pack:check
 ```
 
-For local Gateway testing:
+The repository is an npm workspaces monorepo. The OpenClaw plugin package is
+`packages/openclaw`; the board UI it shares with the VS Code extension is
+`packages/ui`. Run the commands above from the repository root.
+
+For local Gateway testing, link the plugin package directory:
 
 ```bash
-openclaw plugins install --link /path/to/Taskfold
+openclaw plugins install --link /path/to/Taskfold/packages/openclaw
 openclaw plugins enable taskfold
 openclaw gateway restart
 openclaw plugins inspect taskfold --runtime
 openclaw plugins doctor
 ```
 
-After changing `browser/` sources, rebuild the Control UI bundle and reload it
-in the running Gateway without a full restart:
+After changing `packages/ui` sources, rebuild the Control UI bundle and reload
+it in the running Gateway without a full restart:
 
 ```bash
 npm run build:control-ui

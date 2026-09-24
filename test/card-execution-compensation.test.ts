@@ -14,8 +14,8 @@ import type {
 import {
   startTaskfoldCardExecution,
   type TaskfoldCardExecutionOptions,
-} from "../src/backend/src/card-execution.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+} from "../packages/openclaw/src/backend/src/card-execution.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 const roots: string[] = [];

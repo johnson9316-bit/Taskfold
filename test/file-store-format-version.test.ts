@@ -11,7 +11,7 @@ import {
   TASKFOLD_FORMAT_VERSION,
   TaskfoldFormatTooNewError,
 } from "@taskfold/core/file-store.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
 

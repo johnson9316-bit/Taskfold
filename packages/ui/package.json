@@ -1,0 +1,25 @@
+{
+  "name": "@taskfold/ui",
+  "version": "0.2.0",
+  "description": "Taskfold board front end shared by the OpenClaw Control UI panel and the VS Code webview.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*.js": "./src/*.ts"
+  },
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "dependencies": {
+    "@taskfold/core": "0.2.0",
+    "dompurify": "^3.4.12",
+    "lit": "^3.3.0",
+    "marked": "^15.0.12",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.6",
+    "openclaw": "2026.9.4"
+  }
+}

@@ -10,7 +10,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { taskfoldGlobalLockPath } from "@taskfold/core/file-store-locks.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { holdLockInAnotherProcess, type LockHolder } from "./helpers/cli-harness.js";
 
 const roots: string[] = [];

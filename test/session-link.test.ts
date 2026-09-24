@@ -12,7 +12,7 @@ import {
   taskfoldCardMatchesLifecycleLink,
   taskfoldCardSessionLookupKey,
 } from "@taskfold/core/session-link.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore(): TaskfoldStore {

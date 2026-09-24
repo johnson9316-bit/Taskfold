@@ -16,7 +16,7 @@ import {
   isTaskfoldWebviewMessage,
   type TaskfoldExtensionMessage,
   type TaskfoldWebviewMessage,
-} from "./protocol.js";
+} from "@taskfold/ui/protocol.js";
 import type { TaskfoldProjectRegistry } from "./projects.js";
 import type { TaskfoldExtensionStrings } from "./l10n.js";
 
