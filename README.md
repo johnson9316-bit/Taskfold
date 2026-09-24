@@ -174,6 +174,21 @@ WSL drvfs paths (`/mnt/c/...`) and `\\wsl$` paths are not supported: file locks 
 misreported as compromised. See [packages/cli/README.md](packages/cli/README.md) for the
 commands and the output contract.
 
+## VS Code Extension
+
+`packages/vscode` is a VS Code extension that opens the same board in an editor tab for the
+repositories in your workspace. Like the CLI it works on `.taskfold/` directly, without
+OpenClaw or the Gateway. Cards are editable, and every write, including drag and drop, is
+checked against the revision the board last read. A conflict offers Reload, Overwrite or
+View Diff. Build a self-contained `.vsix` and install it:
+
+```bash
+npm run package -w packages/vscode
+code --install-extension packages/vscode/taskfold-0.2.0.vsix
+```
+
+Then run **Taskfold: Open Board**. See [packages/vscode/README.md](packages/vscode/README.md).
+
 ## Development
 
 ```bash

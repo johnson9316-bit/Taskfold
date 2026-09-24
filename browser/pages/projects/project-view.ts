@@ -166,6 +166,29 @@ export type TaskfoldProjectUiState = {
   showArchivedProjects: boolean;
   showHiddenDocuments: boolean;
   query: string;
+  /** 卡片详情编辑模式的草稿（能力开关 `cardEditing`）；null 表示没在编辑。 */
+  cardDraft: TaskfoldCardDraft | null;
+  /** 编辑模式提交失败的原因，显示在编辑表单里（弹窗会盖住页面顶部的错误条）。 */
+  cardDraftError: string | null;
+  /** 交付事实表单开始改动时卡片的 revision（见 `beginDeliveryEdit`）；null 表示还没改。 */
+  deliveryBaseRevision: { cardId: string; revision: number } | null;
+};
+
+/** 可在编辑模式里改的卡片字段。 */
+export type TaskfoldCardDraftFields = {
+  title: string;
+  priority: TaskfoldPriority;
+  notes: string;
+};
+
+/**
+ * 卡片编辑草稿。进入编辑时记下当时的 revision 与字段原值：后台刷新只更新 `state.project`，
+ * 不碰草稿，正在输入的内容不会被覆盖；提交时只发与原值不同的字段，并以 `baseRevision` 做 CAS。
+ */
+export type TaskfoldCardDraft = TaskfoldCardDraftFields & {
+  cardId: string;
+  baseRevision: number;
+  base: TaskfoldCardDraftFields;
 };
 
 export type TaskfoldProjectViewController = {
@@ -173,6 +196,14 @@ export type TaskfoldProjectViewController = {
   connected: boolean;
   /** 宿主能力开关 `capabilities.execution`；关掉时执行区块与启动执行弹窗都不渲染。 */
   executionEnabled: boolean;
+  /** 宿主能力开关 `capabilities.cardEditing`：卡片详情的编辑模式。 */
+  cardEditingEnabled: boolean;
+  /** 宿主能力开关 `capabilities.projectManagement`：新建 / 归档 / 排序项目、设置页、跨项目移卡。 */
+  projectManagementEnabled: boolean;
+  /** 宿主能力开关 `capabilities.documents`：资料库页。 */
+  documentsEnabled: boolean;
+  /** 宿主能力开关 `capabilities.openCardFile`：「在编辑器中打开」原 md 文件。 */
+  openCardFileEnabled: boolean;
   locale: TaskfoldLocale;
   requestUpdate: () => void;
   refresh: () => void;
@@ -211,6 +242,15 @@ export type TaskfoldProjectViewController = {
   hideDocument: (id: string, hidden: boolean) => void;
   deleteDocument: (id: string) => void;
   updateCardDelivery: (id: string, data: Record<string, string>) => void;
+  /**
+   * 交付事实表单第一次被改动时调用，记下当时卡片的 revision，提交时拿它做 CAS：之后的后台刷新
+   * 会把 `card.revision` 更新成别人写入后的新值，提交时若拿新值比对，就会悄悄覆盖别人的修改。
+   */
+  beginDeliveryEdit: (id: string, revision: number) => void;
+  startCardEdit: (id: string) => void;
+  cancelCardEdit: () => void;
+  saveCardEdit: () => void;
+  openCardFile: (id: string) => void;
   prepareCardExecution: (id: string) => void;
   startCardExecution: (id: string) => void;
   refreshCardExecution: (id: string) => void;
@@ -262,6 +302,9 @@ export function createTaskfoldProjectUiState(): TaskfoldProjectUiState {
     showArchivedProjects: false,
     showHiddenDocuments: false,
     query: "",
+    cardDraft: null,
+    cardDraftError: null,
+    deliveryBaseRevision: null,
   };
 }
 
@@ -558,17 +601,21 @@ function renderProjectToolbar(controller: TaskfoldProjectViewController) {
           }}
         />
       </label>
-      <label class="taskfold-project__checkbox">
-        <input
-          type="checkbox"
-          .checked=${state.showArchivedProjects}
-          @change=${(event: Event) => {
-            state.showArchivedProjects = (event.currentTarget as HTMLInputElement).checked;
-            controller.requestUpdate();
-          }}
-        />
-        ${t("taskfoldProject.includeArchived")}
-      </label>
+      ${controller.projectManagementEnabled
+        ? html`
+            <label class="taskfold-project__checkbox">
+              <input
+                type="checkbox"
+                .checked=${state.showArchivedProjects}
+                @change=${(event: Event) => {
+                  state.showArchivedProjects = (event.currentTarget as HTMLInputElement).checked;
+                  controller.requestUpdate();
+                }}
+              />
+              ${t("taskfoldProject.includeArchived")}
+            </label>
+          `
+        : nothing}
       <div class="taskfold-project__project-list" role="list">
         ${projects.length
           ? projects.map(
@@ -590,12 +637,14 @@ function renderProjectToolbar(controller: TaskfoldProjectViewController) {
                         ? html`<small>${t("taskfoldProject.archived")}</small>`
                         : html`<small>${projectCardCount(project)}</small>`}
                     </button>
-                    ${renderOrderControls({
-                      canMoveUp: Boolean(moveUp),
-                      canMoveDown: Boolean(moveDown),
-                      onMoveUp: () => moveUp && controller.reorderProjects(moveUp),
-                      onMoveDown: () => moveDown && controller.reorderProjects(moveDown),
-                    })}
+                    ${controller.projectManagementEnabled
+                      ? renderOrderControls({
+                          canMoveUp: Boolean(moveUp),
+                          canMoveDown: Boolean(moveDown),
+                          onMoveUp: () => moveUp && controller.reorderProjects(moveUp),
+                          onMoveDown: () => moveDown && controller.reorderProjects(moveDown),
+                        })
+                      : nothing}
                   </div>
                 `;
               },
@@ -618,14 +667,18 @@ function renderOverview(controller: TaskfoldProjectViewController) {
           <h1>${t("taskfoldProject.allProjects")}</h1>
           <p>${t("taskfoldProject.title")}</p>
         </div>
-        <button
-          class="tf-btn tf-btn--primary"
-          type="button"
-          ?disabled=${!controller.connected}
-          @click=${() => controller.openModal({ kind: "project" })}
-        >
-          ${t("taskfoldProject.newProject")}
-        </button>
+        ${controller.projectManagementEnabled
+          ? html`
+              <button
+                class="tf-btn tf-btn--primary"
+                type="button"
+                ?disabled=${!controller.connected}
+                @click=${() => controller.openModal({ kind: "project" })}
+              >
+                ${t("taskfoldProject.newProject")}
+              </button>
+            `
+          : nothing}
       </div>
       ${projects.length
         ? html`
@@ -656,15 +709,19 @@ function renderOverview(controller: TaskfoldProjectViewController) {
           `
         : html`
             <div class="taskfold-project__blank">
-              <p>${t("taskfoldProject.emptyOverview")}</p>
-              <button
-                class="tf-btn tf-btn--primary"
-                type="button"
-                ?disabled=${!controller.connected}
-                @click=${() => controller.openModal({ kind: "project" })}
-              >
-                ${t("taskfoldProject.newProject")}
-              </button>
+              ${controller.projectManagementEnabled
+                ? html`
+                    <p>${t("taskfoldProject.emptyOverview")}</p>
+                    <button
+                      class="tf-btn tf-btn--primary"
+                      type="button"
+                      ?disabled=${!controller.connected}
+                      @click=${() => controller.openModal({ kind: "project" })}
+                    >
+                      ${t("taskfoldProject.newProject")}
+                    </button>
+                  `
+                : html`<p>${t("taskfoldProject.emptyWorkspace")}</p>`}
             </div>
           `}
     </section>
@@ -1026,11 +1083,13 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         </div>
         <div class="taskfold-project__heading-actions">
           ${project.board.archivedAt
-            ? html`
-                <button class="tf-btn" type="button" @click=${() => controller.archiveProject(false)}>
-                  ${t("taskfoldProject.restoreProject")}
-                </button>
-              `
+            ? controller.projectManagementEnabled
+              ? html`
+                  <button class="tf-btn" type="button" @click=${() => controller.archiveProject(false)}>
+                    ${t("taskfoldProject.restoreProject")}
+                  </button>
+                `
+              : nothing
             : html`
                 ${view.groupBy === "milestone"
                   ? html`
@@ -1842,8 +1901,39 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
         <button class="taskfold-project__icon-button" type="button" @click=${controller.closeModal}>&times;</button>
       </header>
       <div class="taskfold-project__detail-body">
-        <h3>${card.title}</h3>
-        ${card.notes ? html`<p class="taskfold-project__detail-notes">${card.notes}</p>` : nothing}
+        ${controller.cardEditingEnabled && controller.state.cardDraft?.cardId === card.id
+          ? renderCardEditForm(controller, controller.state.cardDraft)
+          : html`
+              <h3>${card.title}</h3>
+              ${card.notes ? html`<p class="taskfold-project__detail-notes">${card.notes}</p>` : nothing}
+              ${controller.cardEditingEnabled || controller.openCardFileEnabled
+                ? html`
+                    <div class="taskfold-project__inline-actions">
+                      ${controller.cardEditingEnabled
+                        ? html`
+                            <button
+                              class="tf-btn"
+                              type="button"
+                              data-taskfold-action="edit-card"
+                              ?disabled=${controller.state.busy}
+                              @click=${() => controller.startCardEdit(card.id)}
+                            >${t("taskfoldProject.editCard")}</button>
+                          `
+                        : nothing}
+                      ${controller.openCardFileEnabled
+                        ? html`
+                            <button
+                              class="tf-btn"
+                              type="button"
+                              data-taskfold-action="open-card-file"
+                              @click=${() => controller.openCardFile(card.id)}
+                            >${t("taskfoldProject.openCardFile")}</button>
+                          `
+                        : nothing}
+                    </div>
+                  `
+                : nothing}
+            `}
         <dl>
           <div><dt>${t("taskfoldProject.status")}</dt><dd>${t(`workboard.status.${card.status}`)}</dd></div>
           <div><dt>${t("taskfoldProject.priority")}</dt><dd>${card.priority}</dd></div>
@@ -1887,7 +1977,7 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
         ${renderDeliverySection(controller, card)}
         ${renderSourceReferenceSection(controller, card)}
         ${renderEvidenceSection(controller, card)}
-        ${otherProjects.length
+        ${controller.projectManagementEnabled && otherProjects.length
           ? html`
               <button
                 class="tf-btn"
@@ -1923,6 +2013,65 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
         </button>
       </footer>
     </div>
+  `;
+}
+
+function renderCardEditForm(controller: TaskfoldProjectViewController, draft: TaskfoldCardDraft) {
+  const { state } = controller;
+  return html`
+    <form
+      class="taskfold-project__delivery-form taskfold-project__card-edit"
+      @submit=${(event: SubmitEvent) => {
+        event.preventDefault();
+        controller.saveCardEdit();
+      }}
+    >
+      <label>
+        ${t("taskfoldProject.cardTitle")}
+        <input
+          name="title"
+          required
+          .value=${draft.title}
+          @input=${(event: InputEvent) => {
+            draft.title = (event.currentTarget as HTMLInputElement).value;
+          }}
+        />
+      </label>
+      <label>
+        ${t("taskfoldProject.priority")}
+        <select
+          name="priority"
+          .value=${draft.priority}
+          @change=${(event: Event) => {
+            draft.priority = (event.currentTarget as HTMLSelectElement).value as TaskfoldPriority;
+          }}
+        >
+          ${renderPriorityOptions(draft.priority)}
+        </select>
+      </label>
+      <label>
+        ${t("taskfoldProject.cardNotes")}
+        <textarea
+          name="notes"
+          rows="10"
+          .value=${draft.notes}
+          @input=${(event: InputEvent) => {
+            draft.notes = (event.currentTarget as HTMLTextAreaElement).value;
+          }}
+        ></textarea>
+      </label>
+      ${state.cardDraftError
+        ? html`<div class="tf-callout tf-danger" role="alert">${state.cardDraftError}</div>`
+        : nothing}
+      <div class="taskfold-project__inline-actions">
+        <button class="tf-btn" type="button" @click=${controller.cancelCardEdit}>
+          ${t("common.cancel")}
+        </button>
+        <button class="tf-btn tf-btn--primary" type="submit" ?disabled=${state.busy}>
+          ${t("taskfoldProject.saveCard")}
+        </button>
+      </div>
+    </form>
   `;
 }
 
@@ -2096,6 +2245,7 @@ function renderDeliverySection(controller: TaskfoldProjectViewController, card: 
       <h3>${t("taskfoldProject.deliveryFacts")}</h3>
       <form
         class="taskfold-project__delivery-form"
+        @input=${() => controller.beginDeliveryEdit(card.id, card.revision)}
         @submit=${(event: SubmitEvent) => {
           event.preventDefault();
           controller.updateCardDelivery(card.id, readForm(event));
@@ -2675,8 +2825,12 @@ function renderProjectTabs(controller: TaskfoldProjectViewController): TemplateR
   const tabs: Array<[TaskfoldProjectUiState["screen"], string]> = [
     ["board", "taskfoldProject.board"],
     ["graph", "taskfoldProject.graph"],
-    ["settings", "taskfoldProject.settings"],
-    ["documents", "taskfoldProject.documents"],
+    ...(controller.projectManagementEnabled
+      ? ([["settings", "taskfoldProject.settings"]] as Array<[TaskfoldProjectUiState["screen"], string]>)
+      : []),
+    ...(controller.documentsEnabled
+      ? ([["documents", "taskfoldProject.documents"]] as Array<[TaskfoldProjectUiState["screen"], string]>)
+      : []),
   ];
   return html`
     <nav class="taskfold-project__tabs" aria-label=${t("taskfoldProject.title")}>
@@ -2744,14 +2898,18 @@ export function renderTaskfoldProjects(controller: TaskfoldProjectViewController
               <option value="en">${t("languages.en")}</option>
             </select>
           </label>
-          <button
-            class="tf-btn tf-btn--primary"
-            type="button"
-            ?disabled=${!controller.connected}
-            @click=${() => controller.openModal({ kind: "project" })}
-          >
-            ${t("taskfoldProject.newProject")}
-          </button>
+          ${controller.projectManagementEnabled
+            ? html`
+                <button
+                  class="tf-btn tf-btn--primary"
+                  type="button"
+                  ?disabled=${!controller.connected}
+                  @click=${() => controller.openModal({ kind: "project" })}
+                >
+                  ${t("taskfoldProject.newProject")}
+                </button>
+              `
+            : nothing}
           ${state.languageError
             ? html`<span class="taskfold-project__language-error" role="status">${state.languageError}</span>`
             : nothing}

@@ -32,3 +32,7 @@ test-results/
 *.pid.lock
 *.stackdump
 packages/cli/dist/
+packages/vscode/dist/
+packages/vscode/media/
+packages/vscode/LICENSE
+packages/vscode/*.vsix

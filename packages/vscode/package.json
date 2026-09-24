@@ -1,0 +1,49 @@
+{
+  "name": "taskfold",
+  "displayName": "Taskfold",
+  "description": "Kanban board for the Taskfold cards stored in your repository's .taskfold/ directory.",
+  "version": "0.2.0",
+  "publisher": "johnson9316-bit",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnson9316-bit/Taskfold.git",
+    "directory": "packages/vscode"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "kanban",
+    "taskfold",
+    "cards",
+    "board"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "taskfold.openBoard",
+        "title": "%command.openBoard%",
+        "category": "Taskfold"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/build.mjs && vsce package --no-dependencies --out taskfold-0.2.0.vsix",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@taskfold/cli": "0.2.0",
+    "@taskfold/core": "0.2.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.100.0",
+    "@vscode/vsce": "^4.0.0"
+  }
+}

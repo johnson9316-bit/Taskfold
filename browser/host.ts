@@ -20,6 +20,34 @@ export type TaskfoldHostCapabilities = {
    * 以及宿主自己的 `sessions.steer`、`chat.abort`。
    */
   readonly execution: boolean;
+  /**
+   * 卡片 CAS：`taskfold.cards.update` / `move` / `moveMilestone` 带上前端读到的 `expectedRevision`，
+   * 宿主据此做比对，冲突时由宿主自己处理（VS Code 弹 Reload / Overwrite / View Diff），结果见
+   * {@link TaskfoldCardWriteResult}。OpenClaw 网关的 move / moveMilestone 不接收这个参数，关闭。
+   */
+  readonly cardRevisionCheck: boolean;
+  /** 卡片详情里的编辑模式（标题、优先级、正文）。依赖卡片 CAS，没有 CAS 的宿主关闭。 */
+  readonly cardEditing: boolean;
+  /**
+   * 项目级管理：新建 / 归档 / 恢复 / 排序项目、「包含已归档」、项目设置页、跨项目移卡。
+   * VS Code 的项目就是工作区里的文件夹，这些都没有意义，关闭。
+   */
+  readonly projectManagement: boolean;
+  /** 资料库页（`taskfold.projects.documents.*`）。 */
+  readonly documents: boolean;
+  /** 卡片详情里「在编辑器中打开」原 md 文件（`taskfold.cards.openFile`）。 */
+  readonly openCardFile: boolean;
+};
+
+/**
+ * 打开了 `cardRevisionCheck` 的宿主，对 `taskfold.cards.update` / `move` / `moveMilestone` 的返回。
+ * 没有 `conflict`：一次写成。`conflict` 是用户在冲突框里的选择：
+ * - `overwritten`：已在最新 revision 上重新应用了本地修改；
+ * - `reloaded`：放弃本地修改，前端应丢掉草稿、重新读取；
+ * - `cancelled`：什么都没写，本地草稿保留，可以再提交。
+ */
+export type TaskfoldCardWriteResult = {
+  conflict?: "overwritten" | "reloaded" | "cancelled";
 };
 
 export interface TaskfoldHost {

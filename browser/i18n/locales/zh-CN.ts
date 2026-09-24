@@ -4995,5 +4995,9 @@ export const zh_CN: TranslationMap = {
     artifactPath: "路径",
     artifactMimeType: "MIME 类型",
     addArtifact: "添加产物",
+    editCard: "编辑卡片",
+    saveCard: "保存卡片",
+    openCardFile: "在编辑器中打开",
+    emptyWorkspace: "当前工作区没有含 .taskfold/ 的文件夹。请先在仓库里运行 `taskfold init`。",
   },
 };

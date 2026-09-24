@@ -7,7 +7,7 @@
 // - `ControlUiHost.subscribe()` 的每次回调都转成 `{ type: "connection" }`；
 // - 语言偏好读写 localStorage（含 Flowboard 旧键的一次性迁移）；
 // - 确认框用 `window.confirm`；
-// - 能力开关全部打开。
+// - 能力开关：执行、项目管理、资料库打开；卡片 CAS、编辑模式、打开原文件关闭。
 import type { ControlUiHost } from "openclaw/plugin-sdk/control-ui";
 import type { TaskfoldHost, TaskfoldHostEvent } from "./host.ts";
 import { resolveInitialTaskfoldLocale, type TaskfoldLocalePreference } from "./i18n/index.ts";
@@ -171,6 +171,13 @@ export function createOpenClawTaskfoldHost(host: ControlUiHost): TaskfoldHost {
     confirm: async (message) => window.confirm(message),
     capabilities: {
       execution: true,
+      // 网关的 move / moveMilestone 不接收 expectedRevision；前端 CAS 与编辑模式等 OpenClaw
+      // 后端改到文件存储后再一起打开（TASK-8）。
+      cardRevisionCheck: false,
+      cardEditing: false,
+      projectManagement: true,
+      documents: true,
+      openCardFile: false,
     },
   };
 }

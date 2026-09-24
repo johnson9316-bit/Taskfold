@@ -7,12 +7,18 @@ import type {
   TaskfoldProjectView,
   TaskfoldStatus,
 } from "@taskfold/core/contract/index.js";
-import { taskfoldHost, type TaskfoldHostEvent } from "./host.ts";
+import {
+  taskfoldHost,
+  type TaskfoldCardWriteResult,
+  type TaskfoldHostCapabilities,
+  type TaskfoldHostEvent,
+} from "./host.ts";
 import { i18n, type TaskfoldLocale } from "./i18n/index.ts";
 import { taskfoldEditorHtmlToMarkdown } from "./lib/markdown.ts";
 import {
   createTaskfoldProjectUiState,
   renderTaskfoldProjects,
+  type TaskfoldCardDraftFields,
   type TaskfoldCardExecutionInspection,
   type TaskfoldCardExecutionPreparation,
   type TaskfoldProjectModal,
@@ -68,6 +74,14 @@ class TaskfoldProjectHost extends LitElement {
   private connectedToGateway = false;
   // 宿主能力开关在挂载时读一次；render() 不直接碰宿主（卸载后仍可能有一次待执行的渲染）。
   private executionEnabled = false;
+  private capabilities: TaskfoldHostCapabilities = {
+    execution: false,
+    cardRevisionCheck: false,
+    cardEditing: false,
+    projectManagement: false,
+    documents: false,
+    openCardFile: false,
+  };
   private stopped = false;
   private refreshGeneration = 0;
   private executionRefreshTimer: number | null = null;
@@ -82,7 +96,8 @@ class TaskfoldProjectHost extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.stopped = false;
-    this.executionEnabled = taskfoldHost().capabilities.execution;
+    this.capabilities = { ...taskfoldHost().capabilities };
+    this.executionEnabled = this.capabilities.execution;
     this.unsubscribeI18n = i18n.subscribe((locale) => {
       document.documentElement.lang = locale;
       this.requestUpdate();
@@ -261,6 +276,12 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private setScreen(screen: TaskfoldProjectUiState["screen"]) {
+    if (
+      (screen === "settings" && !this.capabilities.projectManagement) ||
+      (screen === "documents" && !this.capabilities.documents)
+    ) {
+      return;
+    }
     if (screen !== "overview" && !this.state.selectedProjectId) {
       this.state.screen = "overview";
       this.requestUpdate();
@@ -276,6 +297,7 @@ class TaskfoldProjectHost extends LitElement {
 
   private openModal(modal: TaskfoldProjectModal) {
     this.clearExecutionRefreshTimer();
+    this.clearCardEditState();
     this.state.modal = modal;
     this.requestUpdate();
     if (modal.kind === "card-detail") {
@@ -285,8 +307,69 @@ class TaskfoldProjectHost extends LitElement {
 
   private closeModal() {
     this.clearExecutionRefreshTimer();
+    this.clearCardEditState();
     this.state.modal = null;
     this.requestUpdate();
+  }
+
+  private clearCardEditState() {
+    this.state.cardDraft = null;
+    this.state.cardDraftError = null;
+    this.state.deliveryBaseRevision = null;
+  }
+
+  /** 前端此刻读到的卡片 revision（拖拽、状态下拉这类即时操作用它做 CAS）。 */
+  private cardRevision(id: string): number | undefined {
+    return this.state.project?.cards.find((card) => card.id === id)?.revision;
+  }
+
+  /** 宿主声明支持卡片 CAS（`capabilities.cardRevisionCheck`）时才带 `expectedRevision`。 */
+  private casParams(expectedRevision: number | undefined): { expectedRevision?: number } {
+    return this.capabilities.cardRevisionCheck && expectedRevision !== undefined
+      ? { expectedRevision }
+      : {};
+  }
+
+  /**
+   * 处理打开了卡片 CAS 的宿主返回的冲突结果（{@link TaskfoldCardWriteResult}）。`reloaded`：丢掉
+   * 这张卡的全部本地修改——编辑草稿、交付事实表单里还没提交的输入（关掉再重开卡片详情，表单
+   * 整个重建）。`cancelled`：什么都没写，草稿与交付事实的基准 revision 原样保留，可以再提交。
+   * 一次写成且草稿正基于这次写入前的 revision 时，把草稿的基准挪到新 revision：这是自己的写入，
+   * 不应让之后保存草稿时和自己冲突。
+   */
+  private async applyCardWriteResult(
+    result: unknown,
+    cardId: string,
+    expectedRevision: number | undefined,
+  ): Promise<TaskfoldCardWriteResult["conflict"]> {
+    const { conflict, card } = (result ?? {}) as TaskfoldCardWriteResult & {
+      card?: { id?: unknown; revision?: unknown };
+    };
+    if (conflict === "reloaded") {
+      this.clearCardEditState();
+      const modal = this.state.modal;
+      if (modal?.kind === "card-detail" && modal.cardId === cardId) {
+        this.state.modal = null;
+        this.requestUpdate();
+        await this.updateComplete;
+        this.state.modal = modal;
+      }
+      return conflict;
+    }
+    if (conflict === "cancelled") {
+      return conflict;
+    }
+    const draft = this.state.cardDraft;
+    if (
+      !conflict &&
+      draft?.cardId === cardId &&
+      draft.baseRevision === expectedRevision &&
+      card?.id === cardId &&
+      typeof card.revision === "number"
+    ) {
+      draft.baseRevision = card.revision;
+    }
+    return conflict;
   }
 
   private clearExecutionRefreshTimer() {
@@ -437,8 +520,14 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private updateCardStatus(id: string, status: TaskfoldStatus) {
+    const expectedRevision = this.cardRevision(id);
     void this.mutate(async () => {
-      await taskfoldHost().request("taskfold.cards.move", { id, status });
+      const result = await taskfoldHost().request("taskfold.cards.move", {
+        id,
+        status,
+        ...this.casParams(expectedRevision),
+      });
+      await this.applyCardWriteResult(result, id, expectedRevision);
     }, { closeModal: false });
   }
 
@@ -453,12 +542,15 @@ class TaskfoldProjectHost extends LitElement {
     if (project?.board.archivedAt) {
       return;
     }
+    const expectedRevision = this.cardRevision(id);
     void this.mutate(async () => {
-      await taskfoldHost().request("taskfold.cards.moveMilestone", {
+      const result = await taskfoldHost().request("taskfold.cards.moveMilestone", {
         id,
         ...(milestoneId ? { milestoneId } : {}),
         ...(position !== undefined ? { position } : {}),
+        ...this.casParams(expectedRevision),
       });
+      await this.applyCardWriteResult(result, id, expectedRevision);
     }, { closeModal: false });
   }
 
@@ -797,9 +889,17 @@ class TaskfoldProjectHost extends LitElement {
     }, { closeModal: false });
   }
 
+  private beginDeliveryEdit(id: string, revision: number) {
+    if (this.state.deliveryBaseRevision?.cardId !== id) {
+      this.state.deliveryBaseRevision = { cardId: id, revision };
+    }
+  }
+
   private updateCardDelivery(id: string, data: Record<string, string>) {
+    const base = this.state.deliveryBaseRevision;
+    const expectedRevision = base?.cardId === id ? base.revision : this.cardRevision(id);
     void this.mutate(async () => {
-      await taskfoldHost().request("taskfold.cards.update", {
+      const result = await taskfoldHost().request("taskfold.cards.update", {
         id,
         delivery: {
           objective: data.objective,
@@ -809,8 +909,88 @@ class TaskfoldProjectHost extends LitElement {
           verificationState: data.verificationState,
           releaseState: data.releaseState,
         },
+        ...this.casParams(expectedRevision),
       });
+      const conflict = await this.applyCardWriteResult(result, id, expectedRevision);
+      if (conflict !== "cancelled" && this.state.deliveryBaseRevision?.cardId === id) {
+        this.state.deliveryBaseRevision = null;
+      }
     }, { closeModal: false });
+  }
+
+  private startCardEdit(id: string) {
+    if (!this.capabilities.cardEditing) {
+      return;
+    }
+    const card = this.state.project?.cards.find((candidate) => candidate.id === id);
+    if (!card) {
+      return;
+    }
+    const base: TaskfoldCardDraftFields = {
+      title: card.title,
+      priority: card.priority,
+      notes: card.notes ?? "",
+    };
+    this.state.cardDraft = { cardId: id, baseRevision: card.revision, base, ...base };
+    this.state.cardDraftError = null;
+    this.requestUpdate();
+  }
+
+  private cancelCardEdit() {
+    this.state.cardDraft = null;
+    this.state.cardDraftError = null;
+    this.requestUpdate();
+  }
+
+  /** 保存编辑草稿：只发与进入编辑时不同的字段，以进入编辑时的 revision 做 CAS。 */
+  private saveCardEdit() {
+    const draft = this.state.cardDraft;
+    if (!draft || this.state.busy) {
+      return;
+    }
+    const patch: Partial<TaskfoldCardDraftFields> = {};
+    for (const field of ["title", "priority", "notes"] as const) {
+      if (draft[field] !== draft.base[field]) {
+        Object.assign(patch, { [field]: draft[field] });
+      }
+    }
+    if (Object.keys(patch).length === 0) {
+      this.cancelCardEdit();
+      return;
+    }
+    this.state.cardDraftError = null;
+    void this.mutate(async () => {
+      try {
+        const result = await taskfoldHost().request("taskfold.cards.update", {
+          id: draft.cardId,
+          ...patch,
+          ...this.casParams(draft.baseRevision),
+        });
+        const conflict = await this.applyCardWriteResult(result, draft.cardId, draft.baseRevision);
+        if (conflict !== "cancelled" && this.state.cardDraft === draft) {
+          this.state.cardDraft = null;
+        }
+      } catch (error) {
+        // 错误显示在编辑表单里，草稿保留，可以重试（LOCKED 等）。
+        if (this.state.cardDraft === draft) {
+          this.state.cardDraftError = errorMessage(error);
+        } else {
+          throw error;
+        }
+      }
+    }, { closeModal: false });
+  }
+
+  private openCardFile(id: string) {
+    if (!this.capabilities.openCardFile) {
+      return;
+    }
+    void taskfoldHost()
+      .request("taskfold.cards.openFile", { id })
+      .catch((error) => {
+        this.state.error = errorMessage(error);
+        this.requestUpdate();
+      });
   }
 
   private prepareCardExecution(id: string) {
@@ -1051,6 +1231,10 @@ class TaskfoldProjectHost extends LitElement {
       state: this.state,
       connected: this.connectedToGateway,
       executionEnabled: this.executionEnabled,
+      cardEditingEnabled: this.capabilities.cardEditing,
+      projectManagementEnabled: this.capabilities.projectManagement,
+      documentsEnabled: this.capabilities.documents,
+      openCardFileEnabled: this.capabilities.openCardFile,
       requestUpdate: () => this.requestUpdate(),
       refresh: () => void this.refresh(),
       locale: i18n.getLocale(),
@@ -1092,6 +1276,11 @@ class TaskfoldProjectHost extends LitElement {
       hideDocument: (id, hidden) => this.hideDocument(id, hidden),
       deleteDocument: (id) => this.deleteDocument(id),
       updateCardDelivery: (id, data) => this.updateCardDelivery(id, data),
+      beginDeliveryEdit: (id, revision) => this.beginDeliveryEdit(id, revision),
+      startCardEdit: (id) => this.startCardEdit(id),
+      cancelCardEdit: () => this.cancelCardEdit(),
+      saveCardEdit: () => this.saveCardEdit(),
+      openCardFile: (id) => this.openCardFile(id),
       prepareCardExecution: (id) => this.prepareCardExecution(id),
       startCardExecution: (id) => this.startCardExecution(id),
       refreshCardExecution: (id) => this.refreshCardExecution(id),

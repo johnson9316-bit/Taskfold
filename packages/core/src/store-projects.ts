@@ -48,6 +48,7 @@ import {
   normalizePosition,
   normalizeTitle,
 } from "./store-normalizers.js";
+import { TaskfoldRevisionConflictError } from "./store-core.js";
 import { TaskfoldNotificationStore } from "./store-notifications.js";
 import {
   discoverTaskfoldProjectDocuments,
@@ -668,12 +669,25 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
     });
   }
 
-  async moveMilestone(id: string, input: TaskfoldMoveMilestoneInput): Promise<TaskfoldCard> {
+  /**
+   * 把卡片移到另一个里程碑（或未分配）并定位。`options.expectedRevision`（TASK-8，VS Code 看板的
+   * 拖拽 CAS）：给了就只在卡片仍是这个 revision 时写入，否则抛 {@link TaskfoldRevisionConflictError}、
+   * 不重试；不给时行为与原来逐字相同。特意不从 `input` 里读：网关把整个请求参数当 `input` 传进来，
+   * 放在 `input` 里会让网关不改代码就开始接受它。
+   */
+  async moveMilestone(
+    id: string,
+    input: TaskfoldMoveMilestoneInput,
+    options: { expectedRevision?: number } = {},
+  ): Promise<TaskfoldCard> {
     // 单卡读改写：输给并发写入就重读重算（TASK-6）。
-    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
+    const run = async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
+      }
+      if (options.expectedRevision !== undefined && card.revision !== options.expectedRevision) {
+        throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
       }
       const boardId = cardBoardId(card);
       await this.assertProjectCanReceiveCards(boardId);
@@ -715,7 +729,8 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
       }
       await this.persistCard(next, card.revision);
       return next;
-    }));
+    });
+    return options.expectedRevision !== undefined ? await run() : await this.retryOnRevisionConflict(run);
   }
 
   async moveProject(id: string, input: TaskfoldMoveProjectInput): Promise<TaskfoldCard> {

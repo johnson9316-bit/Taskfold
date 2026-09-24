@@ -20,13 +20,19 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
     });
   }
 
+  /**
+   * 改卡片状态。`options.expectedRevision`（TASK-8，VS Code 看板的拖拽 CAS）：给了就只在卡片
+   * 仍是这个 revision 时写入，否则抛 {@link TaskfoldRevisionConflictError}、不重试；不给时
+   * 行为与原来逐字相同（以刚读到的 revision 做 CAS，输给并发写入就重读重试）。
+   */
   async move(
     id: string,
     status: unknown,
     position: unknown,
     scope?: TaskfoldMutationScope,
+    options: { expectedRevision?: number } = {},
   ): Promise<TaskfoldCard> {
-    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
+    const run = async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -40,10 +46,11 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
         {
           allowMetadataDependencyLinks: false,
           enforceStatusHolds: true,
-          expectedRevision: existing.revision,
+          expectedRevision: options.expectedRevision ?? existing.revision,
         },
       );
-    }));
+    });
+    return options.expectedRevision !== undefined ? await run() : await this.retryOnRevisionConflict(run);
   }
 
   async promote(

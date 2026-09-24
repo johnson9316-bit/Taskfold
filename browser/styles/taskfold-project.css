@@ -1412,6 +1412,12 @@
   white-space: pre-wrap;
 }
 
+.taskfold-project__card-edit textarea {
+  line-height: 1.5;
+  min-height: 180px;
+  resize: vertical;
+}
+
 .taskfold-project__detail-body dl {
   display: grid;
   gap: 7px;

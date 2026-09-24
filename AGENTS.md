@@ -80,6 +80,22 @@ openclaw plugins doctor
 
 如果 checkout 已经在 `plugins.load.paths` 里（本机现状即是如此），跳过第一条 `install --link`，直接 `enable` + `restart` 即可。README「Development」一节的等价命令用的是占位路径，这里补上本机真实路径。
 
+## VS Code 扩展（packages/vscode）
+
+本机 VS Code 是 1.138。打包出自包含的 `.vsix`，由用户自己安装进真实的 VS Code（代理不代装）：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"
+npm run package -w packages/vscode      # → packages/vscode/taskfold-0.2.0.vsix
+code --install-extension /home/john/src/personal/Taskfold/packages/vscode/taskfold-0.2.0.vsix
+```
+
+在隔离环境里无头验收时，有三处容易踩坑：
+
+1. **HOME 也要隔离**。只带 `--user-data-dir` / `--extensions-dir` 不够：VS Code 仍会改写 `~/.vscode/argv.json`，并打开 `~/.vscode-shared/sharedStorage/`。所以启动时要设 `HOME`、`XDG_*` 指向 scratchpad，另加 `--password-store=basic`。启动参数：直接调用 Electron 可执行文件 `/usr/share/code/code`，带 `--ozone-platform=headless --remote-debugging-port=<端口>`。
+2. **只用一条 CDP 连接**。Playwright 断开后，视口会恢复成 400×270，再次连接时也看不到之前已打开的 Webview 的 frame。所以要在同一条连接里依次 `set_viewport_size`、执行「Taskfold: Open Board」、完成全部操作。
+3. **对话框要能在页面里操作**。在隔离用户设置里写 `"window.dialogStyle": "custom"`，模态框就渲染成 workbench 里的 `.monaco-dialog-box`，可以截图和点击。
+
 ## 文档地图
 
 | 文档 | 定位 |

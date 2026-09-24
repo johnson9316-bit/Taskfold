@@ -9,16 +9,12 @@
     "strict": true,
     "target": "ES2023",
     "types": [
-      "node"
+      "node",
+      "vscode"
     ],
     "useDefineForClassFields": true
   },
   "include": [
-    "src/**/*.ts",
-    "packages/core/src/**/*.ts",
-    "packages/cli/src/**/*.ts",
-    "test/**/*.ts",
-    "browser/index.ts",
-    "browser/vscode-index.ts"
+    "src/**/*.ts"
   ]
 }

@@ -66,7 +66,7 @@ function cardFileName(displayId: string, title: string): string {
  * target scale (2000 卡片时 164ms 全量 parse，81 张卡约 9.3ms，解析占其中 80~84%），这个
  * 只读 TASKFOLD 区块 uuid 的最小解析比全量 parseMarkdownCard 轻得多，扫目录找 uuid 完全
  * 可接受。 */
-function findCardFilePath(cardsDir: string, id: string): string | undefined {
+export function findCardFilePath(cardsDir: string, id: string): string | undefined {
   for (const fileName of listFileNamesSafe(cardsDir)) {
     if (!fileName.endsWith(CARD_EXTENSION)) {
       continue;

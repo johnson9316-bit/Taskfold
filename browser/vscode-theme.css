@@ -1,0 +1,62 @@
+/*
+ * VS Code Webview 的主题映射（需求/18 §5）：把看板样式用到的共享变量映射到 VS Code 注入的
+ * `--vscode-*` 主题变量，随编辑器主题（含高对比度）切换。OpenClaw 里这些变量由宿主外壳在
+ * 自己的 :root 上定义（见 host.css 头注释），Webview 是独立文档，这里补上。
+ *
+ * `--warn` / `--info` / `--success` 等 Taskfold 自己的变量在 host.css 的 `taskfold-app` 上定义，
+ * 这里用 `body taskfold-app` 提高优先级覆盖。
+ */
+
+:root {
+  --bg: var(--vscode-editor-background);
+  --panel: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  --panel-strong: var(--vscode-sideBar-background, var(--vscode-editorWidget-background));
+  --bg-elevated: var(--vscode-input-background);
+  --text: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --border: var(--vscode-widget-border, var(--vscode-panel-border, rgb(128 128 128 / 35%)));
+  --border-strong: var(--vscode-contrastBorder, var(--vscode-input-border, var(--vscode-widget-border, rgb(128 128 128 / 55%))));
+  --accent: var(--vscode-button-background);
+  --accent-foreground: var(--vscode-button-foreground);
+  --danger: var(--vscode-errorForeground);
+  --font-body: var(--vscode-font-family);
+  --font-mono: var(--vscode-editor-font-family);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--vscode-font-size, 13px);
+  margin: 0;
+  padding: 0;
+}
+
+body taskfold-app {
+  --warn: var(--vscode-editorWarning-foreground);
+  --info: var(--vscode-editorInfo-foreground);
+  --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+body.vscode-light taskfold-app {
+  color-scheme: light;
+}
+
+body.vscode-dark taskfold-app,
+body.vscode-high-contrast taskfold-app {
+  color-scheme: dark;
+}
+
+body.vscode-high-contrast-light taskfold-app {
+  color-scheme: light;
+}
+
+/* 输入框的底色、边框由 taskfold-project.css 用 --bg-elevated / --border 画，上面已映射。 */
+body taskfold-app button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+body taskfold-app .tf-btn--primary:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}

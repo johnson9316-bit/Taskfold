@@ -5254,5 +5254,9 @@ export const en: TranslationMap = {
     artifactPath: "Path",
     artifactMimeType: "MIME type",
     addArtifact: "Add artifact",
+    editCard: "Edit card",
+    saveCard: "Save card",
+    openCardFile: "Open in editor",
+    emptyWorkspace: "No folder in this workspace has a .taskfold/ directory. Run `taskfold init` in a repository to start.",
   },
 };
