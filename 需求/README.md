@@ -1,10 +1,10 @@
 # Taskfold
 
-> 规划文档入口。2026-07-28 起，Taskfold 是 OpenClaw 插件；此前“独立本地应用优先”的方案已停止。
+> 规划文档入口。2026-09-24 起，Taskfold 是多宿主工具（OpenClaw、VS Code，以后还有 dsh、pi），OpenClaw 降为适配层之一，Gateway 不再是必需组件，定案见 [[18-多宿主架构]]。（2026-09-24 前为：2026-07-28 起 Taskfold 是 OpenClaw 插件；此前”独立本地应用优先”的方案已停止。）
 
 ## 当前决定
 
-- 产品形态：唯一形态是 OpenClaw 插件，产品显示名称为 Taskfold，插件 ID 为 `taskfold`。
+- 产品形态：**已定（2026-09-24，见 [[18-多宿主架构]]）**：多宿主工具——OpenClaw、VS Code 先行，以后还有 dsh、pi；OpenClaw 降为适配层之一，Gateway 不再是必需组件。产品显示名称仍为 Taskfold，OpenClaw 插件 ID 仍为 `taskfold`。（2026-09-24 前为：唯一形态是 OpenClaw 插件，产品显示名称为 Taskfold，插件 ID 为 `taskfold`。）
 - M1：以固定的 OpenClaw Workboard 上游快照为代码、目录和开发规范基线，完整复制其功能层后做成可安装的 Taskfold 插件；不重写为独立应用，不另造一套架构。
 - 本机开发安装：`openclaw plugins install --link /home/john/src/personal/Taskfold`。
 - 分发安装：用户可执行 `openclaw plugins install <Git-仓库地址>` 安装插件。
@@ -39,6 +39,7 @@
 | [[15.10-并发执行模型调查]] | **未处理**：并行执行方案四选一待定，连带挂起 15.8 的 owner slot |
 | [[16-文件存储改造]] | **已定**：去 SQLite 改本地 Markdown 文件、兼容 Backlog.md 格式、数据入项目库；推翻 [[7-数据与接口]] 的 SQLite 真相源结论 |
 | [[17-规划文件目录规范调研]] | 调研结论：AI 规划文件目录无统一标准，作为 16 的分叉 B/C 输入 |
+| [[18-多宿主架构]] | **已定**：多宿主（OpenClaw/VS Code/dsh/pi）、core 库+两层文件锁、AI 只走 CLI、VS Code 首版可编辑；推翻 [[16-文件存储改造]] 的 A1 |
 
 ## 本版本范围（2026-09-18）
 
