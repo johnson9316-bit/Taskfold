@@ -31,3 +31,4 @@ test-results/
 *.seed
 *.pid.lock
 *.stackdump
+packages/cli/dist/

@@ -156,6 +156,24 @@ managed Git worktree. It does not fall back to running directly in the primary
 checkout. Stopping an execution preserves the card's business status and does
 not automatically infer delivery, validation, or release facts.
 
+## Standalone CLI
+
+`packages/cli` builds a standalone `taskfold` command that reads and writes the cards in a
+repository's `.taskfold/` directory without OpenClaw or the Gateway. It is the write path
+for AI agents: `--json` output with a versioned schema, stable error codes on stderr, and
+`taskfold guidelines` to add a short usage block to `AGENTS.md` / `CLAUDE.md`. Until the
+plugin itself moves to the file store, the CLI and the plugin do not share cards.
+
+```bash
+npm run build:cli
+node packages/cli/dist/taskfold.js init
+node packages/cli/dist/taskfold.js --help
+```
+
+WSL drvfs paths (`/mnt/c/...`) and `\\wsl$` paths are not supported: file locks there are
+misreported as compromised. See [packages/cli/README.md](packages/cli/README.md) for the
+commands and the output contract.
+
 ## Development
 
 ```bash

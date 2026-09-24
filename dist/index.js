@@ -3973,8 +3973,8 @@ var TaskfoldChangeTracker = class {
       },
       entries: async () => await store.entries(),
       ...store.compareAndSwap ? {
-        compareAndSwap: async (key, expectedRevision, value) => {
-          const swapped = await store.compareAndSwap(key, expectedRevision, value);
+        compareAndSwap: async (key, expectedRevision, value, onReject) => {
+          const swapped = await store.compareAndSwap(key, expectedRevision, value, onReject);
           if (swapped) {
             this.mutationRevision += 1;
           }
@@ -4205,10 +4205,11 @@ function invertTaskfoldWorkspaceMutation(before, after, current) {
 
 // packages/core/src/store-core.ts
 var TaskfoldRevisionConflictError = class extends Error {
-  constructor(cardId, expectedRevision) {
+  constructor(cardId, expectedRevision, reason = "revision") {
     super(`card ${cardId} changed since revision ${expectedRevision}.`);
     this.cardId = cardId;
     this.expectedRevision = expectedRevision;
+    this.reason = reason;
     this.name = "TaskfoldRevisionConflictError";
   }
 };
@@ -4225,7 +4226,7 @@ function stampCardRevisions(store) {
     lookup: async (key) => await store.lookup(key),
     delete: async (key) => await store.delete(key),
     entries: async () => await store.entries(),
-    compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value)),
+    compareAndSwap: async (key, expectedRevision, value, onReject) => await store.compareAndSwap(key, expectedRevision, stamp(value), onReject),
     ...store.registerIfAbsent ? {
       registerIfAbsent: async (key, value) => await store.registerIfAbsent(key, stamp(value))
     } : {}
@@ -4805,12 +4806,17 @@ var TaskfoldCoreStore = class {
       await this.store.register(card.id, { version: 1, card });
       return;
     }
-    const swapped = await this.store.compareAndSwap(card.id, expectedRevision, {
-      version: 1,
-      card
-    });
+    let reason;
+    const swapped = await this.store.compareAndSwap(
+      card.id,
+      expectedRevision,
+      { version: 1, card },
+      (rejected) => {
+        reason = rejected;
+      }
+    );
     if (!swapped) {
-      throw new TaskfoldRevisionConflictError(card.id, expectedRevision);
+      throw new TaskfoldRevisionConflictError(card.id, expectedRevision, reason);
     }
   }
   /**

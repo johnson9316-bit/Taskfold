@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TaskfoldChange } from "./contract/index.js";
-import type { TaskfoldKeyedStore } from "./persistence-types.js";
+import type { TaskfoldCompareAndSwapFailure, TaskfoldKeyedStore } from "./persistence-types.js";
 
 /**
  * Revisions reserved per round trip to the backing store. Large enough that a
@@ -105,8 +105,13 @@ export class TaskfoldChangeTracker {
       entries: async () => await store.entries(),
       ...(store.compareAndSwap
         ? {
-            compareAndSwap: async (key: string, expectedRevision: number, value: T) => {
-              const swapped = await store.compareAndSwap!(key, expectedRevision, value);
+            compareAndSwap: async (
+              key: string,
+              expectedRevision: number,
+              value: T,
+              onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
+            ) => {
+              const swapped = await store.compareAndSwap!(key, expectedRevision, value, onReject);
               if (swapped) {
                 this.mutationRevision += 1;
               }

@@ -14,10 +14,6 @@
     "useDefineForClassFields": true
   },
   "include": [
-    "src/**/*.ts",
-    "packages/core/src/**/*.ts",
-    "packages/cli/src/**/*.ts",
-    "test/**/*.ts",
-    "browser/index.ts"
+    "src/**/*.ts"
   ]
 }

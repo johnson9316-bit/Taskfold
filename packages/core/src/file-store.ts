@@ -5,13 +5,19 @@
 //
 // Scope note for whoever wires this into production (needs to touch store.ts /
 // store-projects.ts / gateway.ts, all out of bounds for this change): this factory takes
-// an already-resolved `dataDir` (one project's `.taskfold/` root) and `pluginDir`. It
+// an already-resolved `dataDir` (one project's `.taskfold/` root) and, for OpenClaw only,
+// `pluginDir`. It
 // does not itself pick which project's directory to use for a given board/card -- that
 // per-project routing, plus swapping `resolveTaskfoldDataDir`'s workspace-based
 // resolution (file-store-paths.ts) into wherever a project's `defaultWorkspace` is read
 // today, belongs to the later "切生产路径" milestone (需求/16 第八节 第 3 期), not to this
 // storage skeleton.
-import type { TaskfoldKeyedStore } from "./persistence-types.js";
+import type {
+  PersistedTaskfoldBoard,
+  PersistedTaskfoldNotificationSubscription,
+  TaskfoldCompareAndSwapFailure,
+  TaskfoldKeyedStore,
+} from "./persistence-types.js";
 import {
   ensureTaskfoldDataDirectories,
   ensureTaskfoldPluginDirectories,
@@ -61,8 +67,11 @@ export type TaskfoldFileStoresOptions = {
    * （需求/18 §3.6，file-store-path-resolver.ts），worktree 里那份副本不读不写。 */
   dataDir: string;
   /** 宿主的插件级目录，e.g. `resolveTaskfoldPluginDir(stateDir)`，只放项目注册表与通知订阅。
-   * 由调用方注入，core 不再自行解析宿主的 state 目录。 */
-  pluginDir: string;
+   * 由调用方注入，core 不再自行解析宿主的 state 目录。
+   * 可选：只有 OpenClaw 有项目注册表与通知订阅（需求/18 §3.8）。CLI、VS Code 等不传，此时
+   * `boards`/`subscriptions` 是本进程内存里的空 store（见 {@link createProcessLocalStore}），
+   * `.taskfold/` 之外一个文件都不碰。 */
+  pluginDir?: string;
   /**
    * Defaults to the real Markdown+frontmatter codec (file-store-codec.ts's
    * `createMarkdownCardCodec`). Override only for a test that deliberately wants a
@@ -78,10 +87,9 @@ export type TaskfoldFileStoresOptions = {
  * `ReturnType<typeof createTaskfoldSqliteStores>` at every call site that matters --
  * chiefly store.ts's `TaskfoldStore.fromSqliteStores`. */
 export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
-  const pluginDir = options.pluginDir;
   const layout: TaskfoldFileStoreLayout = resolveTaskfoldFileStoreLayout({
     dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
-    pluginDir,
+    ...(options.pluginDir === undefined ? {} : { pluginDir: options.pluginDir }),
   });
   // 需求/18 §3.9：格式版本高于本版 core 时只读不写——不初始化 `.taskfold/`，写入一律拒绝。
   // 每次写入前都重读 config.yml，运行期间被别的进程升级了格式也能拦住。
@@ -118,7 +126,10 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     runtimeCardsDir: layout.runtimeCardsDir,
   }));
   // 项目注册表与通知订阅在宿主的插件目录里，不归 `.taskfold/` 的格式版本管。
-  const boards = createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
+  const boards =
+    layout.projectsJsonPath === undefined
+      ? createProcessLocalStore<PersistedTaskfoldBoard>()
+      : createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
   const milestones = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileMilestoneStore({
     milestonesDir: layout.milestonesDir,
     codec: milestoneCodec,
@@ -128,9 +139,10 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     assertWritable,
     createTaskfoldFileDocumentStore({ documentsDir: layout.documentsDir }),
   );
-  const subscriptions = createTaskfoldFileSubscriptionStore({
-    subscriptionsDir: layout.subscriptionsDir,
-  });
+  const subscriptions =
+    layout.subscriptionsDir === undefined
+      ? createProcessLocalStore<PersistedTaskfoldNotificationSubscription>()
+      : createTaskfoldFileSubscriptionStore({ subscriptionsDir: layout.subscriptionsDir });
   const attachments = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileAttachmentStore({
     attachmentsDir: layout.attachmentsDir,
     cardsDir: layout.cardsDir,
@@ -172,6 +184,27 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
   };
 }
 
+/**
+ * 没注入 `pluginDir` 时的项目注册表 / 通知订阅：只活在本进程内存里，起始为空。
+ * 这两样只有 OpenClaw 真正需要（需求/18 §3.8）；业务层仍会顺手写它们（新建卡片时
+ * `ensureBoardDirect` 给没登记过的 board 补一条骨架记录），写进内存即可——骨架随时能重建，
+ * 看板归属本身记在卡片的 `metadata.automation.boardId` 上，不依赖注册表。
+ */
+function createProcessLocalStore<T>(): TaskfoldKeyedStore<T> {
+  const values = new Map<string, T>();
+  return {
+    register: async (key, value) => {
+      values.set(key, structuredClone(value));
+    },
+    lookup: async (key) => {
+      const value = values.get(key);
+      return value === undefined ? undefined : structuredClone(value);
+    },
+    delete: async (key) => values.delete(key),
+    entries: async () => [...values].map(([key, value]) => ({ key, value: structuredClone(value) })),
+  } as TaskfoldKeyedStore<T>;
+}
+
 /** 包一层：每个会改动 `.taskfold/` 的方法先确认格式版本可写（需求/18 §3.9），读方法原样透传。
  * 与 store-change-tracker.ts 的 `track` 一样，`compareAndSwap`/`registerIfAbsent` 原来有才有，
  * 保持同样的（随 T 变化的）必选/可选 CAS 形状，TS 在条件类型里看不出来，所以要 cast。 */
@@ -192,9 +225,14 @@ function rejectWritesUnlessFormatWritable<T>(
     entries: async () => await store.entries(),
     ...(store.compareAndSwap
       ? {
-          compareAndSwap: async (key: string, expectedRevision: number, value: T) => {
+          compareAndSwap: async (
+            key: string,
+            expectedRevision: number,
+            value: T,
+            onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
+          ) => {
             assertWritable();
-            return await store.compareAndSwap!(key, expectedRevision, value);
+            return await store.compareAndSwap!(key, expectedRevision, value, onReject);
           },
         }
       : {}),

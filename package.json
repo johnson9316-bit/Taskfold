@@ -37,9 +37,10 @@
     "openclaw.plugin.json"
   ],
   "scripts": {
-    "build": "npm run build:backend && npm run build:control-ui",
+    "build": "npm run build:backend && npm run build:control-ui && npm run build:cli",
     "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/*",
     "build:control-ui": "node scripts/build-control-ui.mjs",
+    "build:cli": "npm run build -w @taskfold/cli",
     "check:public-names": "node scripts/check-public-names.mjs",
     "pack:check": "npm pack --dry-run",
     "test": "vitest run --config vitest.config.ts",

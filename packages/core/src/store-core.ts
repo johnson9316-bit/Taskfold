@@ -15,6 +15,7 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
+  TaskfoldCompareAndSwapFailure,
   TaskfoldKeyedStore,
 } from "./persistence-types.js";
 import { normalizeAutomationPatch, normalizeCardAutomation } from "./store-automation.js";
@@ -98,6 +99,12 @@ export class TaskfoldRevisionConflictError extends Error {
   constructor(
     readonly cardId: string,
     readonly expectedRevision: number,
+    /**
+     * 为什么没写成（persistence-types.ts 的 {@link TaskfoldCompareAndSwapFailure}）。store 层把锁超时
+     * 也映射成 CAS 失败（需求/16 R2），不看这个字段就分不出「别人改过」与「锁被占着」；补偿与重试
+     * 逻辑照旧只认错误类型。后端不报原因时按 `revision` 处理。message 与原因无关、保持不变。
+     */
+    readonly reason: TaskfoldCompareAndSwapFailure = "revision",
   ) {
     super(`card ${cardId} changed since revision ${expectedRevision}.`);
     this.name = "TaskfoldRevisionConflictError";
@@ -124,8 +131,8 @@ function stampCardRevisions(store: TaskfoldKeyedStore): TaskfoldKeyedStore {
     lookup: async (key) => await store.lookup(key),
     delete: async (key) => await store.delete(key),
     entries: async () => await store.entries(),
-    compareAndSwap: async (key, expectedRevision, value) =>
-      await store.compareAndSwap(key, expectedRevision, stamp(value)),
+    compareAndSwap: async (key, expectedRevision, value, onReject) =>
+      await store.compareAndSwap(key, expectedRevision, stamp(value), onReject),
     ...(store.registerIfAbsent
       ? {
           registerIfAbsent: async (key: string, value) =>
@@ -912,12 +919,17 @@ export class TaskfoldCoreStore {
       await this.store.register(card.id, { version: 1, card });
       return;
     }
-    const swapped = await this.store.compareAndSwap(card.id, expectedRevision, {
-      version: 1,
-      card,
-    });
+    let reason: TaskfoldCompareAndSwapFailure | undefined;
+    const swapped = await this.store.compareAndSwap(
+      card.id,
+      expectedRevision,
+      { version: 1, card },
+      (rejected) => {
+        reason = rejected;
+      },
+    );
     if (!swapped) {
-      throw new TaskfoldRevisionConflictError(card.id, expectedRevision);
+      throw new TaskfoldRevisionConflictError(card.id, expectedRevision, reason);
     }
   }
 

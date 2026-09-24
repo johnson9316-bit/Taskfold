@@ -58,27 +58,29 @@ export type TaskfoldFileStoreLayout = {
   changesLogPath: string;
   /** `<repo>/.taskfold/config.yml`：记录格式版本（需求/18 §3.9，file-store-format.ts），纳入 Git。 */
   configPath: string;
-  /** 宿主注入的插件级目录（见 {@link resolveTaskfoldPluginDir}），只放 OpenClaw 专属数据。 */
-  pluginDir: string;
-  projectsJsonPath: string;
-  subscriptionsDir: string;
+  /** 宿主注入的插件级目录（见 {@link resolveTaskfoldPluginDir}），只放 OpenClaw 专属数据。
+   * 非 OpenClaw 宿主（CLI、VS Code）不传：没有项目注册表与通知订阅（需求/18 §3.8），
+   * 下面四个插件级路径随之为 `undefined`。 */
+  pluginDir?: string;
+  projectsJsonPath?: string;
+  subscriptionsDir?: string;
   /**
    * Reserved by 需求/16 第六节 for the M4 execution ledger and M9 metrics time
    * series. Neither is implemented anywhere in the codebase yet (confirmed by a
    * full grep on 2026-09-18), so this skeleton only reserves the path -- it does
    * not create the directory or define a format.
    */
-  runsDir: string;
+  runsDir?: string;
   /** Reserved; see `runsDir` above. */
-  metricsDir: string;
+  metricsDir?: string;
 };
 
 export function resolveTaskfoldFileStoreLayout(options: {
   dataDir: string;
-  pluginDir: string;
+  pluginDir?: string;
 }): TaskfoldFileStoreLayout {
   const dataDir = path.resolve(options.dataDir);
-  const pluginDir = path.resolve(options.pluginDir);
+  const pluginDir = options.pluginDir === undefined ? undefined : path.resolve(options.pluginDir);
   return {
     dataDir,
     cardsDir: path.join(dataDir, "cards"),
@@ -90,11 +92,15 @@ export function resolveTaskfoldFileStoreLayout(options: {
     runtimeCardsDir: path.join(dataDir, ".runtime", "cards"),
     changesLogPath: path.join(dataDir, ".runtime", "changes.log"),
     configPath: path.join(dataDir, "config.yml"),
-    pluginDir,
-    projectsJsonPath: path.join(pluginDir, "projects.json"),
-    subscriptionsDir: path.join(pluginDir, "subscriptions"),
-    runsDir: path.join(pluginDir, "runs"),
-    metricsDir: path.join(pluginDir, "metrics"),
+    ...(pluginDir === undefined
+      ? {}
+      : {
+          pluginDir,
+          projectsJsonPath: path.join(pluginDir, "projects.json"),
+          subscriptionsDir: path.join(pluginDir, "subscriptions"),
+          runsDir: path.join(pluginDir, "runs"),
+          metricsDir: path.join(pluginDir, "metrics"),
+        }),
   };
 }
 
@@ -163,9 +169,13 @@ export function ensureTaskfoldDataDirectories(layout: TaskfoldFileStoreLayout): 
   ensureRuntimeGitignored(layout.dataDir);
 }
 
-/** 插件级目录（宿主注入的 `pluginDir`）。Deliberately excludes `runsDir`/`metricsDir`: those
- * are reserved paths for unimplemented M4/M9 features, not directories this skeleton owns yet. */
+/** 插件级目录（宿主注入的 `pluginDir`；没注入就什么都不建）。Deliberately excludes
+ * `runsDir`/`metricsDir`: those are reserved paths for unimplemented M4/M9 features, not
+ * directories this skeleton owns yet. */
 export function ensureTaskfoldPluginDirectories(layout: TaskfoldFileStoreLayout): void {
+  if (layout.pluginDir === undefined || layout.subscriptionsDir === undefined) {
+    return;
+  }
   ensureHardenedDir(layout.pluginDir);
   ensureHardenedDir(layout.subscriptionsDir);
 }

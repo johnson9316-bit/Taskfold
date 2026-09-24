@@ -55,6 +55,17 @@ type TaskfoldKeyedStoreBase<T> = {
   registerIfAbsent?(key: string, value: T): Promise<boolean>;
 };
 
+/**
+ * compareAndSwap 返回 `false` 的原因（需求/18 §3.4）。store 层照旧只返回 `false`、不 throw
+ * （需求/16 R2），原因经可选的 `onReject` 回调带出，供需要区分的调用方（CLI 的 `LOCKED` 与
+ * `CONFLICT`）使用；不关心原因的调用方（补偿循环等）行为不变。
+ * - `revision`：存储里的 revision 不等于 `expectedRevision`；
+ * - `missing`：没有这个 key；
+ * - `lock-timeout`：等锁超时（别的进程一直占着锁）；
+ * - `lock-compromised`：持锁期间锁被判 stale、被别的进程接管，本次写入已放弃。
+ */
+export type TaskfoldCompareAndSwapFailure = "revision" | "missing" | "lock-timeout" | "lock-compromised";
+
 type TaskfoldCompareAndSwap<T> = {
   /**
    * Conditional write: persist `value` only if the stored row still carries
@@ -62,8 +73,16 @@ type TaskfoldCompareAndSwap<T> = {
    * be one atomic unit so concurrent processes cannot both win. A lost race --
    * including lock contention or a lock lost mid-write -- returns `false`, never
    * throws, and never writes (需求/16 R1/R2).
+   *
+   * `onReject`（可选）：返回 `false` 之前以失败原因调用一次。后端可以不报（SQLite 后端不报，
+   * 调用方按 `revision` 处理）；包装层必须原样透传。
    */
-  compareAndSwap(key: string, expectedRevision: number, value: T): Promise<boolean>;
+  compareAndSwap(
+    key: string,
+    expectedRevision: number,
+    value: T,
+    onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
+  ): Promise<boolean>;
 };
 
 /**

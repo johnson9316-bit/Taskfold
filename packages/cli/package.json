@@ -1,0 +1,25 @@
+{
+  "name": "@taskfold/cli",
+  "version": "0.2.0",
+  "description": "Taskfold command-line interface: read and write .taskfold cards without OpenClaw.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "taskfold": "./dist/taskfold.js"
+  },
+  "exports": {
+    "./*.js": "./src/*.ts"
+  },
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@taskfold/core": "0.2.0",
+    "commander": "^13.1.0"
+  }
+}

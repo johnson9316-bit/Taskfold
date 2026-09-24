@@ -29,6 +29,7 @@ import {
 } from "./file-store-card-runtime.js";
 import {
   isTaskfoldLockConflictError,
+  TaskfoldLockTimeoutError,
   withTaskfoldCardLock,
   withTaskfoldGlobalLock,
   type TaskfoldLockGuard,
@@ -346,11 +347,12 @@ export function createTaskfoldFileCardStore(options: {
       return results;
     },
 
-    async compareAndSwap(key, expectedRevision, value) {
+    async compareAndSwap(key, expectedRevision, value, onReject) {
       assertValidCardPayload(key, value);
       const filePath = findCardFilePath(cardsDir, key);
       if (!filePath) {
         // Nothing to swap against -- mirrors sqlite-store.ts's `!row` branch.
+        onReject?.("missing");
         return false;
       }
       try {
@@ -363,6 +365,7 @@ export function createTaskfoldFileCardStore(options: {
           // the lock was taken may already be stale.
           const current = readCardState(filePath, codec, runtimeCardsDir, key);
           if (current === undefined) {
+            onReject?.("missing");
             return false;
           }
           // 需求/18 §3.7：比对 revision 之前先做外部修改检测。md 的 hash 与运行态记录的
@@ -373,6 +376,7 @@ export function createTaskfoldFileCardStore(options: {
           }
           if (current.runtime.revision !== expectedRevision) {
             // R2: a stale/conflicting revision returns false, and the card itself is not written.
+            onReject?.("revision");
             return false;
           }
           writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, filePath, guard, current.content);
@@ -383,6 +387,7 @@ export function createTaskfoldFileCardStore(options: {
         // conflicts, not errors -- report false so the compensation/retry loop handles it.
         // Neither path has written anything (see writeFileAtomic's beforeRename).
         if (isTaskfoldLockConflictError(error)) {
+          onReject?.(error instanceof TaskfoldLockTimeoutError ? "lock-timeout" : "lock-compromised");
           return false;
         }
         throw error;
