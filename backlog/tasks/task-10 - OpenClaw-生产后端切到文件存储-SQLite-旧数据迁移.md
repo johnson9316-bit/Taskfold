@@ -4,6 +4,7 @@ title: OpenClaw 生产后端切到文件存储 + SQLite 旧数据迁移
 status: To Do
 assignee: []
 created_date: '2026-09-24 10:36'
+updated_date: '2026-09-24 10:43'
 labels:
   - openclaw
   - storage
@@ -31,3 +32,9 @@ ordinal: 10000
 - [ ] #3 切换后本机 Gateway 加载正常，Control UI 看到的项目/卡片/里程碑与迁移前一致
 - [ ] #4 SQLite 下线后 compareAndSwap 对卡片 store 无条件必选，typecheck 通过
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-09-24 用户已授权真实迁移：先备份 taskfold.sqlite，把各项目数据写入各自仓库主 checkout 的 .taskfold/（其他仓库里只产生未跟踪文件，不在其他仓库 commit），按需重启 Gateway；回滚方法写进文档。追加验收：TASK-6 AC#3 用真实 Gateway + CLI 复验。
+<!-- SECTION:NOTES:END -->

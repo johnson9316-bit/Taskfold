@@ -4,7 +4,7 @@ title: VS Code 扩展：WebviewPanel 看板，可编辑卡片
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
-updated_date: '2026-09-24 10:36'
+updated_date: '2026-09-24 10:54'
 labels:
   - vscode
 milestone: m-0
@@ -37,4 +37,6 @@ ordinal: 8000
 TASK-7 结论落实：4 处 style=${...}（project-view.ts:584,637,1270,1326）改用自写 CSSOM 指令（不要用 styleMap，首次渲染仍走 setAttribute 被 CSP 拦）；CSP 用 default-src 'none'; img-src ${cspSource} data:; font-src ${cspSource}; style-src ${cspSource}; script-src 'nonce-${nonce}'；host 接口 confirm(): Promise<boolean>，VS Code 端用 showWarningMessage(msg,{modal:true},'确定')，否则 3 处 confirm 会静默变成取消；语言跟随 vscode.env.language，viewType 定了不要改（localStorage origin 与它绑定）。
 
 TASK-1 遗留：前端改为从 @taskfold/core 引用 contract 后，删除 src/contract/index.ts 转发文件。
+
+2026-09-24 用户要求完成后能在自己的 VS Code 里用上：追加范围——扩展打包成自包含 .vsix（core 打进 bundle，不依赖仓库路径），在隔离 user-data-dir/extensions-dir 里 --install-extension 后能打开看板；README/AGENTS.md 写安装命令。不代用户装进真实 VS Code，只交付 .vsix 与命令。
 <!-- SECTION:NOTES:END -->

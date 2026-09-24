@@ -4,7 +4,7 @@ title: core：主 checkout 定位、changes.log 迁 .runtime、格式版本
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
-updated_date: '2026-09-24 10:33'
+updated_date: '2026-09-24 10:43'
 labels:
   - core
   - storage
@@ -37,4 +37,6 @@ ordinal: 4000
 TASK-2 遗留：changes.log 目前在 pluginDir、多项目共享，而全局锁按项目 dataDir 分，多项目并发 reserveFileChangeRevisions 仍可能冲突——迁到 .taskfold/.runtime/ 后随之解决，验收时要覆盖这一点。
 
 2026-09-24 暂停：子代理开工后即被叫停，工作树无代码改动。重启时先查清 change cursor（changes.wait，browser/project-host.ts:204）是跨项目全局游标还是按项目游标——若是全局，changes.log 按项目拆分会改变游标语义，须先定方案再做。
+
+2026-09-24 定案（变更游标）：采用「适配层聚合游标」。每个项目一份 .taskfold/.runtime/changes.log（全局锁内追加 epoch/reserve 记录），core 只提供按项目的 ChangeSource；OpenClaw 适配层的 taskfold.changes.wait 聚合所有已注册项目：适配层自有 epoch（Gateway 进程级）+ 单调计数，任一项目 changes.log 前进即 +1，返回形状不变，前端零改动。未采用：changes.wait 按项目等（要改前端与网关契约）；项目内 + ~/.openclaw 全局双写（违反 18 §3.8）。
 <!-- SECTION:NOTES:END -->

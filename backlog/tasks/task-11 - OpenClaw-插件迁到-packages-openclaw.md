@@ -4,6 +4,7 @@ title: OpenClaw 插件迁到 packages/openclaw
 status: To Do
 assignee: []
 created_date: '2026-09-24 10:36'
+updated_date: '2026-09-24 10:43'
 labels:
   - openclaw
   - refactor
@@ -27,3 +28,9 @@ TASK-1 为免改全局配置把插件留在仓库根；本任务把 openclaw.plu
 - [ ] #2 npm test / typecheck / build / check:public-names 通过
 - [ ] #3 AGENTS.md 的加载路径与验证方法已更新
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-09-24 定案：browser/ 前端源码迁成共享 workspace packages/ui；packages/openclaw 与 packages/vscode 各自从 packages/ui 构建产物，vscode 不反向依赖 openclaw 包。未采用：browser/ 并入 packages/openclaw（vscode 会依赖 openclaw 内部目录）、browser/ 暂留根目录（根目录只做 workspaces 根不达成）。用户已授权修改 ~/.openclaw/openclaw.json 的 plugins.load.paths（改前先备份）与重启 Gateway。
+<!-- SECTION:NOTES:END -->
