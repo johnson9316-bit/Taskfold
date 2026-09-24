@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { taskfoldLastActivityAt } from "@taskfold/core/store-card-helpers.js";
 import type {
-  TaskfoldKeyedStore,
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
   PersistedTaskfoldCard,
@@ -15,29 +14,12 @@ import {
   type TaskfoldReconcilerRuntime,
 } from "../src/backend/src/reconciler.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
+import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 /** Silent long enough to be presumed gone: heartbeat-stale (20m) plus grace (10m). */
 const ABANDONED_MS = 31 * 60 * 1000;
 /** Silent enough to be flagged, not yet long enough to be closed. */
 const STALE_MS = 25 * 60 * 1000;
-
-function keyedStore<T>(): TaskfoldKeyedStore<T> {
-  const values = new Map<string, T>();
-  return {
-    async register(key, value) {
-      values.set(key, value);
-    },
-    async lookup(key) {
-      return values.get(key);
-    },
-    async delete(key) {
-      return values.delete(key);
-    },
-    async entries() {
-      return [...values.entries()].map(([key, value]) => ({ key, value }));
-    },
-  };
-}
 
 function createStore(): TaskfoldStore {
   return new TaskfoldStore(keyedStore<PersistedTaskfoldCard>(), {

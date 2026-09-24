@@ -4,6 +4,7 @@ title: OpenClaw 插件改调 core
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 10:02'
 labels:
   - openclaw
 milestone: m-0
@@ -27,3 +28,9 @@ ordinal: 6000
 - [ ] #2 本机 Gateway 实际加载后 Control UI 面板可用（按 AGENTS.md 的验证方法）
 - [ ] #3 OpenClaw 与 CLI 同时写同一张卡，结果一致、无静默覆盖
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-2 遗留：① persistence-types.ts 的 CAS 目前用条件类型「仅卡片 store 必选」，是为了让 sqlite-store.ts / doctor-contract-api.ts 继续编译；SQLite 后端下线时改回对所有卡片 store 无条件必选，并去掉 store-change-tracker.ts:85 的类型断言。② src/backend/src/store.ts 的 TaskfoldStore.open() 把宿主 KV store 强转为卡片 store，宿主 store 无 CAS，运行时会出错；当前零调用，改调 core 时删除或修正。
+<!-- SECTION:NOTES:END -->

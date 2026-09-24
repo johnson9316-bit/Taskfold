@@ -43,6 +43,9 @@ export class TaskfoldChangeTracker {
   }
 
   track<T>(store: TaskfoldKeyedStore<T>): TaskfoldKeyedStore<T> {
+    // The wrapper exposes `compareAndSwap` exactly when `store` does, so it satisfies
+    // the same (T-dependent) required/optional CAS shape; TS cannot see that through
+    // the conditional type in persistence-types.ts, hence the cast.
     return {
       register: async (key, value) => {
         await store.register(key, value);
@@ -79,7 +82,7 @@ export class TaskfoldChangeTracker {
             },
           }
         : {}),
-    };
+    } as TaskfoldKeyedStore<T>;
   }
 
   subscribe(listener: (change: TaskfoldChange) => void): () => void {

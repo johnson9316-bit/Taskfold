@@ -6,30 +6,12 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
-  TaskfoldKeyedStore,
 } from "@taskfold/core/persistence-types.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { TaskfoldStore } from "../src/backend/src/store.js";
-
-function keyedStore<T>(): TaskfoldKeyedStore<T> {
-  const values = new Map<string, T>();
-  return {
-    async register(key, value) {
-      values.set(key, value);
-    },
-    async lookup(key) {
-      return values.get(key);
-    },
-    async delete(key) {
-      return values.delete(key);
-    },
-    async entries() {
-      return [...values.entries()].map(([key, value]) => ({ key, value }));
-    },
-  };
-}
+import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore() {
   const cards = keyedStore<PersistedTaskfoldCard>();

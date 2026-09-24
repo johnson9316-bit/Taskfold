@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createFileExclusive, readFileIfExists } from "./file-store-atomic.js";
+import { withTaskfoldGlobalLockSync } from "./file-store-locks.js";
 import { TASKFOLD_FILE_STORE_FILE_MODE } from "./file-store-paths.js";
 
 type ChangeLogRecord = { type: "epoch"; epoch: string } | { type: "reserve"; ceiling: number };
@@ -75,18 +76,23 @@ export function ensureFileChangeEpoch(changesLogPath: string): string {
  * corrupt value as 0, never as a negative or non-integer base), appends a new ceiling
  * `base + count`, and returns `base` (the block's lower bound) to the caller.
  */
-export function reserveFileChangeRevisions(changesLogPath: string, count: number): number {
-  const records = readChangeLogRecords(changesLogPath);
-  let base = 0;
-  for (const record of records) {
-    if (record.type === "reserve" && Number.isSafeInteger(record.ceiling) && record.ceiling > 0) {
-      base = record.ceiling;
+export function reserveFileChangeRevisions(changesLogPath: string, count: number, locksDir: string): number {
+  // 「读最后一个 ceiling → 追加新 ceiling」在全局锁内完成（需求/18 §3.3），否则两个进程会
+  // 读到同一个 base、拿到重叠的 revision 区间。同步锁：调用链（store-change-tracker.ts）是同步的。
+  return withTaskfoldGlobalLockSync(locksDir, (guard) => {
+    const records = readChangeLogRecords(changesLogPath);
+    let base = 0;
+    for (const record of records) {
+      if (record.type === "reserve" && Number.isSafeInteger(record.ceiling) && record.ceiling > 0) {
+        base = record.ceiling;
+      }
     }
-  }
-  const nextCeiling = base + count;
-  fs.appendFileSync(changesLogPath, `${JSON.stringify({ type: "reserve", ceiling: nextCeiling })}\n`, {
-    mode: TASKFOLD_FILE_STORE_FILE_MODE,
+    const nextCeiling = base + count;
+    guard.assertHeld();
+    fs.appendFileSync(changesLogPath, `${JSON.stringify({ type: "reserve", ceiling: nextCeiling })}\n`, {
+      mode: TASKFOLD_FILE_STORE_FILE_MODE,
+    });
+    return base;
   });
-  return base;
 }
 

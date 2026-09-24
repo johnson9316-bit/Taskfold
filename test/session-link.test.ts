@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  TaskfoldKeyedStore,
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
   PersistedTaskfoldCard,
@@ -14,24 +13,7 @@ import {
   taskfoldCardSessionLookupKey,
 } from "@taskfold/core/session-link.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
-
-function keyedStore<T>(): TaskfoldKeyedStore<T> {
-  const values = new Map<string, T>();
-  return {
-    async register(key, value) {
-      values.set(key, value);
-    },
-    async lookup(key) {
-      return values.get(key);
-    },
-    async delete(key) {
-      return values.delete(key);
-    },
-    async entries() {
-      return [...values.entries()].map(([key, value]) => ({ key, value }));
-    },
-  };
-}
+import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore(): TaskfoldStore {
   return new TaskfoldStore(keyedStore<PersistedTaskfoldCard>(), {

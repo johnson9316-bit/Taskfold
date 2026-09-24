@@ -86,11 +86,13 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     attachmentsDir: layout.attachmentsDir,
     codec: cardCodec,
     onWrite: externalChangeReconciler.noteOwnWrite,
+    locksDir: layout.locksDir,
   });
   const boards = createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
   const milestones = createTaskfoldFileMilestoneStore({
     milestonesDir: layout.milestonesDir,
     codec: milestoneCodec,
+    locksDir: layout.locksDir,
   });
   const documents = createTaskfoldFileDocumentStore({ documentsDir: layout.documentsDir });
   const subscriptions = createTaskfoldFileSubscriptionStore({
@@ -116,7 +118,7 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     attachments,
     dataVersion: externalChangeReconciler.dataVersion,
     changeEpoch,
-    reserveChangeRevisions: (count: number) => reserveFileChangeRevisions(layout.changesLogPath, count),
+    reserveChangeRevisions: (count: number) => reserveFileChangeRevisions(layout.changesLogPath, count, layout.locksDir),
     // Nothing to release: this backend holds no open file descriptors or watchers
     // between calls (every read/write in this skeleton opens and closes its own fd).
     // Kept for shape parity with createTaskfoldSqliteStores, and as the seam a future

@@ -4188,9 +4188,7 @@ function stampCardRevisions(store) {
     lookup: async (key) => await store.lookup(key),
     delete: async (key) => await store.delete(key),
     entries: async () => await store.entries(),
-    ...store.compareAndSwap ? {
-      compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value))
-    } : {},
+    compareAndSwap: async (key, expectedRevision, value) => await store.compareAndSwap(key, expectedRevision, stamp(value)),
     ...store.registerIfAbsent ? {
       registerIfAbsent: async (key, value) => await store.registerIfAbsent(key, stamp(value))
     } : {}
@@ -4769,9 +4767,8 @@ var TaskfoldCoreStore = class {
   }
   /**
    * Single card write boundary. With `expectedRevision` the backend performs the
-   * check and the write atomically when it can; backends without that capability
-   * fall back to the plain write already guarded by the read-revision check in
-   * {@link updateCard} and the in-process mutation queue.
+   * check and the write atomically (`compareAndSwap` is required on the cards
+   * store, 需求/16 R1); without it this is an unconditional write.
    *
    * `protected`, not `private`: {@link compensateCardMutation} below and
    * store-workflow.ts's `decompose` rollback both need to persist an already-
@@ -4779,7 +4776,7 @@ var TaskfoldCoreStore = class {
    * `update`/`updateCard` do not offer.
    */
   async persistCard(card, expectedRevision) {
-    if (expectedRevision === void 0 || !this.store.compareAndSwap) {
+    if (expectedRevision === void 0) {
       await this.store.register(card.id, { version: 1, card });
       return;
     }

@@ -4,6 +4,7 @@ title: core：主 checkout 定位、changes.log 迁 .runtime、格式版本
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 10:02'
 labels:
   - core
   - storage
@@ -27,3 +28,11 @@ ordinal: 4000
 - [ ] #2 两个进程各写一次，对方都能从 changes.log 感知到
 - [ ] #3 config.yml 格式版本高于 core 时，写操作被拒并给出升级提示
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+承接 18 §3.3 表第 6 行：store-change-tracker.ts:18,85-127 的内存 listener 与 store-core.ts:216-238 的 waitForChange，改由 ChangeSource 端口驱动（跨进程靠 .runtime/changes.log）；并入 change-events.ts:4,18 的 1 秒轮询。
+
+TASK-2 遗留：changes.log 目前在 pluginDir、多项目共享，而全局锁按项目 dataDir 分，多项目并发 reserveFileChangeRevisions 仍可能冲突——迁到 .taskfold/.runtime/ 后随之解决，验收时要覆盖这一点。
+<!-- SECTION:NOTES:END -->

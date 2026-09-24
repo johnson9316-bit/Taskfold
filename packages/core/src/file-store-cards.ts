@@ -16,6 +16,12 @@ import {
   writeFileAtomic,
 } from "./file-store-atomic.js";
 import { allocateNextTaskfoldCardId } from "./file-store-card-id.js";
+import {
+  isTaskfoldLockConflictError,
+  withTaskfoldCardLock,
+  withTaskfoldGlobalLock,
+  type TaskfoldLockGuard,
+} from "./file-store-locks.js";
 import type { TaskfoldCardCodec } from "./file-store-codec.js";
 import { extractTaskfoldSectionUuid, parseCardFrontmatterId, type CardDisplayId } from "./markdown-card-format.js";
 
@@ -127,17 +133,18 @@ function writeCard(
   value: PersistedTaskfoldCard,
   codec: TaskfoldCardCodec,
   existingPath: string | undefined,
+  guard: TaskfoldLockGuard,
   previousContent?: string,
 ): { path: string; content: string } {
   if (existingPath) {
     const baseline = previousContent ?? readFileIfExists(existingPath);
     const content = codec.serialize(value.card, baseline);
-    writeFileAtomic(existingPath, content);
+    writeFileAtomic(existingPath, content, undefined, guard.assertHeld);
     return { path: existingPath, content };
   }
   const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
   const content = codec.serialize(value.card, previousContent, displayId);
-  writeFileAtomic(newPath, content);
+  writeFileAtomic(newPath, content, undefined, guard.assertHeld);
   return { path: newPath, content };
 }
 
@@ -155,15 +162,42 @@ export function createTaskfoldFileCardStore(options: {
    * 务写入会在下一轮扫描时被误判成"外部又改了一次"，被再重盖一次 revision。
    */
   onWrite?: (cardId: string, card: TaskfoldCard | undefined, filePath: string) => void;
+  /** `<repo>/.taskfold/.locks`：两层跨进程锁的锁文件目录（file-store-locks.ts）。 */
+  locksDir: string;
 }): TaskfoldKeyedStore<PersistedTaskfoldCard> {
-  const { cardsDir, archiveCardsDir, attachmentsDir, codec, onWrite } = options;
+  const { cardsDir, archiveCardsDir, attachmentsDir, codec, onWrite, locksDir } = options;
+
+  /** 已有文件的卡：卡锁内无条件覆盖（register 语义是 last-writer-wins，但不能插进
+   * 别人 CAS 的「重读 → rename」中间把对方的写吞掉）。 */
+  async function overwriteExistingCard(key: string, filePath: string, value: PersistedTaskfoldCard) {
+    await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+      const written = writeCard(cardsDir, archiveCardsDir, value, codec, filePath, guard);
+      onWrite?.(key, codec.parse(written.content), written.path);
+    });
+  }
 
   return {
     async register(key, value) {
       assertValidCardPayload(key, value);
       const existingPath = findCardFilePath(cardsDir, key);
-      const written = writeCard(cardsDir, archiveCardsDir, value, codec, existingPath);
-      onWrite?.(key, codec.parse(written.content), written.path);
+      if (existingPath) {
+        await overwriteExistingCard(key, existingPath, value);
+        return;
+      }
+      // 新卡：全局锁内重查 + 分配展示 ID + 落盘，别的进程不会拿到同一个 ID。
+      const racedPath = await withTaskfoldGlobalLock(locksDir, (guard) => {
+        const raced = findCardFilePath(cardsDir, key);
+        if (raced) {
+          return raced;
+        }
+        const written = writeCard(cardsDir, archiveCardsDir, value, codec, undefined, guard);
+        onWrite?.(key, codec.parse(written.content), written.path);
+        return undefined;
+      });
+      if (racedPath) {
+        // 拿全局锁之前另一个进程刚把同 key 的卡建出来：按已有卡覆盖（放掉全局锁后再拿卡锁，不嵌套）。
+        await overwriteExistingCard(key, racedPath, value);
+      }
     },
 
     async lookup(key) {
@@ -186,19 +220,26 @@ export function createTaskfoldFileCardStore(options: {
       if (!filePath) {
         return false;
       }
-      const card = readCardAt(filePath, codec);
-      const removed = removeFileIfExists(filePath);
-      if (!removed) {
+      // 卡锁内删除：不能插进别人 CAS 的「重读 → rename」中间（否则被删的卡会被那次 CAS 写回来）。
+      const card = await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+        const current = readCardAt(filePath, codec);
+        guard.assertHeld();
+        if (!removeFileIfExists(filePath)) {
+          return undefined;
+        }
+        onWrite?.(key, undefined, filePath);
+        return { card: current };
+      });
+      if (!card) {
         return false;
       }
-      onWrite?.(key, undefined, filePath);
       // No ON DELETE CASCADE here (there is no database): explicitly clean up every
       // attachment blob this card referenced, mirroring what
       // TaskfoldSqliteCardStore.delete does inside its own transaction before the
       // SQL-level cascade fires. Missing blobs are ignored, not an error -- the
       // attachments store's own two-phase write (see file-store-attachments.ts) means a
       // half-finished attachment may never have had a blob to begin with.
-      for (const attachment of card?.metadata?.attachments ?? []) {
+      for (const attachment of card.card?.metadata?.attachments ?? []) {
         removeFileIfExists(path.join(attachmentsDir, attachment.id));
       }
       return true;
@@ -243,25 +284,36 @@ export function createTaskfoldFileCardStore(options: {
         // Nothing to swap against -- mirrors sqlite-store.ts's `!row` branch.
         return false;
       }
-      // Read the raw content once, ourselves (rather than via readCardAt), so it can be
-      // handed straight to writeCard's `previousContent` param below -- this is the read
-      // 需求/16 集成任务书 promised was "几乎零成本": compareAndSwap already has to read
-      // this file to check the revision, so passing it on saves writeCard a second read.
-      const previousContent = readFileIfExists(filePath);
-      if (previousContent === undefined) {
-        return false;
+      try {
+        // 需求/18 §3.4 写入流程：拿卡锁 → 重读 → 比对整数 revision → 写 tmp → rename → 放锁。
+        return await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+          // Read the raw content once, ourselves (rather than via readCardAt), so it can be
+          // handed straight to writeCard's `previousContent` param below -- compareAndSwap
+          // already has to read this file to check the revision, so passing it on saves
+          // writeCard a second read. Re-read *inside* the lock: whatever was on disk before
+          // the lock was taken may already be stale.
+          const previousContent = readFileIfExists(filePath);
+          if (previousContent === undefined) {
+            return false;
+          }
+          const current = codec.parse(previousContent);
+          if (current.revision !== expectedRevision) {
+            // R2: a stale/conflicting revision returns false, and nothing is written.
+            return false;
+          }
+          const written = writeCard(cardsDir, archiveCardsDir, value, codec, filePath, guard, previousContent);
+          onWrite?.(key, codec.parse(written.content), written.path);
+          return true;
+        });
+      } catch (error) {
+        // R2: lock contention (wait timeout) and a lock lost mid-write (compromised) are
+        // conflicts, not errors -- report false so the compensation/retry loop handles it.
+        // Neither path has written anything (see writeFileAtomic's beforeRename).
+        if (isTaskfoldLockConflictError(error)) {
+          return false;
+        }
+        throw error;
       }
-      const current = codec.parse(previousContent);
-      if (current.revision !== expectedRevision) {
-        // R2: a stale/conflicting revision returns false, and nothing is written.
-        return false;
-      }
-      // Everything from the read above to this write is synchronous (no `await` in
-      // between): see file-store-atomic.ts's module comment for why that makes this
-      // check-and-write indivisible under the A1 single-process assumption (R1/R9).
-      const written = writeCard(cardsDir, archiveCardsDir, value, codec, filePath, previousContent);
-      onWrite?.(key, codec.parse(written.content), written.path);
-      return true;
     },
 
     async registerIfAbsent(key, value) {
@@ -269,20 +321,26 @@ export function createTaskfoldFileCardStore(options: {
       if (findCardFilePath(cardsDir, key)) {
         return false;
       }
-      // 同 writeCard 的"真新卡"分支：分配一个全新展示 ID，构造文件名，并把它当
-      // displayIdHint 传给 codec，避免退化成占位 "CARD-0"。分配 + createFileExclusive
-      // 之间全程同步、无 await，保持 R1 要求的"判断存在 + 写入"整体不可分割。
-      const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
-      const content = codec.serialize(value.card, undefined, displayId);
-      // Exclusive create (O_EXCL) rather than the tmp+rename used elsewhere: this is the
-      // one card write where "someone else already created this key" must fail loudly
-      // enough to return false instead of silently overwriting -- see
-      // file-store-atomic.ts's `createFileExclusive`.
-      const created = createFileExclusive(newPath, content);
-      if (created) {
-        onWrite?.(key, codec.parse(content), newPath);
-      }
-      return created;
+      // 全局锁内完成「重查是否存在 + 分配展示 ID + 独占创建」：两个进程不会拿到同一个
+      // 展示 ID，也不会给同一个 key 各建一个文件。同 writeCard 的"真新卡"分支，把展示 ID
+      // 当 displayIdHint 传给 codec，避免退化成占位 "CARD-0"。
+      return await withTaskfoldGlobalLock(locksDir, (guard) => {
+        if (findCardFilePath(cardsDir, key)) {
+          return false;
+        }
+        const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
+        const content = codec.serialize(value.card, undefined, displayId);
+        guard.assertHeld();
+        // Exclusive create (O_EXCL) rather than the tmp+rename used elsewhere: this is the
+        // one card write where "someone else already created this key" must fail loudly
+        // enough to return false instead of silently overwriting -- see
+        // file-store-atomic.ts's `createFileExclusive`.
+        const created = createFileExclusive(newPath, content);
+        if (created) {
+          onWrite?.(key, codec.parse(content), newPath);
+        }
+        return created;
+      });
     },
   };
 }

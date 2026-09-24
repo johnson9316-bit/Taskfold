@@ -49,6 +49,8 @@ export type TaskfoldFileStoreLayout = {
   milestonesDir: string;
   documentsDir: string;
   attachmentsDir: string;
+  /** `<repo>/.taskfold/.locks`：跨进程锁文件（需求/18 §3.4），由 `<repo>/.taskfold/.gitignore` 忽略。 */
+  locksDir: string;
   /** `~/.openclaw/plugins/taskfold` */
   pluginDir: string;
   projectsJsonPath: string;
@@ -78,6 +80,7 @@ export function resolveTaskfoldFileStoreLayout(options: {
     milestonesDir: path.join(dataDir, "milestones"),
     documentsDir: path.join(dataDir, "documents"),
     attachmentsDir: path.join(dataDir, "attachments"),
+    locksDir: path.join(dataDir, ".locks"),
     pluginDir,
     projectsJsonPath: path.join(pluginDir, "projects.json"),
     changesLogPath: path.join(pluginDir, "changes.log"),
@@ -102,6 +105,30 @@ function ensureHardenedDir(dir: string): void {
   chmodIfExists(dir, TASKFOLD_FILE_STORE_DIR_MODE);
 }
 
+const LOCKS_GITIGNORE_ENTRY = ".locks/";
+
+/** `.taskfold/` 纳入 Git，但锁文件是纯运行时产物：确保 `.taskfold/.gitignore` 里有 `.locks/`。 */
+function ensureLocksGitignored(dataDir: string): void {
+  const gitignorePath = path.join(dataDir, ".gitignore");
+  let existing: string | undefined;
+  try {
+    existing = fs.readFileSync(gitignorePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
+    }
+  }
+  if (existing === undefined) {
+    fs.writeFileSync(gitignorePath, `${LOCKS_GITIGNORE_ENTRY}\n`);
+    return;
+  }
+  if (existing.split(/\r?\n/).some((line) => line.trim() === LOCKS_GITIGNORE_ENTRY)) {
+    return;
+  }
+  const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+  fs.appendFileSync(gitignorePath, `${separator}${LOCKS_GITIGNORE_ENTRY}\n`);
+}
+
 /**
  * Creates every directory this skeleton actually writes to and tightens
  * permissions the same way sqlite-store.ts's `hardenTaskfoldDatabaseFiles` does
@@ -119,6 +146,8 @@ export function ensureTaskfoldFileStoreDirectories(layout: TaskfoldFileStoreLayo
   ensureHardenedDir(layout.milestonesDir);
   ensureHardenedDir(layout.documentsDir);
   ensureHardenedDir(layout.attachmentsDir);
+  ensureHardenedDir(layout.locksDir);
+  ensureLocksGitignored(layout.dataDir);
   ensureHardenedDir(layout.pluginDir);
   ensureHardenedDir(layout.subscriptionsDir);
 }

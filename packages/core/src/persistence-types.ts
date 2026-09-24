@@ -39,19 +39,11 @@ export type PersistedTaskfoldAttachment = {
   contentBase64: string;
 };
 
-export type TaskfoldKeyedStore<T = PersistedTaskfoldCard> = {
+type TaskfoldKeyedStoreBase<T> = {
   register(key: string, value: T): Promise<void>;
   lookup(key: string): Promise<T | undefined>;
   delete(key: string): Promise<boolean>;
   entries(): Promise<Array<{ key: string; value: T }>>;
-  /**
-   * Conditional write: persist `value` only if the stored row still carries
-   * `expectedRevision`, and report whether it did. Backends that implement this
-   * must perform the check and the write in one atomic unit so concurrent
-   * processes cannot both win. Optional: callers fall back to a
-   * read-compare-write guarded only by the in-process mutation queue.
-   */
-  compareAndSwap?(key: string, expectedRevision: number, value: T): Promise<boolean>;
   /**
    * Conditional insert: persist `value` only if no row exists for `key`, and
    * report whether it did. Backends that implement this must perform the
@@ -62,3 +54,23 @@ export type TaskfoldKeyedStore<T = PersistedTaskfoldCard> = {
    */
   registerIfAbsent?(key: string, value: T): Promise<boolean>;
 };
+
+type TaskfoldCompareAndSwap<T> = {
+  /**
+   * Conditional write: persist `value` only if the stored row still carries
+   * `expectedRevision`, and report whether it did. The check and the write must
+   * be one atomic unit so concurrent processes cannot both win. A lost race --
+   * including lock contention or a lock lost mid-write -- returns `false`, never
+   * throws, and never writes (需求/16 R1/R2).
+   */
+  compareAndSwap(key: string, expectedRevision: number, value: T): Promise<boolean>;
+};
+
+/**
+ * Keyed persistence port. For the cards store (`T = PersistedTaskfoldCard`, the
+ * default) `compareAndSwap` is **required** (需求/16 R1, 需求/18 §3.3): there is no
+ * fallback to an unconditional write any more. Every other entity store keeps it
+ * optional -- no caller ever swaps a board/milestone/document/etc. conditionally.
+ */
+export type TaskfoldKeyedStore<T = PersistedTaskfoldCard> = TaskfoldKeyedStoreBase<T> &
+  ([T] extends [PersistedTaskfoldCard] ? TaskfoldCompareAndSwap<T> : Partial<TaskfoldCompareAndSwap<T>>);

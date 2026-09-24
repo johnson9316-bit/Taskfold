@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  TaskfoldKeyedStore,
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
   PersistedTaskfoldCard,
@@ -21,6 +20,7 @@ import {
   type TaskfoldCardExecutionOptions,
 } from "../src/backend/src/card-execution.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
+import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 const roots: string[] = [];
 
@@ -29,24 +29,6 @@ afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-
-function keyedStore<T>(): TaskfoldKeyedStore<T> {
-  const values = new Map<string, T>();
-  return {
-    async register(key, value) {
-      values.set(key, value);
-    },
-    async lookup(key) {
-      return values.get(key);
-    },
-    async delete(key) {
-      return values.delete(key);
-    },
-    async entries() {
-      return [...values.entries()].map(([key, value]) => ({ key, value }));
-    },
-  };
-}
 
 function createStore(): TaskfoldStore {
   return new TaskfoldStore(keyedStore<PersistedTaskfoldCard>(), {

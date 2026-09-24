@@ -4,23 +4,10 @@ import type {
   TaskfoldKeyedStore,
   PersistedTaskfoldCard,
 } from "@taskfold/core/persistence-types.js";
+import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 function createStore(): TaskfoldKeyedStore<PersistedTaskfoldCard> {
-  const values = new Map<string, PersistedTaskfoldCard>();
-  return {
-    async register(key: string, value: PersistedTaskfoldCard) {
-      values.set(key, value);
-    },
-    async lookup(key: string) {
-      return values.get(key);
-    },
-    async delete(key: string) {
-      return values.delete(key);
-    },
-    async entries() {
-      return [...values.entries()].map(([key, value]) => ({ key, value }));
-    },
-  };
+  return keyedStore<PersistedTaskfoldCard>();
 }
 
 describe("taskfold change wait", () => {

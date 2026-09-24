@@ -14,6 +14,7 @@ import {
 } from "./file-store-atomic.js";
 import { allocateNextTaskfoldMilestoneId } from "./file-store-card-id.js";
 import type { TaskfoldMilestoneCodec } from "./file-store-codec.js";
+import { withTaskfoldGlobalLock, type TaskfoldLockGuard } from "./file-store-locks.js";
 import { extractTaskfoldSectionUuid, parseCardFrontmatterId, type CardDisplayId } from "./markdown-card-format.js";
 
 const MILESTONE_EXTENSION = ".md";
@@ -87,6 +88,7 @@ function writeMilestone(
   value: PersistedTaskfoldMilestone,
   codec: TaskfoldMilestoneCodec,
   existingPath: string | undefined,
+  guard?: TaskfoldLockGuard,
 ): void {
   // 镜像 file-store-cards.ts 的 `writeCard`：既有文件写回原路径（改标题**不重命名**，
   // 见 需求/16 第七节更正后的表述），真新建才分配展示 ID 并据此构造文件名。
@@ -96,20 +98,30 @@ function writeMilestone(
     return;
   }
   const { path: newPath, displayId } = allocateNewMilestoneFile(milestonesDir, value.milestone);
-  writeFileAtomic(newPath, codec.serialize(value.milestone, undefined, displayId));
+  writeFileAtomic(newPath, codec.serialize(value.milestone, undefined, displayId), undefined, guard?.assertHeld);
 }
 
 export function createTaskfoldFileMilestoneStore(options: {
   milestonesDir: string;
   codec: TaskfoldMilestoneCodec;
+  /** `<repo>/.taskfold/.locks`：新建里程碑时的全局锁（file-store-locks.ts）。 */
+  locksDir: string;
 }): TaskfoldKeyedStore<PersistedTaskfoldMilestone> {
-  const { milestonesDir, codec } = options;
+  const { milestonesDir, codec, locksDir } = options;
 
   return {
     async register(key, value) {
       assertValidMilestonePayload(key, value);
       const existingPath = findMilestoneFilePath(milestonesDir, key);
-      writeMilestone(milestonesDir, value, codec, existingPath);
+      if (existingPath) {
+        writeMilestone(milestonesDir, value, codec, existingPath);
+        return;
+      }
+      // 新里程碑：与卡片共用 allocateNextOrdinalId，同样要在全局锁内「重查 + 分配展示 ID +
+      // 落盘」，否则两个进程会拿到同一个 M-<n>（需求/18 §3.3）。
+      await withTaskfoldGlobalLock(locksDir, (guard) => {
+        writeMilestone(milestonesDir, value, codec, findMilestoneFilePath(milestonesDir, key), guard);
+      });
     },
 
     async lookup(key) {

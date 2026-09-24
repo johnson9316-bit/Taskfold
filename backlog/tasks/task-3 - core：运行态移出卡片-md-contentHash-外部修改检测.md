@@ -4,6 +4,7 @@ title: core：运行态移出卡片 md + contentHash 外部修改检测
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 09:46'
 labels:
   - core
   - storage
@@ -28,3 +29,9 @@ ordinal: 3000
 - [ ] #2 claim/心跳写入不改动任何 Git 跟踪文件（git status 干净）
 - [ ] #3 删除 .runtime/ 后卡片内容完整、revision 重新初始化
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+承接 18 §3.3 表第 7 行：file-store-reconcile.ts:114,145 的内存哈希表 + noteOwnWrite 自写标记，改为按 core 返回的 revision/contentHash 识别自己的写入。
+<!-- SECTION:NOTES:END -->

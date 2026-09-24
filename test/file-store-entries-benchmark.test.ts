@@ -358,6 +358,7 @@ describe("冒烟：entries() 基本正确性与耗时量级（常跑）", () => 
     const store = createTaskfoldFileCardStore({
       cardsDir,
       archiveCardsDir: path.resolve(cardsDir, "..", "archive", "cards"),
+      locksDir: path.resolve(cardsDir, "..", ".locks"),
       attachmentsDir,
       codec: createRealMarkdownCodec(),
     });
@@ -397,6 +398,7 @@ describe.skipIf(!RUN_FULL_BENCH)("完整基准：entries() 耗时 vs 卡片规�
         const store = createTaskfoldFileCardStore({
       cardsDir,
       archiveCardsDir: path.resolve(cardsDir, "..", "archive", "cards"),
+      locksDir: path.resolve(cardsDir, "..", ".locks"),
       attachmentsDir,
       codec: createRealMarkdownCodec(),
     });
@@ -436,6 +438,7 @@ describe.skipIf(!RUN_FULL_BENCH)("完整基准：I/O 耗时 vs 解析耗时占�
       const store = createTaskfoldFileCardStore({
       cardsDir,
       archiveCardsDir: path.resolve(cardsDir, "..", "archive", "cards"),
+      locksDir: path.resolve(cardsDir, "..", ".locks"),
       attachmentsDir,
       codec: createRealMarkdownCodec(),
     });
@@ -478,6 +481,7 @@ describe.skipIf(!RUN_FULL_BENCH)("完整基准：同步顺序读 vs 异步并发
       const store = createTaskfoldFileCardStore({
       cardsDir,
       archiveCardsDir: path.resolve(cardsDir, "..", "archive", "cards"),
+      locksDir: path.resolve(cardsDir, "..", ".locks"),
       attachmentsDir,
       codec: createRealMarkdownCodec(),
     });
