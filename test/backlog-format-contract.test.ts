@@ -37,7 +37,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { TaskfoldCard } from "../src/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import {
   buildCardFilename,
   findSectionFamilyBlock,
@@ -46,7 +46,7 @@ import {
   splitFrontmatter,
   type CardDisplayId,
   type MarkdownCardDocument,
-} from "../src/backend/src/markdown-card-format.js";
+} from "@taskfold/core/markdown-card-format.js";
 
 /** 探测 `backlog` CLI 是否在本机可用；探测失败时整份契约测试优雅跳过。 */
 function detectBacklogAvailable(): boolean {

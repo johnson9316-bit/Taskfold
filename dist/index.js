@@ -8,7 +8,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/backend/src/card-redaction.ts
+// packages/core/src/card-redaction.ts
 function redactClaimToken(card) {
   const claim = card.metadata?.claim;
   if (!claim) {
@@ -26,18 +26,18 @@ function redactClaimToken(card) {
   };
 }
 var init_card_redaction = __esm({
-  "src/backend/src/card-redaction.ts"() {
+  "packages/core/src/card-redaction.ts"() {
     "use strict";
   }
 });
 
-// src/contract/index.ts
+// packages/core/src/contract/index.ts
 function isValidTaskfoldBoardId(value) {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
 var TASKFOLD_STATUSES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
 var init_contract = __esm({
-  "src/contract/index.ts"() {
+  "packages/core/src/contract/index.ts"() {
     "use strict";
     TASKFOLD_STATUSES = [
       "triage",
@@ -160,7 +160,7 @@ var init_contract = __esm({
   }
 });
 
-// src/backend/src/card-lookup.ts
+// packages/core/src/card-lookup.ts
 function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   const exact = cards.find((card2) => card2.id === id);
   if (exact) {
@@ -177,7 +177,7 @@ function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   return card ? { card } : { error: `Card not found: ${id}` };
 }
 var init_card_lookup = __esm({
-  "src/backend/src/card-lookup.ts"() {
+  "packages/core/src/card-lookup.ts"() {
     "use strict";
   }
 });
@@ -492,17 +492,127 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor4
 // src/backend/src/dispatcher-workspace.ts
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2 } from "openclaw/plugin-sdk/security-runtime";
 
-// src/backend/src/store-card-helpers.ts
+// packages/core/src/store-card-helpers.ts
 init_contract();
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
-import { truncateUtf16Safe } from "openclaw/plugin-sdk/string-coerce-runtime";
 
-// src/backend/src/store-constants.ts
-import {
-  MAX_DATE_TIMESTAMP_MS,
-  resolveExpiresAtMsFromDurationMs
-} from "openclaw/plugin-sdk/number-runtime";
+// packages/core/src/sdk-utils.ts
+import { timingSafeEqual } from "node:crypto";
+var MAX_DATE_TIMESTAMP_MS = 864e13;
+function asFiniteNumber(value) {
+  return Number.isFinite(value) ? value : void 0;
+}
+function asDateTimestampMs(value) {
+  const number = asFiniteNumber(value);
+  if (number === void 0 || number < -MAX_DATE_TIMESTAMP_MS || number > MAX_DATE_TIMESTAMP_MS) {
+    return void 0;
+  }
+  return number;
+}
+function asPositiveSafeInteger(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : void 0;
+}
+function isDateRepresentable(value) {
+  return asDateTimestampMs(value) !== void 0;
+}
+function isFutureDateTimestampMs(value, opts = {}) {
+  const timestampMs = asDateTimestampMs(value);
+  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
+  return timestampMs !== void 0 && nowMs !== void 0 && timestampMs > nowMs;
+}
+function resolveExpiresAtMsFromDurationMs(value, opts = {}) {
+  const durationMs = asPositiveSafeInteger(value);
+  if (durationMs === void 0) {
+    return void 0;
+  }
+  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
+  const bufferMs = asFiniteNumber(opts.bufferMs ?? 0);
+  if (nowMs === void 0 || bufferMs === void 0) {
+    return void 0;
+  }
+  const expiresAt = nowMs + durationMs - bufferMs;
+  if (!Number.isSafeInteger(expiresAt) || !isDateRepresentable(expiresAt)) {
+    return void 0;
+  }
+  const minRemainingMs = opts.minRemainingMs;
+  if (minRemainingMs === void 0) {
+    return expiresAt;
+  }
+  const minExpiresAt = nowMs + minRemainingMs;
+  if (!Number.isSafeInteger(minExpiresAt) || !isDateRepresentable(minExpiresAt)) {
+    return expiresAt;
+  }
+  return Math.max(expiresAt, minExpiresAt);
+}
+function padSecretBytes(bytes, length) {
+  if (bytes.length === length) {
+    return bytes;
+  }
+  const padded = Buffer.alloc(length);
+  bytes.copy(padded);
+  return padded;
+}
+function safeEqualSecret(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string") {
+    return false;
+  }
+  const providedBytes = Buffer.from(provided, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const byteLength = Math.max(providedBytes.length, expectedBytes.length);
+  if (byteLength === 0) {
+    return true;
+  }
+  return timingSafeEqual(
+    padSecretBytes(providedBytes, byteLength),
+    padSecretBytes(expectedBytes, byteLength)
+  ) && providedBytes.length === expectedBytes.length;
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isHighSurrogate(codeUnit) {
+  return codeUnit >= 55296 && codeUnit <= 56319;
+}
+function isLowSurrogate(codeUnit) {
+  return codeUnit >= 56320 && codeUnit <= 57343;
+}
+function sliceUtf16Safe(input, start, end) {
+  const len = input.length;
+  let from = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+  let to = end === void 0 ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+  if (to <= from) {
+    return "";
+  }
+  if (from > 0 && from < len) {
+    if (isLowSurrogate(input.charCodeAt(from)) && isHighSurrogate(input.charCodeAt(from - 1))) {
+      from += 1;
+    }
+  }
+  if (to > 0 && to < len) {
+    if (isHighSurrogate(input.charCodeAt(to - 1)) && isLowSurrogate(input.charCodeAt(to))) {
+      to -= 1;
+    }
+  }
+  return input.slice(from, to);
+}
+function truncateUtf16Safe(input, maxLen) {
+  const limit = Math.max(0, Math.floor(maxLen));
+  if (input.length <= limit) {
+    return input;
+  }
+  return sliceUtf16Safe(input, 0, limit);
+}
+function resolveGlobalSingleton(key, create) {
+  const globalStore = globalThis;
+  if (Object.hasOwn(globalStore, key)) {
+    return globalStore[key];
+  }
+  const value = create();
+  globalStore[key] = value;
+  return value;
+}
+
+// packages/core/src/store-constants.ts
 var POSITION_STEP = 1e3;
 var MAX_CARDS = 2e3;
 var MAX_CARD_EVENTS = 50;
@@ -539,16 +649,16 @@ function addTaskfoldDurationMs(now, durationMs) {
   return resolveExpiresAtMsFromDurationMs(durationMs, { nowMs: now }) ?? MAX_DATE_TIMESTAMP_MS;
 }
 
-// src/backend/src/store-normalizers.ts
+// packages/core/src/store-normalizers.ts
 init_contract();
 import { randomUUID } from "node:crypto";
 
-// src/backend/src/workspace-path.ts
+// packages/core/src/workspace-path.ts
 function isAbsoluteWorkspacePath(value) {
   return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
 }
 
-// src/backend/src/store-normalizers.ts
+// packages/core/src/store-normalizers.ts
 function normalizeOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
@@ -1746,7 +1856,7 @@ function trimMetadataToBudget(metadata, options = {}) {
   return next;
 }
 
-// src/backend/src/store-card-helpers.ts
+// packages/core/src/store-card-helpers.ts
 function compareCards(left, right) {
   if (left.status !== right.status) {
     return TASKFOLD_STATUSES.indexOf(left.status) - TASKFOLD_STATUSES.indexOf(right.status);
@@ -2190,7 +2300,7 @@ function compareNotifications(a, b) {
   return a.id.localeCompare(b.id);
 }
 
-// src/backend/src/session-link.ts
+// packages/core/src/session-link.ts
 function sanitizeSessionSegment(value, fallback) {
   const sanitized = (value ?? fallback).trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return (sanitized || fallback).slice(0, 96);
@@ -2613,10 +2723,10 @@ async function assertRestrictedTaskfoldTarget(params) {
 // src/backend/src/dispatcher.ts
 import path from "node:path";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
+import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
 
-// src/backend/src/worker-prompt.ts
+// packages/core/src/worker-prompt.ts
 var RECENT_ATTEMPTS = 8;
 var FAILED_ATTEMPT_DETAIL = 3;
 function cardResultSummary(card) {
@@ -2820,7 +2930,7 @@ function cardIsArchived(card) {
 }
 function cardHasActiveClaim(card, now) {
   const claim = card.metadata?.claim;
-  return Boolean(claim && isFutureDateTimestampMs(claim.expiresAt, { nowMs: now }));
+  return Boolean(claim && isFutureDateTimestampMs2(claim.expiresAt, { nowMs: now }));
 }
 async function materializeWorkspace(params) {
   const workspace = params.card.metadata?.automation?.workspace;
@@ -3743,10 +3853,10 @@ function createTaskfoldDispatchHandler(params) {
   };
 }
 
-// src/backend/src/store-core.ts
+// packages/core/src/store-core.ts
 import { createHash, randomUUID as randomUUID4 } from "node:crypto";
 
-// src/backend/src/store-automation.ts
+// packages/core/src/store-automation.ts
 function normalizeTrustedWorkspaceAccess(value, fallback) {
   if (value === void 0) {
     return fallback;
@@ -3805,7 +3915,7 @@ function normalizeAutomationPatch(patch, current) {
   });
 }
 
-// src/backend/src/store-change-tracker.ts
+// packages/core/src/store-change-tracker.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 var CHANGE_REVISION_BLOCK = 1e4;
 var TaskfoldChangeTracker = class {
@@ -3912,9 +4022,8 @@ var TaskfoldChangeTracker = class {
   }
 };
 
-// src/backend/src/store-compensation.ts
+// packages/core/src/store-compensation.ts
 import { isDeepStrictEqual } from "node:util";
-import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 var ABSENT = Symbol("taskfold-compensation-absent");
 function recordValue(record, key) {
   return Object.hasOwn(record, key) && record[key] !== void 0 ? record[key] : ABSENT;
@@ -4057,7 +4166,7 @@ function invertTaskfoldWorkspaceMutation(before, after, current) {
   return withoutMetadata;
 }
 
-// src/backend/src/store-core.ts
+// packages/core/src/store-core.ts
 var TaskfoldRevisionConflictError = class extends Error {
   constructor(cardId, expectedRevision) {
     super(`card ${cardId} changed since revision ${expectedRevision}.`);
@@ -7833,22 +7942,19 @@ function createTaskfoldSqliteStores(options = {}) {
   };
 }
 
-// src/backend/src/store-projects.ts
+// packages/core/src/store-projects.ts
 init_contract();
 import { randomUUID as randomUUID10 } from "node:crypto";
 import { stat } from "node:fs/promises";
 
-// src/backend/src/store-workflow.ts
+// packages/core/src/store-workflow.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
-import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
-import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
-import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
-// src/backend/src/store-promote.ts
+// packages/core/src/store-promote.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
 
-// src/backend/src/store-enrichment.ts
+// packages/core/src/store-enrichment.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
   async addProof(id, input, scope) {
@@ -8072,7 +8178,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
   }
 };
 
-// src/backend/src/store-promote.ts
+// packages/core/src/store-promote.ts
 var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
   async promoteReady(now = Date.now()) {
     return await this.enqueueMutation(async () => {
@@ -8131,11 +8237,11 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
   }
 };
 
-// src/backend/src/store-workflow.ts
+// packages/core/src/store-workflow.ts
 function assertClaimIdentity(claim, input) {
   const token = normalizeOptionalString(input.token);
   const ownerId = normalizeOptionalString(input.ownerId);
-  if (token && !safeEqualSecret2(token, claim.token)) {
+  if (token && !safeEqualSecret(token, claim.token)) {
     throw new Error("claim token does not match.");
   }
   if (!token && ownerId && ownerId !== claim.ownerId) {
@@ -8210,7 +8316,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       }
       const now = Date.now();
       const existingClaim = existing.metadata?.claim;
-      if (existingClaim && (isFutureDateTimestampMs2(existingClaim.expiresAt, { nowMs: now }) || !isTaskfoldClaimReclaimable(existingClaim, now))) {
+      if (existingClaim && (isFutureDateTimestampMs(existingClaim.expiresAt, { nowMs: now }) || !isTaskfoldClaimReclaimable(existingClaim, now))) {
         throw new Error(`card already claimed by ${existingClaim.ownerId}.`);
       }
       const token = randomUUID9();
@@ -8561,7 +8667,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         throw new Error("card workspace authority changed before claim.");
       }
       const existingClaim = guarded.metadata?.claim;
-      const activeClaim = existingClaim && (isFutureDateTimestampMs2(existingClaim.expiresAt, { nowMs: now }) || // Direct claims must honor the same running-worker heartbeat grace
+      const activeClaim = existingClaim && (isFutureDateTimestampMs(existingClaim.expiresAt, { nowMs: now }) || // Direct claims must honor the same running-worker heartbeat grace
       // as dispatcher recovery; otherwise they silently steal live tokens.
       guarded.status === "running" && !isTaskfoldClaimReclaimable(existingClaim, now)) ? existingClaim : void 0;
       if (cardParentIds(guarded).length > 0 && guarded.status !== "ready" && !activeClaim) {
@@ -8989,7 +9095,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
   }
 };
 
-// src/backend/src/store-notifications.ts
+// packages/core/src/store-notifications.ts
 var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
   async subscribeNotifications(input) {
     return await this.enqueueMutation(async () => {
@@ -9117,7 +9223,7 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
   }
 };
 
-// src/backend/src/project-document-discovery.ts
+// packages/core/src/project-document-discovery.ts
 import { createHash as createHash3 } from "node:crypto";
 import fs3 from "node:fs/promises";
 import path4 from "node:path";
@@ -9316,7 +9422,7 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   return results;
 }
 
-// src/backend/src/store-projects.ts
+// packages/core/src/store-projects.ts
 var RESERVED_AUTOMATIC_DOCUMENT_KEY_PREFIXES = ["file.", "ai."];
 function normalizeProjectCreateMode(value) {
   if (value === void 0 || value === "new") {
@@ -10310,10 +10416,14 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
     return _TaskfoldStore.fromSqliteStores(createTaskfoldSqliteStores());
   }
   /**
-   * Single wiring point from SQLite stores to a card store. Tests use this too,
-   * so a newly added capability cannot be silently missing under test only.
+   * Single wiring point from any backend factory's KV stores to a card store --
+   * `createTaskfoldSqliteStores` and `createTaskfoldFileStores` both satisfy
+   * {@link TaskfoldBackendStores} structurally, despite neither depending on the other.
+   * `fromSqliteStores` below is kept only for backward compatibility with its existing
+   * call sites (production's `openSqlite`, and every test that already names it) and
+   * now just delegates here.
    */
-  static fromSqliteStores(stores) {
+  static fromStores(stores) {
     return new _TaskfoldStore(stores.cards, {
       boards: stores.boards,
       milestones: stores.milestones,
@@ -10324,6 +10434,13 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
       changeEpoch: stores.changeEpoch,
       reserveChangeRevisions: stores.reserveChangeRevisions
     });
+  }
+  /**
+   * Tests use this too (as well as `fromStores` directly for the file backend), so a
+   * newly added capability cannot be silently missing under test only.
+   */
+  static fromSqliteStores(stores) {
+    return _TaskfoldStore.fromStores(stores);
   }
 };
 
@@ -11614,7 +11731,7 @@ function createTaskfoldReconcilerService(params) {
 
 // src/backend/src/tools.ts
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/core";
-import { safeEqualSecret as safeEqualSecret3 } from "openclaw/plugin-sdk/security-runtime";
+import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
 // node_modules/typebox/build/system/memory/memory.mjs
 var memory_exports = {};
@@ -16033,7 +16150,7 @@ function contextOwner(ctx) {
 }
 function canMutateCard(card, ownerId, token) {
   const claim = card.metadata?.claim;
-  return !claim || claim.ownerId === ownerId || safeEqualSecret3(token, claim.token);
+  return !claim || claim.ownerId === ownerId || safeEqualSecret2(token, claim.token);
 }
 function readParentIds(value) {
   if (value == null) {

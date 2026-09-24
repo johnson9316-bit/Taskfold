@@ -1,4 +1,4 @@
-import type { TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 // Taskfold Gateway methods that can persist workspace-bearing card metadata.
 import type { OpenClawPluginApi } from "../api.js";
 import {
@@ -10,7 +10,7 @@ import {
   withoutTaskfoldCasParams,
   type GatewayMethodContext,
 } from "./gateway-helpers.js";
-import { TaskfoldRevisionConflictError } from "./store-core.js";
+import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import type { TaskfoldStore } from "./store.js";
 import {
   assertTaskfoldWorkspaceMutationAccess,

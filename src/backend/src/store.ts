@@ -1,6 +1,6 @@
 // Taskfold plugin module implements store behavior.
 import { randomUUID } from "node:crypto";
-import type { TaskfoldAttachment, TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldAttachment, TaskfoldCard } from "@taskfold/core/contract/index.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -8,7 +8,7 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
   TaskfoldKeyedStore,
-} from "./persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import { createTaskfoldSqliteStores } from "./sqlite-store.js";
 import {
   cardBoardId,
@@ -19,31 +19,31 @@ import {
   mergeDiagnostics,
   removeUndefinedCardFields,
   retryBudgetExhausted,
-} from "./store-card-helpers.js";
-import { buildWorkerContext } from "./worker-prompt.js";
+} from "@taskfold/core/store-card-helpers.js";
+import { buildWorkerContext } from "@taskfold/core/worker-prompt.js";
 import {
   isTaskfoldClaimReclaimable,
   MAX_ATTACHMENT_ENTRIES,
   MAX_CARDS,
   MAX_CARD_NOTIFICATIONS,
   secondsToDurationMs,
-} from "./store-constants.js";
+} from "@taskfold/core/store-constants.js";
 import type {
   TaskfoldBulkInput,
   TaskfoldCardPatch,
   TaskfoldDiagnosticsResult,
   TaskfoldDispatchOptions,
   TaskfoldDispatchResult,
-} from "./store-inputs.js";
+} from "@taskfold/core/store-inputs.js";
 import {
   metadataIsEmpty,
   normalizeBoardId,
   normalizeTimestamp,
   trimMetadataToBudget,
-} from "./store-normalizers.js";
-import { TaskfoldProjectStore } from "./store-projects.js";
+} from "@taskfold/core/store-normalizers.js";
+import { TaskfoldProjectStore } from "@taskfold/core/store-projects.js";
 
-export type { TaskfoldDispatchResult } from "./store-inputs.js";
+export type { TaskfoldDispatchResult } from "@taskfold/core/store-inputs.js";
 
 /**
  * Shape every storage backend factory must return to plug into {@link TaskfoldStore}.

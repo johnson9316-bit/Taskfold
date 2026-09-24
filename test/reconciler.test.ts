@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TaskfoldCard } from "../src/contract/index.js";
-import { taskfoldLastActivityAt } from "../src/backend/src/store-card-helpers.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { taskfoldLastActivityAt } from "@taskfold/core/store-card-helpers.js";
 import type {
   TaskfoldKeyedStore,
   PersistedTaskfoldAttachment,
@@ -9,7 +9,7 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
-} from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import {
   reconcileTaskfoldCards,
   type TaskfoldReconcilerRuntime,

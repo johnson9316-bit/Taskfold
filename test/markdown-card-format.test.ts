@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TaskfoldCard } from "../src/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import {
   buildCardFilename,
   escapeTaskfoldBodyText,
@@ -18,7 +18,7 @@ import {
   type BacklogOnlyFrontmatterFields,
   type CardDisplayId,
   type MarkdownCardDocument,
-} from "../src/backend/src/markdown-card-format.js";
+} from "@taskfold/core/markdown-card-format.js";
 
 /** 造一张最小可用的卡片，测试按需覆盖字段。 */
 function baseCard(overrides: Partial<TaskfoldCard> = {}): TaskfoldCard {

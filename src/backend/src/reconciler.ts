@@ -11,7 +11,7 @@
 // `index.ts`. This loop exists for the case that hook cannot cover: the process died
 // before the event was delivered. See `lifecycle.ts` for why that judgement is made
 // from local evidence instead of asking the host.
-import type { TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import type { OpenClawPluginService } from "../api.js";
@@ -24,9 +24,9 @@ import {
   shouldSyncExecutionStatus,
   staleRunState,
 } from "./lifecycle.js";
-import { cardRunId } from "./store-card-helpers.js";
-import { isTaskfoldClaimReclaimable } from "./store-constants.js";
-import { TaskfoldRevisionConflictError } from "./store-core.js";
+import { cardRunId } from "@taskfold/core/store-card-helpers.js";
+import { isTaskfoldClaimReclaimable } from "@taskfold/core/store-constants.js";
+import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import type { TaskfoldStore } from "./store.js";
 
 const RECONCILE_INTERVAL_MS = 15_000;

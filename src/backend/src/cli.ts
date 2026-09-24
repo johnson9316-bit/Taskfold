@@ -2,15 +2,15 @@ import {
   TASKFOLD_STATUSES,
   type TaskfoldCard,
   type TaskfoldStatus,
-} from "../../contract/index.js";
+} from "@taskfold/core/contract/index.js";
 // Taskfold plugin module implements cli behavior.
 import type { Command } from "commander";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { addGatewayClientOptions, callGatewayFromCli } from "openclaw/plugin-sdk/gateway-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
 import { isRecord, parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { resolveTaskfoldCardByIdOrPrefix } from "./card-lookup.js";
-import { redactClaimToken } from "./card-redaction.js";
+import { resolveTaskfoldCardByIdOrPrefix } from "@taskfold/core/card-lookup.js";
+import { redactClaimToken } from "@taskfold/core/card-redaction.js";
 import type { TaskfoldDispatchResult, TaskfoldStore } from "./store.js";
 
 type JsonOptions = {

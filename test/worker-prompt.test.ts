@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { TaskfoldCard, TaskfoldRunAttempt } from "../src/contract/index.js";
+import type { TaskfoldCard, TaskfoldRunAttempt } from "@taskfold/core/contract/index.js";
 import {
   buildWorkerContext,
   buildWorkerPrompt,
   TASKFOLD_PROMPT_VERSION,
-} from "../src/backend/src/worker-prompt.js";
+} from "@taskfold/core/worker-prompt.js";
 
 const NOW = 1_800_000_000_000;
 

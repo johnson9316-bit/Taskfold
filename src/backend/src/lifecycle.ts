@@ -29,9 +29,9 @@ import type {
   TaskfoldExecutionStatus,
   TaskfoldStaleState,
   TaskfoldStatus,
-} from "../../contract/index.js";
-import { cardSessionKey, taskfoldLastActivityAt } from "./store-card-helpers.js";
-import { RUNNING_HEARTBEAT_STALE_MS } from "./store-constants.js";
+} from "@taskfold/core/contract/index.js";
+import { cardSessionKey, taskfoldLastActivityAt } from "@taskfold/core/store-card-helpers.js";
+import { RUNNING_HEARTBEAT_STALE_MS } from "@taskfold/core/store-constants.js";
 
 /**
  * How long past the heartbeat-stale threshold a run is given before it is treated

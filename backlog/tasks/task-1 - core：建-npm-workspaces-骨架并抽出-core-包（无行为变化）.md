@@ -1,9 +1,10 @@
 ---
 id: TASK-1
 title: core：建 npm workspaces 骨架并抽出 core 包（无行为变化）
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 09:45'
 labels:
   - core
   - refactor
@@ -23,7 +24,13 @@ ordinal: 1000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 core 包不依赖 openclaw / openclaw/*（grep 为零）
-- [ ] #2 现有单测全绿、typecheck 通过、npm run build 产物可被本机 Gateway 加载
-- [ ] #3 npm run check:public-names 通过
+- [x] #1 core 包不依赖 openclaw / openclaw/*（grep 为零）
+- [x] #2 现有单测全绿、typecheck 通过、npm run build 产物可被本机 Gateway 加载
+- [x] #3 npm run check:public-names 通过
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+36 个模块 git mv 进 packages/core（@taskfold/core），SDK 纯工具函数换为 sdk-utils.ts 本地实现（差分测试比对等价），resolveStateDir 改注入。store.ts/sqlite-store.ts（含 dispatch）与 project-document-reader.ts 留在适配层；src/contract/index.ts 留转发文件供 browser 引用，TASK-8 改前端引用后删除。npm test 296 个前后一致（3 个 e2e control-ui-baseline 失败为既有问题：断言写死 4 个项目，真实数据是 5 个）。Gateway 重启后 loaded、43 个工具注册、taskfold.projects.list 正常。
+<!-- SECTION:FINAL_SUMMARY:END -->

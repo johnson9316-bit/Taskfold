@@ -2,10 +2,10 @@ import {
   TASKFOLD_STATUSES,
   type TaskfoldCard,
   type TaskfoldStatus,
-} from "../../contract/index.js";
+} from "@taskfold/core/contract/index.js";
 // Taskfold plugin module implements command behavior.
 import type { OpenClawPluginApi } from "../api.js";
-import { resolveTaskfoldCardByIdOrPrefix } from "./card-lookup.js";
+import { resolveTaskfoldCardByIdOrPrefix } from "@taskfold/core/card-lookup.js";
 import {
   dispatchAndStartTaskfoldCards,
   type TaskfoldSubagentRuntime,

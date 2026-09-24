@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { TaskfoldCard, TaskfoldComment, TaskfoldWorkspace } from "../src/contract/index.js";
+import type { TaskfoldCard, TaskfoldComment, TaskfoldWorkspace } from "@taskfold/core/contract/index.js";
 import {
   invertTaskfoldCardMutation,
   invertTaskfoldWorkspaceMutation,
   sameTaskfoldCardState,
-} from "../src/backend/src/store-compensation.js";
+} from "@taskfold/core/store-compensation.js";
 
 const NOW = 1_700_000_000_000;
 

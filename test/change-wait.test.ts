@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { TaskfoldCoreStore } from "../src/backend/src/store-core.js";
+import { TaskfoldCoreStore } from "@taskfold/core/store-core.js";
 import type {
   TaskfoldKeyedStore,
   PersistedTaskfoldCard,
-} from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 
 function createStore(): TaskfoldKeyedStore<PersistedTaskfoldCard> {
   const values = new Map<string, PersistedTaskfoldCard>();

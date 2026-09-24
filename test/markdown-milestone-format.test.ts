@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { TaskfoldMilestone } from "../src/contract/index.js";
+import type { TaskfoldMilestone } from "@taskfold/core/contract/index.js";
 import {
   parseMarkdownMilestone,
   serializeMarkdownMilestone,
   type MarkdownMilestoneDocument,
   type MilestoneDisplayId,
-} from "../src/backend/src/markdown-milestone-format.js";
+} from "@taskfold/core/markdown-milestone-format.js";
 
 /** 造一张最小可用的里程碑，测试按需覆盖字段。 */
 function baseMilestone(overrides: Partial<TaskfoldMilestone> = {}): TaskfoldMilestone {

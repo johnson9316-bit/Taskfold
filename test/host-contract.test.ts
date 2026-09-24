@@ -1,6 +1,6 @@
 import type { TaskRunView } from "../src/backend/src/host-task-types.js";
 import { describe, expect, it } from "vitest";
-import type { TaskfoldCard } from "../src/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { buildSessionKey } from "../src/backend/src/dispatcher.js";
 
 // Fixtures below are verbatim excerpts of what a live OpenClaw 2026.7.1-2 Gateway

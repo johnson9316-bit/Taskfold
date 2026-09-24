@@ -1,5 +1,5 @@
 import type { OpenClawPluginApi } from "../api.js";
-import type { TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import {
   readId,
   resolveGatewayTaskfoldWorkspaceAccess,

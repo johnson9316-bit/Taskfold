@@ -11,7 +11,7 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
-} from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import {
   abortTaskfoldCardExecution,
   inspectTaskfoldCardExecution,

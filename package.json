@@ -4,6 +4,9 @@
   "description": "Project, milestone, documentation, and execution boards for OpenClaw.",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "main": "./dist/index.js",
   "repository": {
     "type": "git",

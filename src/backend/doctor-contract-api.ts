@@ -9,7 +9,7 @@ import type {
   PersistedTaskfoldCard,
   PersistedTaskfoldNotificationSubscription,
   TaskfoldKeyedStore,
-} from "./src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import { createTaskfoldSqliteStores, resolveTaskfoldSqlitePath } from "./src/sqlite-store.js";
 
 const MAX_CARDS = 2000;

@@ -5,7 +5,7 @@ import type {
   TaskfoldProjectDocument,
   TaskfoldProjectDocumentRead,
   TaskfoldWorkspaceAccess,
-} from "../../contract/index.js";
+} from "@taskfold/core/contract/index.js";
 import { assertTaskfoldWorkspaceSourceAccess } from "./workspace-access.js";
 
 const MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;

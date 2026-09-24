@@ -15,7 +15,7 @@
 // the identical { id, label, detectLegacyState, migrateLegacyState } shape
 // with openPluginStateKeyedStore — only the .d.ts export was dropped.
 declare module "openclaw/plugin-sdk/runtime-doctor" {
-  import type { TaskfoldKeyedStore } from "./persistence-types.js";
+  import type { TaskfoldKeyedStore } from "@taskfold/core/persistence-types.js";
 
   export interface PluginDoctorStateMigrationContext {
     openPluginStateKeyedStore<T>(options: {

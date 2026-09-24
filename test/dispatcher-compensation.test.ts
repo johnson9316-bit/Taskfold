@@ -12,7 +12,7 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
-} from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
 
 const roots: string[] = [];

@@ -15,6 +15,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "packages/core/src/**/*.ts",
     "test/**/*.ts",
     "browser/index.ts"
   ]

@@ -1,8 +1,8 @@
-import { TASKFOLD_STATUSES, type TaskfoldCard } from "../../contract/index.js";
+import { TASKFOLD_STATUSES, type TaskfoldCard } from "@taskfold/core/contract/index.js";
 import type { AnyAgentTool } from "openclaw/plugin-sdk/plugin-entry";
 import type { AgentToolResult } from "openclaw/plugin-sdk/tool-results";
 import { Type } from "typebox";
-import type { TaskfoldMutationScope } from "./store-inputs.js";
+import type { TaskfoldMutationScope } from "@taskfold/core/store-inputs.js";
 import type { TaskfoldStore } from "./store.js";
 
 type ScopedMoveParams = {

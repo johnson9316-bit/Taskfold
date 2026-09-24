@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TaskfoldCard, TaskfoldClaim } from "../src/contract/index.js";
+import type { TaskfoldCard, TaskfoldClaim } from "@taskfold/core/contract/index.js";
 import {
   executionStatusForLifecycle,
   taskfoldRunEvidence,

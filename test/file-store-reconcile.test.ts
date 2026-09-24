@@ -17,8 +17,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { PersistedTaskfoldCard } from "../src/backend/src/persistence-types.js";
-import { createTaskfoldFileStores } from "../src/backend/src/file-store.js";
+import type { PersistedTaskfoldCard } from "@taskfold/core/persistence-types.js";
+import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
 
 const roots: string[] = [];

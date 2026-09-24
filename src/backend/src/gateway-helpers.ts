@@ -1,4 +1,4 @@
-import { TASKFOLD_STATUSES, type TaskfoldCard } from "../../contract/index.js";
+import { TASKFOLD_STATUSES, type TaskfoldCard } from "@taskfold/core/contract/index.js";
 // Taskfold plugin module implements shared gateway request helpers.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";

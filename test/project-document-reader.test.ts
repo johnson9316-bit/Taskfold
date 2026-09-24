@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { TaskfoldProjectDocument } from "../src/contract/index.js";
+import type { TaskfoldProjectDocument } from "@taskfold/core/contract/index.js";
 import {
   readTaskfoldProjectDocument,
   writeTaskfoldProjectDocumentPath,

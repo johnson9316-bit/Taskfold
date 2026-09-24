@@ -4,7 +4,7 @@ import type {
   TaskfoldCard,
   TaskfoldExecution,
   TaskfoldWorkspace,
-} from "../../contract/index.js";
+} from "@taskfold/core/contract/index.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
@@ -15,12 +15,12 @@ import {
   resolveDispatchWorkspaceAccess,
   type ResolveAgentWorkspaceRuntime,
 } from "./dispatcher-workspace.js";
-import { cardBoardId } from "./store-card-helpers.js";
-import { buildWorkerPrompt } from "./worker-prompt.js";
-import { isTaskfoldClaimReclaimable } from "./store-constants.js";
-import { buildSessionKey } from "./session-link.js";
+import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
+import { buildWorkerPrompt } from "@taskfold/core/worker-prompt.js";
+import { isTaskfoldClaimReclaimable } from "@taskfold/core/store-constants.js";
+import { buildSessionKey } from "@taskfold/core/session-link.js";
 import { TaskfoldStore, type TaskfoldDispatchResult } from "./store.js";
-import type { TaskfoldPreparedLaunch } from "./store-workflow.js";
+import type { TaskfoldPreparedLaunch } from "@taskfold/core/store-workflow.js";
 import {
   assertCanonicalTaskfoldRootAccess,
   assertTaskfoldWorkspaceSourceAccess,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidTaskfoldBoardId } from "../src/contract/index.js";
+import { isValidTaskfoldBoardId } from "@taskfold/core/contract/index.js";
 
 describe("taskfold board IDs", () => {
   it("accepts the persisted board namespace format", () => {

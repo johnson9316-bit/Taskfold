@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { TaskfoldCard, TaskfoldWorkspace } from "../../contract/index.js";
+import type { TaskfoldCard, TaskfoldWorkspace } from "@taskfold/core/contract/index.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import { canonicalPathFromExistingAncestor } from "openclaw/plugin-sdk/security-runtime";
@@ -10,11 +10,11 @@ import {
   type ResolveAgentWorkspaceRuntime,
 } from "./dispatcher-workspace.js";
 import { createManagedTaskfoldWorktree } from "./dispatcher.js";
-import { buildSessionKey } from "./session-link.js";
-import { buildWorkerPrompt } from "./worker-prompt.js";
-import { cardBoardId, isRequirementCard } from "./store-card-helpers.js";
+import { buildSessionKey } from "@taskfold/core/session-link.js";
+import { buildWorkerPrompt } from "@taskfold/core/worker-prompt.js";
+import { cardBoardId, isRequirementCard } from "@taskfold/core/store-card-helpers.js";
 import { TaskfoldStore } from "./store.js";
-import type { TaskfoldPreparedLaunch } from "./store-workflow.js";
+import type { TaskfoldPreparedLaunch } from "@taskfold/core/store-workflow.js";
 import {
   assertTaskfoldWorkspaceSourceAccess,
   canonicalizeTaskfoldWorkspaceAccess,

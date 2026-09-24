@@ -7,4 +7,4 @@ export type {
   TaskfoldListResult,
   TaskfoldPriority,
   TaskfoldStatus,
-} from "../contract/index.js";
+} from "@taskfold/core/contract/index.js";

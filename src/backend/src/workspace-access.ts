@@ -1,4 +1,4 @@
-import type { TaskfoldWorkspace, TaskfoldWorkspaceAccess } from "../../contract/index.js";
+import type { TaskfoldWorkspace, TaskfoldWorkspaceAccess } from "@taskfold/core/contract/index.js";
 // Taskfold workspace access follows the caller's canonical filesystem boundary.
 import {
   listAgentIds,
@@ -16,7 +16,7 @@ import {
   isPathInside,
 } from "openclaw/plugin-sdk/security-runtime";
 
-export type { TaskfoldWorkspaceAccess } from "../../contract/index.js";
+export type { TaskfoldWorkspaceAccess } from "@taskfold/core/contract/index.js";
 
 type TaskfoldConfig = NonNullable<OpenClawPluginToolContext["config"]>;
 type TaskfoldSandboxWorkspaceRuntime = {

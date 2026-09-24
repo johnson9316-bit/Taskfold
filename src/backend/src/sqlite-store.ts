@@ -21,7 +21,7 @@ import type {
   TaskfoldRunAttempt,
   TaskfoldSourceReference,
   TaskfoldWorkerLog,
-} from "../../contract/index.js";
+} from "@taskfold/core/contract/index.js";
 import { configureSqliteConnectionPragmas } from "openclaw/plugin-sdk/plugin-state-runtime";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 import type {
@@ -32,7 +32,7 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
   TaskfoldKeyedStore,
-} from "./persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 const TASKFOLD_DB_RELATIVE_PATH = ["plugins", "taskfold", "taskfold.sqlite"] as const;
 const LEGACY_FLOWBOARD_DB_RELATIVE_PATH = ["plugins", "flowboard", "flowboard.sqlite"] as const;
 const SCHEMA_VERSION = 8;

@@ -1,11 +1,11 @@
-import type { TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 // Taskfold plugin module implements tools behavior.
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/core";
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import { safeEqualSecret } from "openclaw/plugin-sdk/security-runtime";
 import { Type } from "typebox";
-import { redactClaimToken } from "./card-redaction.js";
+import { redactClaimToken } from "@taskfold/core/card-redaction.js";
 import { TaskfoldStore } from "./store.js";
 import { cardIdField, claimTokenField, createTaskfoldMoveTool } from "./tools-card-mutations.js";
 

@@ -1,7 +1,7 @@
 // Taskfold plugin module implements gateway behavior.
 import type { OpenClawPluginApi } from "../api.js";
 import { resolveDefaultAgentId } from "openclaw/plugin-sdk/agent-runtime";
-import { redactClaimToken } from "./card-redaction.js";
+import { redactClaimToken } from "@taskfold/core/card-redaction.js";
 import {
   abortTaskfoldCardExecution,
   inspectTaskfoldCardExecution,

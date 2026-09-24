@@ -10,10 +10,10 @@ import type {
   PersistedTaskfoldMilestone,
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
-} from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/persistence-types.js";
 import { createTaskfoldSqliteStores } from "../src/backend/src/sqlite-store.js";
-import { createTaskfoldFileStores } from "../src/backend/src/file-store.js";
-import { normalizeAutomation } from "../src/backend/src/store-normalizers.js";
+import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
+import { normalizeAutomation } from "@taskfold/core/store-normalizers.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
 
 const roots: string[] = [];

@@ -1,8 +1,8 @@
-import type { TaskfoldCard } from "../../contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 // Taskfold dispatch workspace helpers keep authority resolution outside the orchestration loop.
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import { canonicalPathFromExistingAncestor } from "openclaw/plugin-sdk/security-runtime";
-import { taskfoldCardMatchesLifecycleLink } from "./session-link.js";
+import { taskfoldCardMatchesLifecycleLink } from "@taskfold/core/session-link.js";
 import type { TaskfoldStore } from "./store.js";
 import {
   assertCanonicalTaskfoldRootAccess,

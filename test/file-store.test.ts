@@ -2,11 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PersistedTaskfoldAttachment, PersistedTaskfoldCard } from "../src/backend/src/persistence-types.js";
-import { createTaskfoldFileStores } from "../src/backend/src/file-store.js";
-import { createMarkdownCardCodec } from "../src/backend/src/file-store-codec.js";
-import { allocateNextTaskfoldCardId } from "../src/backend/src/file-store-card-id.js";
-import { resolveTaskfoldDataDir } from "../src/backend/src/file-store-paths.js";
+import type { PersistedTaskfoldAttachment, PersistedTaskfoldCard } from "@taskfold/core/persistence-types.js";
+import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
+import { createMarkdownCardCodec } from "@taskfold/core/file-store-codec.js";
+import { allocateNextTaskfoldCardId } from "@taskfold/core/file-store-card-id.js";
+import { resolveTaskfoldDataDir } from "@taskfold/core/file-store-paths.js";
 import { TaskfoldStore } from "../src/backend/src/store.js";
 
 const roots: string[] = [];

@@ -14,6 +14,10 @@ const activeFiles = [
     .readdirSync(path.join(root, "src/backend/src"), { recursive: true })
     .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
     .map((entry) => path.join("src/backend/src", entry)),
+  ...fs
+    .readdirSync(path.join(root, "packages/core/src"), { recursive: true })
+    .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
+    .map((entry) => path.join("packages/core/src", entry)),
 ];
 
 const violations = [];
@@ -67,16 +71,18 @@ if (!toolNamesBlock) {
 const toolNames = toolNamesBlock ? [...toolNamesBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
 
 const implemented = new Set(
-  fs
-    .readdirSync(path.join(root, "src/backend/src"), { recursive: true })
-    .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
-    .flatMap((entry) =>
-      [
-        ...fs
-          .readFileSync(path.join(root, "src/backend/src", entry), "utf8")
-          .matchAll(/^\s*name: "(taskfold_[a-z_]+)",$/gm),
-      ].map((m) => m[1]),
-    ),
+  ["src/backend/src", "packages/core/src"].flatMap((dir) =>
+    fs
+      .readdirSync(path.join(root, dir), { recursive: true })
+      .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))
+      .flatMap((entry) =>
+        [
+          ...fs
+            .readFileSync(path.join(root, dir, entry), "utf8")
+            .matchAll(/^\s*name: "(taskfold_[a-z_]+)",$/gm),
+        ].map((m) => m[1]),
+      ),
+  ),
 );
 
 function reportSetDifference(label, expected, actual) {

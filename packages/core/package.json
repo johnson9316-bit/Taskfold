@@ -1,0 +1,17 @@
+{
+  "name": "@taskfold/core",
+  "version": "0.2.0",
+  "description": "Host-neutral Taskfold domain and storage core.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*.js": "./src/*.ts"
+  },
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

@@ -42,17 +42,17 @@ import type {
   TaskfoldRunAttempt,
   TaskfoldSourceReference,
   TaskfoldWorkerLog,
-} from "../src/contract/index.js";
-import { TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_STATUSES } from "../src/contract/index.js";
-import { createTaskfoldFileCardStore } from "../src/backend/src/file-store-cards.js";
-import type { TaskfoldCardCodec } from "../src/backend/src/file-store-codec.js";
+} from "@taskfold/core/contract/index.js";
+import { TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_STATUSES } from "@taskfold/core/contract/index.js";
+import { createTaskfoldFileCardStore } from "@taskfold/core/file-store-cards.js";
+import type { TaskfoldCardCodec } from "@taskfold/core/file-store-codec.js";
 import {
   parseCardFrontmatterId,
   parseMarkdownCard,
   serializeMarkdownCard,
   type MarkdownCardDocument,
-} from "../src/backend/src/markdown-card-format.js";
-import type { PersistedTaskfoldCard } from "../src/backend/src/persistence-types.js";
+} from "@taskfold/core/markdown-card-format.js";
+import type { PersistedTaskfoldCard } from "@taskfold/core/persistence-types.js";
 
 /** 完整基准的开关：默认关闭，避免成为常规 CI 负担。见文件头注释里的启用命令。 */
 const RUN_FULL_BENCH = process.env.TASKFOLD_BENCH === "1";
