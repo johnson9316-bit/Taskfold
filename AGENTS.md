@@ -133,9 +133,9 @@ code --install-extension /home/john/src/personal/Taskfold/packages/vscode/taskfo
 
 | 文档 | 定位 |
 | --- | --- |
-| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（按设计要打进 ClawHub 包，不要往里塞本机路径或临时排查结论）。**当前 `npm pack -w packages/openclaw` 缺 README、LICENSE、THIRD-PARTY-NOTICES、UPSTREAM.md、docs/CLAW_HUB_PUBLISHING.md**：这几份文件留在仓库根，打包时从根目录拷贝的方案待 TASK-9 处理 |
+| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（按设计要打进 ClawHub 包，不要往里塞本机路径或临时排查结论）。TASK-9 已处理：README、LICENSE、THIRD-PARTY-NOTICES、UPSTREAM.md、docs/CLAW_HUB_PUBLISHING.md 仍只在仓库根留一份源文件，`packages/openclaw/scripts/release-files.mjs`（`npm run prepare-release-files` / `clean-release-files`）在打包前后临时复制/清理进 `packages/openclaw/`，`npm run pack:check` 自带这一步并校验产物清单；README 的「From GitHub」安装方式已删除，只保留 ClawHub/npm |
 | `VERIFICATION.md` | 按日期只增的验证台账，历史快照性质，早期结论可能已被后文推翻 —— 不要拿它当「当前状态」用 |
-| `docs/CLAW_HUB_PUBLISHING.md` | ClawHub 发布流程（尚未适配 monorepo，待 TASK-9） |
+| `docs/CLAW_HUB_PUBLISHING.md` | ClawHub 发布流程，已适配 monorepo（TASK-9）：发布对象是 `packages/openclaw`，命令要带 `./packages/openclaw` 前缀或在该目录内用 `.`（裸 `packages/openclaw` 会被 npm 误判成 GitHub `user/repo` 简写） |
 | `需求/` | 中文规划文档体系，Obsidian 风格 `[[wiki-link]]` 互链，入口 `需求/README.md` |
 | `需求/6-OpenClaw集成.md` | 插件安装/运行/分发的规划记录（注意：其「已在 2026.7.1-2 验证」的记载已过期，本机现为 2026.9.4，尚待重新验证） |
 | `需求/15-上游2026.9.4差异评估.md` | 上游 workboard 版本差异评估，见上文 |

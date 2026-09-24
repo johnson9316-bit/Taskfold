@@ -38,7 +38,9 @@
     "build": "npm run build:backend && npm run build:control-ui",
     "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/* '--banner:js=import { createRequire as __taskfoldCreateRequire } from \"node:module\"; const require = __taskfoldCreateRequire(import.meta.url);'",
     "build:control-ui": "node scripts/build-control-ui.mjs",
-    "pack:check": "npm pack --dry-run"
+    "prepare-release-files": "node scripts/release-files.mjs copy",
+    "clean-release-files": "node scripts/release-files.mjs clean",
+    "pack:check": "node scripts/pack-check.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^3.0.0",

@@ -20,6 +20,8 @@
     "build:cli": "npm run build -w @taskfold/cli",
     "check:public-names": "node scripts/check-public-names.mjs",
     "pack:check": "npm run pack:check -w @johnson9316-bit/taskfold",
+    "prepare-release-files": "npm run prepare-release-files -w @johnson9316-bit/taskfold",
+    "clean-release-files": "npm run clean-release-files -w @johnson9316-bit/taskfold",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

@@ -62,9 +62,7 @@ separate web server.
 
 ## Install
 
-### From ClawHub
-
-After the package is published, install the scoped package:
+After the package is published, install the scoped package from ClawHub:
 
 ```bash
 openclaw plugins install clawhub:@johnson9316-bit/taskfold
@@ -72,18 +70,15 @@ openclaw plugins enable taskfold
 openclaw gateway restart
 ```
 
-### From GitHub
-
-Install directly from this repository:
-
-```bash
-openclaw plugins install git:github.com/johnson9316-bit/Taskfold
-openclaw plugins enable taskfold
-openclaw gateway restart
-```
-
 Open the **Taskfold** tab from the OpenClaw Control UI after the Gateway has
 restarted.
+
+ClawHub/npm is the only supported install channel: the repository is an npm
+workspaces monorepo and the publishable plugin lives in `packages/openclaw`,
+but OpenClaw's `git:` install source clones the repository root and treats
+it as the plugin directory with no way to point at a subdirectory, so
+`openclaw plugins install git:...` against this repository no longer works.
+See [docs/CLAW_HUB_PUBLISHING.md](docs/CLAW_HUB_PUBLISHING.md) for details.
 
 ## Control UI Security
 
