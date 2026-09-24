@@ -84,13 +84,22 @@ interface ReconResult {
   websocketUrls?: string[];
 }
 
+interface ProjectCounts {
+  /** 全部项目数（含已归档），对应"全部项目"徽标——不受归档勾选框影响。 */
+  total: number;
+  /** 未归档项目数，对应归档勾选框未勾选时项目列表页可见的项目卡片数。 */
+  active: number;
+}
+
 interface SuiteState {
   available: boolean;
   skipReason: string;
   facts: ReconResult | null;
+  /** 实时读取的项目数基线（TASK-12：不写死本机某一时刻的项目数量）。 */
+  projectCounts: ProjectCounts | null;
 }
 
-const state: SuiteState = { available: false, skipReason: "", facts: null };
+const state: SuiteState = { available: false, skipReason: "", facts: null, projectCounts: null };
 
 /** 探活 Gateway；超时或非 2xx 都算不可用，不抛错——交给调用方决定是跳过。 */
 async function probeGateway(): Promise<boolean> {
@@ -143,6 +152,35 @@ function fetchGatewayToken(): string | null {
   }
 }
 
+/**
+ * 现取项目列表的真实计数（含 / 不含已归档），作为下面项目数断言的基线，
+ * 而不是写死本机某一时刻的项目数量——本机项目数会随时间增减，写死的数字
+ * 每次都要人工排除（TASK-12）。复用 fetchGatewayToken 同样的伪终端 + 剔除
+ * VITEST 环境变量的绕过方式：`openclaw gateway call` 在 Vitest worker 的
+ * VITEST 环境变量下同样会不打印结果就静默退出（实测，与 auth-token 一致）。
+ *
+ * 只读：`taskfold.projects.list` 是查询方法，不新建/删除任何项目。
+ */
+function fetchProjectCounts(token: string): ProjectCounts {
+  const cleanEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("VITEST")),
+  );
+  const countProjects = (includeArchived: boolean): number => {
+    const cmd =
+      `script -qec "openclaw gateway call taskfold.projects.list --token ${token} ` +
+      `--json --params '{\\"includeArchived\\":${includeArchived}}'" /dev/null`;
+    const stdout = execSync(cmd, {
+      encoding: "utf-8",
+      timeout: 20_000,
+      stdio: ["ignore", "pipe", "ignore"],
+      env: cleanEnv,
+    });
+    const parsed = JSON.parse(stdout) as { projects: unknown[] };
+    return parsed.projects.length;
+  };
+  return { total: countProjects(true), active: countProjects(false) };
+}
+
 function runRecon(token: string): ReconResult {
   const artifactDir = path.join(os.tmpdir(), "taskfold-control-ui-e2e");
   const stdout = execFileSync(PYTHON_BIN, [RECON_SCRIPT], {
@@ -186,6 +224,13 @@ beforeAll(async () => {
     return;
   }
 
+  try {
+    state.projectCounts = fetchProjectCounts(token);
+  } catch (error) {
+    state.skipReason = `取不到项目列表基线计数（taskfold.projects.list 调用失败）：${String(error)}`;
+    return;
+  }
+
   state.available = true;
   state.facts = runRecon(token);
 }, 120_000);
@@ -200,18 +245,18 @@ describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对�
     expect(state.facts?.sectionErrors, JSON.stringify(state.facts?.sectionErrors)).toEqual({});
   });
 
-  it("项目总数徽标恒为 4，不受「包含已归档」勾选影响", (ctx) => {
+  it("项目总数徽标：不受「包含已归档」勾选影响，且等于 Gateway 实时项目总数", (ctx) => {
     if (!state.available) return ctx.skip();
     const badge = state.facts?.projectBadgeTotal;
-    expect(badge?.before).toBe(4);
-    expect(badge?.after).toBe(4);
+    expect(badge?.before).toBe(state.projectCounts?.total);
+    expect(badge?.after).toBe(state.projectCounts?.total);
   });
 
-  it("归档过滤：未勾选显示 3 个项目卡片，勾选后变成 4（fb-probe 现身）", (ctx) => {
+  it("归档过滤：未勾选只显示未归档项目，勾选后包含已归档项目（fb-probe 现身）", (ctx) => {
     if (!state.available) return ctx.skip();
     const cards = state.facts?.projectCardCountVisible;
-    expect(cards?.before).toBe(3);
-    expect(cards?.after).toBe(4);
+    expect(cards?.before).toBe(state.projectCounts?.active);
+    expect(cards?.after).toBe(state.projectCounts?.total);
 
     const sidebar = state.facts?.sidebarProjectCounts;
     expect(sidebar?.before["fb-probe"]).toBeUndefined();
@@ -286,9 +331,14 @@ describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对�
     expect(detail?.assigneeFieldValue).toBe("未归属");
   });
 
-  it("控制台只有两类已知无关的 404，没有新增的异常报错", (ctx) => {
+  it("控制台没有超出允许名单的异常报错（允许名单内的已知无关 404 不强制要求出现）", (ctx) => {
     if (!state.available) return ctx.skip();
-    const knownBenignUrlPatterns = [/\/plugins\/taskfold\/?$/, /\/api\/users\/[^/]+\/avatar\b/];
+    // 允许名单语义：出现了不算错，不要求必须出现——这里只断言"控制台里没有
+    // 允许名单以外的错误"，不断言这些已知无关 404 本身一定会发生。
+    // 注意：`/plugins/taskfold/`（旧 iframe 静态路由）已不在名单里——`8cd934c`
+    // 把这条路由连同 src/ui-static.ts 一起删掉了（原生注入取代旧管线），
+    // Control UI 壳层不会再请求这个路径，这类 404 已经不可能再出现。
+    const knownBenignUrlPatterns = [/\/api\/users\/[^/]+\/avatar\b/];
 
     const network = state.facts?.network4xx5xx ?? [];
     for (const entry of network) {
@@ -298,9 +348,6 @@ describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对�
         `出现未知的 4xx/5xx 请求，可能是迁移引入的新问题：${entry.status} ${entry.url}`,
       ).toBe(true);
     }
-    // 两类已知 404 至少各出现一次（哪类都没有，说明基线环境变了，需要人看一眼）。
-    expect(network.some((e) => /\/plugins\/taskfold\/?$/.test(e.url))).toBe(true);
-    expect(network.some((e) => /\/api\/users\/[^/]+\/avatar\b/.test(e.url))).toBe(true);
 
     const consoleErrors = state.facts?.consoleErrors ?? [];
     for (const entry of consoleErrors) {
