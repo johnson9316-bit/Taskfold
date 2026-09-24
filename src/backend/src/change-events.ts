@@ -3,7 +3,7 @@ import type { TaskfoldStore } from "./store.js";
 
 const TASKFOLD_EXTERNAL_CHANGE_CHECK_MS = 1000;
 
-/** SQLite 生产路径传 TaskfoldStore；文件后端传 change-aggregator.ts 的聚合游标（轮询所有已注册项目）。 */
+/** 传 TaskfoldStore：文件后端下它的 reconcileExternalChanges 就是聚合游标轮询所有项目（change-aggregator.ts）。 */
 export type TaskfoldChangeEventTarget = Pick<TaskfoldStore, "announceChangeEpoch" | "reconcileExternalChanges">;
 
 export function createTaskfoldChangeEventService(store: TaskfoldChangeEventTarget): OpenClawPluginService {

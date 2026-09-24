@@ -34,6 +34,7 @@ import {
   formatCardFrontmatterId,
   numberValue,
   parseBacklogDateTime,
+  resolvePreciseTimestamp,
   parseCardFrontmatterId,
   parseFrontmatterBlock,
   requiredString,
@@ -65,6 +66,8 @@ function buildTaskfoldMilestoneSectionJson(milestone: TaskfoldMilestone): string
     // 完整精度的排序值，同卡片的「决策 4」：frontmatter 的 ordinal 只是四舍五入的整数
     // 投影，给人看/给未来的排序 UI 用；权威值存在这里。
     position: milestone.position,
+    // 毫秒精度的创建时间，同卡片（markdown-card-format.ts 的 resolvePreciseTimestamp）。
+    createdAt: milestone.createdAt,
   };
   if (milestone.color !== undefined) payload.color = milestone.color;
   if (milestone.completedAt !== undefined) payload.completedAt = milestone.completedAt;
@@ -127,7 +130,10 @@ export function parseMarkdownMilestone(markdown: string): MarkdownMilestoneDocum
 
   const title = requiredString(fm, "title");
   const state = requiredString(fm, "state") as TaskfoldMilestoneState;
-  const createdAt = parseBacklogDateTime(requiredString(fm, "created_date"));
+  const createdAt = resolvePreciseTimestamp(
+    payload.createdAt,
+    parseBacklogDateTime(requiredString(fm, "created_date")),
+  );
   const updatedDateRaw = stringValue(fm, "updated_date");
   const updatedAt = updatedDateRaw ? parseBacklogDateTime(updatedDateRaw) : createdAt;
 

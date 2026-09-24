@@ -138,10 +138,46 @@ function hasConfiguredRemoteGatewayTarget(): boolean {
   }
 }
 
-export function registerTaskfoldCli(params: { program: Command; store: TaskfoldStore }): void {
+export function registerTaskfoldCli(params: {
+  program: Command;
+  store: TaskfoldStore;
+  /** `~/.openclaw/plugins/taskfold`：migrate-sqlite 读这里的 taskfold.sqlite、写 projects.json。 */
+  pluginDir: string;
+}): void {
   const taskfold = params.program
     .command("taskfold")
     .description("Manage Taskfold cards and worker dispatch");
+
+  taskfold
+    .command("migrate-sqlite")
+    .description("Migrate data from the old SQLite store (taskfold.sqlite) to Taskfold's file store")
+    .option("--dry-run", "Verify the migration in a temporary directory and print counts; write nothing")
+    .option("--apply", "Back up taskfold.sqlite, then write every project's data to files")
+    .option("--json", "Print JSON", false)
+    .action(async (options: JsonOptions & { dryRun?: boolean; apply?: boolean }) => {
+      if (Boolean(options.dryRun) === Boolean(options.apply)) {
+        throw invalidCliArgument("pass exactly one of --dry-run or --apply.");
+      }
+      // 动态 import：只有这条命令才加载 node:sqlite。
+      const { formatTaskfoldSqliteMigrationReport, runTaskfoldSqliteMigration, TaskfoldSqliteMigrationError } =
+        await import("./sqlite-migration.js");
+      try {
+        const report = await runTaskfoldSqliteMigration({
+          pluginDir: params.pluginDir,
+          mode: options.apply ? "apply" : "dry-run",
+        });
+        if (options.json) {
+          writeJson(report);
+        } else {
+          writeLine(formatTaskfoldSqliteMigrationReport(report));
+        }
+      } catch (error) {
+        if (error instanceof TaskfoldSqliteMigrationError && error.report && !options.json) {
+          writeLine(formatTaskfoldSqliteMigrationReport(error.report));
+        }
+        throw error;
+      }
+    });
 
   taskfold
     .command("list")

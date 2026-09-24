@@ -2121,6 +2121,25 @@ class TaskfoldSqliteAttachmentStore implements TaskfoldKeyedStore<PersistedTaskf
   }
 }
 
+/**
+ * 只读打开一份 Taskfold SQLite 库（TASK-10 迁移工具用）：`readOnly` 连接，不建目录、不跑 schema
+ * 迁移、不设 pragma、不碰旧 flowboard 库（不经过 {@link createDatabase}）。写方法会被 SQLite 拒绝。
+ * `db` 给迁移工具按表计数用。
+ */
+export function openTaskfoldSqliteStoresReadOnly(dbPath: string) {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  return {
+    db,
+    cards: new TaskfoldSqliteCardStore(db),
+    boards: new TaskfoldSqliteBoardStore(db),
+    milestones: new TaskfoldSqliteMilestoneStore(db),
+    documents: new TaskfoldSqliteProjectDocumentStore(db),
+    subscriptions: new TaskfoldSqliteSubscriptionStore(db),
+    attachments: new TaskfoldSqliteAttachmentStore(db),
+    close: () => db.close(),
+  };
+}
+
 export function createTaskfoldSqliteStores(
   options: {
     dbPath?: string;

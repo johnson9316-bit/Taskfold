@@ -235,6 +235,18 @@ export function withTaskfoldGlobalLockSync<T>(
   return withTaskfoldFileLockSync(lockfilePath.slice(0, -".lock".length), lockfilePath, section);
 }
 
+/**
+ * 全局锁的同步「只试一次」版：ChangeSource.poll 补记 changes.log（poll 是同步契约，每秒一次）。
+ * 锁被占用时立即抛 {@link TaskfoldLockTimeoutError}，不等待——理由同 {@link tryWithTaskfoldCardLockSync}。
+ */
+export function tryWithTaskfoldGlobalLockSync<T>(
+  locksDir: string,
+  section: (guard: TaskfoldLockGuard) => T,
+): T {
+  const lockfilePath = taskfoldGlobalLockPath(locksDir);
+  return withTaskfoldFileLockSync(lockfilePath.slice(0, -".lock".length), lockfilePath, section, 0);
+}
+
 /** 卡锁：锁目标是卡片文件本身，锁文件按卡片 key 放在 `locksDir` 下。 */
 export async function withTaskfoldCardLock<T>(
   locksDir: string,

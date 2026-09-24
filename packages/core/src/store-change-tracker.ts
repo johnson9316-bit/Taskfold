@@ -21,8 +21,8 @@ const CHANGE_REVISION_BLOCK = 10_000;
 export type TaskfoldChangeSource = {
   /** 宿主启动时调一次，给等待者一个起始游标。 */
   announce(): TaskfoldChange | undefined;
-  /** 本进程刚提交了写入。 */
-  record(): TaskfoldChange | undefined;
+  /** 本进程刚提交了写入。异步：实现可以在这里等跨进程锁，但不能阻塞事件循环（TASK-10）。 */
+  record(): Promise<TaskfoldChange | undefined>;
   /** 宿主定期调用（OpenClaw 的 change-events.ts 每秒一次）：别处有没有变化。 */
   poll(): TaskfoldChange | undefined;
 };
@@ -49,7 +49,7 @@ export function createTaskfoldReservedChangeSource(
   let revisionCeiling = revision + CHANGE_REVISION_BLOCK;
   let externalDataVersion = dataVersion?.();
 
-  const record = (): TaskfoldChange => {
+  const next = (): TaskfoldChange => {
     if (revision + 1 >= revisionCeiling) {
       const base = Math.max(reserveRevisions(CHANGE_REVISION_BLOCK), revision);
       revision = base;
@@ -59,8 +59,8 @@ export function createTaskfoldReservedChangeSource(
   };
 
   return {
-    announce: record,
-    record,
+    announce: next,
+    record: async () => next(),
     poll() {
       if (!dataVersion) {
         return undefined;
@@ -70,7 +70,7 @@ export function createTaskfoldReservedChangeSource(
         return undefined;
       }
       externalDataVersion = current;
-      return record();
+      return next();
     },
   };
 }
@@ -142,9 +142,9 @@ export class TaskfoldChangeTracker {
     this.publish(this.source.announce());
   }
 
-  /** 记一次变化并广播（给不经 {@link track} 的调用方用，例如 OpenClaw 适配层的聚合游标）。 */
-  recordChange(): void {
-    this.publish(this.source.record());
+  /** 记一次变化并广播（给不经 {@link track} 的调用方用）。 */
+  async recordChange(): Promise<void> {
+    this.publish(await this.source.record());
   }
 
   current(): TaskfoldChange | undefined {
@@ -166,7 +166,7 @@ export class TaskfoldChangeTracker {
       return await run();
     } finally {
       if (this.mutationRevision !== initialRevision) {
-        this.publish(this.source.record());
+        this.publish(await this.source.record());
       }
     }
   }

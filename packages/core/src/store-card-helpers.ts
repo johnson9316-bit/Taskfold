@@ -39,7 +39,12 @@ export function compareCards(left: TaskfoldCard, right: TaskfoldCard): number {
   if (left.position !== right.position) {
     return left.position - right.position;
   }
-  return left.createdAt - right.createdAt;
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt - right.createdAt;
+  }
+  // 最后按 id 字节序：复现 SQLite 后端 `ORDER BY created_at, id`（BINARY 排序规则）给出的次序，
+  // 文件后端的目录顺序不带这层隐含次序（test/card-order.test.ts）。不用 localeCompare：它会忽略 "-"。
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
 export function cardSessionKey(card: TaskfoldCard): string | undefined {

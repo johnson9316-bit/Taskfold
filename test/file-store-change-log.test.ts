@@ -186,13 +186,13 @@ describe("changes.log 的位置与维护（单进程）", () => {
     const stores = createTaskfoldFileStores({ dataDir, pluginDir: path.join(root, "plugin") });
     const logPath = path.join(dataDir, ".runtime", "changes.log");
     for (let i = 0; i < 1100; i += 1) {
-      stores.changeSource.record();
+      await stores.changeSource.record();
     }
     const lines = fs.readFileSync(logPath, "utf8").trim().split("\n");
     expect(lines.length).toBeLessThan(1000);
     expect(JSON.parse(lines[0]!)).toEqual({ type: "epoch", epoch: stores.changeEpoch });
     expect(reserveCeilings(logPath).at(-1)).toBe(1100);
-    expect(stores.changeSource.record()).toEqual({ epoch: stores.changeEpoch, revision: 1101 });
+    await expect(stores.changeSource.record()).resolves.toEqual({ epoch: stores.changeEpoch, revision: 1101 });
   });
 
   it("删掉 .runtime/ 后日志换一个新 epoch，别的进程轮询时看到 epoch 变化", async () => {

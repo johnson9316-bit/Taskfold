@@ -1,10 +1,14 @@
 // Taskfold plugin entrypoint registers its OpenClaw integration.
+import { resolveTaskfoldPluginDir } from "@taskfold/core/file-store.js";
+import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 import { definePluginEntry } from "./api.js";
 import { registerTaskfoldGatewayMethods } from "./runtime-api.js";
 import { createTaskfoldChangeEventService } from "./src/change-events.js";
 import { registerTaskfoldCommand } from "./src/command.js";
 import { cleanupTaskfoldRunWorktree } from "./src/dispatcher-workspace.js";
+import { createTaskfoldProjectRoutedStores } from "./src/project-routed-stores.js";
 import { createTaskfoldReconcilerService } from "./src/reconciler.js";
+import { createTaskfoldSqliteMigrationCheckService } from "./src/sqlite-migration-check.js";
 import { TaskfoldStore } from "./src/store.js";
 import { createTaskfoldTools } from "./src/tools.js";
 import {
@@ -32,7 +36,12 @@ export default definePluginEntry({
       return;
     }
 
-    const store = TaskfoldStore.openSqlite();
+    // TASK-10：生产存储是文件。各项目数据在自己仓库主 checkout 的 `.taskfold/`（没绑仓库的在
+    // `<pluginDir>/projects/<id>/`），项目注册表与通知订阅在 `<pluginDir>/`（project-routed-stores.ts）。
+    const pluginDir = resolveTaskfoldPluginDir(resolveStateDir(process.env));
+    const store = TaskfoldStore.fromStores(
+      createTaskfoldProjectRoutedStores({ pluginDir, warn: (message) => api.logger.warn(message) }),
+    );
     api.session.controls.registerControlUiDescriptor({
       surface: "tab",
       id: "taskfold",
@@ -45,6 +54,7 @@ export default definePluginEntry({
     registerTaskfoldGatewayMethods({ api, store });
     registerTaskfoldCommand({ api, store });
     api.registerService(createTaskfoldChangeEventService(store));
+    api.registerService(createTaskfoldSqliteMigrationCheckService(pluginDir));
     // Server-side control loop: converges card state with no browser attached, and
     // recovers runs orphaned by a Gateway restart. The hook below reports outcomes
     // for runs that end normally; the loop covers the case where this process did
@@ -73,7 +83,7 @@ export default definePluginEntry({
     api.registerCli(
       async ({ program }) => {
         const { registerTaskfoldCli } = await import("./src/cli.js");
-        registerTaskfoldCli({ program, store });
+        registerTaskfoldCli({ program, store, pluginDir });
       },
       TASKFOLD_CLI_OPTIONS,
     );

@@ -14,6 +14,8 @@ import type { TaskfoldChange } from "./contract/index.js";
 import { readFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
 import {
   isTaskfoldLockConflictError,
+  tryWithTaskfoldGlobalLockSync,
+  withTaskfoldGlobalLock,
   withTaskfoldGlobalLockSync,
   type TaskfoldLockGuard,
 } from "./file-store-locks.js";
@@ -179,12 +181,14 @@ function isAhead(head: TaskfoldChange, seen: TaskfoldChange | undefined): boolea
  * 文件后端的 ChangeSource（需求/18 §3.3 第 6 行、§3.5 第 3 项）。游标就是日志本身：epoch 取日志
  * 的 epoch，revision 取日志最后一个 ceiling，所以同一个项目的所有进程看到的是同一条单调序列。
  *
- * - `record()`：本进程提交了写入，全局锁内追加一条 reserve（+1），返回新游标。等锁超时
- *   不 throw（写入本身已经成功，不能因为记日志失败而报错），记下「欠一条」，由下次 `poll()` 补记。
+ * - `record()`：本进程提交了写入，全局锁内追加一条 reserve（+1），返回新游标。**异步等锁**，
+ *   锁被别的进程占着时不阻塞事件循环（TASK-10）。等锁超时不 throw（写入本身已经成功，不能因为
+ *   记日志失败而报错），记下「欠一条」，由下次 `poll()` 补记。
  * - `poll()`：先看 `dataVersion`（file-store-reconcile.ts：人手改文件、`git checkout` 等绕过
  *   core 的改动，探测到时已在卡锁内重盖了 revision），有就记一条，让别的进程也能从日志感知；
- *   再看日志的 ceiling 有没有越过本进程上次见到的位置——越过了就是别的进程写过。
- * - `announce()`：给出启动时的游标（日志已有游标就直接用，不追加）。
+ *   再看日志的 ceiling 有没有越过本进程上次见到的位置——越过了就是别的进程写过。poll 是同步
+ *   契约（每秒一次），补记那一条**只试一次**锁，被占着就留到下一次 poll。
+ * - `announce()`：给出启动时的游标（日志已有游标就直接用，不追加；要追加时同样只试一次）。
  *
  * `canWrite` 为 false（格式版本高于本版 core，只读）时不追加，只读别人写下的游标。
  */
@@ -200,23 +204,29 @@ export function createTaskfoldFileChangeSource(options: {
   let externalDataVersion = dataVersion?.();
   let recordPending = false;
 
-  function record(): TaskfoldChange | undefined {
+  function recorded({ epoch, base }: { epoch: string; base: number }): TaskfoldChange {
+    recordPending = false;
+    seen = { epoch, revision: base + 1 };
+    return seen;
+  }
+
+  function deferOnLockConflict(error: unknown): undefined {
+    if (isTaskfoldLockConflictError(error)) {
+      recordPending = true;
+      return undefined;
+    }
+    throw error;
+  }
+
+  /** 同步、只试一次：poll 与 announce 用。 */
+  function recordOnce(): TaskfoldChange | undefined {
     if (!canWrite()) {
       return undefined;
     }
     try {
-      const { epoch, base } = withTaskfoldGlobalLockSync(locksDir, (guard) =>
-        reserveLocked(changesLogPath, 1, guard),
-      );
-      recordPending = false;
-      seen = { epoch, revision: base + 1 };
-      return seen;
+      return recorded(tryWithTaskfoldGlobalLockSync(locksDir, (guard) => reserveLocked(changesLogPath, 1, guard)));
     } catch (error) {
-      if (isTaskfoldLockConflictError(error)) {
-        recordPending = true;
-        return undefined;
-      }
-      throw error;
+      return deferOnLockConflict(error);
     }
   }
 
@@ -227,9 +237,18 @@ export function createTaskfoldFileChangeSource(options: {
         seen = head;
         return head;
       }
-      return record();
+      return recordOnce();
     },
-    record,
+    async record() {
+      if (!canWrite()) {
+        return undefined;
+      }
+      try {
+        return recorded(await withTaskfoldGlobalLock(locksDir, (guard) => reserveLocked(changesLogPath, 1, guard)));
+      } catch (error) {
+        return deferOnLockConflict(error);
+      }
+    },
     poll() {
       if (dataVersion) {
         const current = dataVersion();
@@ -239,9 +258,9 @@ export function createTaskfoldFileChangeSource(options: {
         }
       }
       if (recordPending) {
-        const recorded = record();
-        if (recorded) {
-          return recorded;
+        const change = recordOnce();
+        if (change) {
+          return change;
         }
       }
       const head = readFileChangeHead(changesLogPath);

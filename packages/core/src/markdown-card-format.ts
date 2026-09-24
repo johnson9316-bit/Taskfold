@@ -476,6 +476,18 @@ export function formatBacklogDateTime(epochMs: number): string {
   );
 }
 
+/**
+ * TASKFOLD 区块里的毫秒时间戳与 frontmatter 的分钟值（Backlog 的 created_date）二选一：毫秒值
+ * 截到分钟后与分钟值相同才用它，否则说明 frontmatter 被人手改过，以分钟值为准；区块里没有
+ * 毫秒值（旧文件）同样回退到分钟值。
+ */
+export function resolvePreciseTimestamp(payloadValue: unknown, backlogMinuteValue: number): number {
+  if (typeof payloadValue !== "number" || !Number.isFinite(payloadValue)) {
+    return backlogMinuteValue;
+  }
+  return Math.floor(payloadValue / 60_000) * 60_000 === backlogMinuteValue ? payloadValue : backlogMinuteValue;
+}
+
 export function parseBacklogDateTime(text: string): number {
   const match = BACKLOG_DATETIME_PATTERN.exec(text.trim());
   if (!match) {
@@ -740,6 +752,8 @@ function buildTaskfoldSectionJson(card: TaskfoldCard): string {
     revision: card.revision,
     // 完整精度的排序值，见文件头决策 4。
     position: card.position,
+    // 毫秒精度的创建时间（frontmatter 的 created_date 只到分钟），见 resolvePreciseTimestamp。
+    createdAt: card.createdAt,
   };
   if (card.kind !== undefined) payload.kind = card.kind;
   if (card.notes !== undefined) payload.notes = card.notes;
@@ -852,7 +866,10 @@ export function parseMarkdownCard(markdown: string): MarkdownCardDocument {
   const agentId = assignee[0];
   const labels = arrayOfStrings(fm, "labels");
   const milestoneId = stringValue(fm, "milestone");
-  const createdAt = parseBacklogDateTime(requiredString(fm, "created_date"));
+  const createdAt = resolvePreciseTimestamp(
+    payload.createdAt,
+    parseBacklogDateTime(requiredString(fm, "created_date")),
+  );
   const updatedDateRaw = stringValue(fm, "updated_date");
   const updatedAt = updatedDateRaw ? parseBacklogDateTime(updatedDateRaw) : createdAt;
 
