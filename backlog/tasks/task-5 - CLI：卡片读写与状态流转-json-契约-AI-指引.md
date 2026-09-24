@@ -4,6 +4,7 @@ title: CLI：卡片读写与状态流转 + --json 契约 + AI 指引
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 10:36'
 labels:
   - cli
 milestone: m-0
@@ -28,3 +29,9 @@ ordinal: 5000
 - [ ] #2 锁冲突/revision 冲突分别返回 LOCKED/CONFLICT 与非零退出码
 - [ ] #3 在 Claude Code 里只凭注入的标记块和 taskfold instructions，能完成建卡、改状态、改正文
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+18 §9 待验证：WSL 的 drvfs（/mnt/c）与 \\wsl$ 路径下 proper-lockfile 会误判锁为 compromised，在 CLI 文档/skill 与 README 中写明不支持这类路径。
+<!-- SECTION:NOTES:END -->

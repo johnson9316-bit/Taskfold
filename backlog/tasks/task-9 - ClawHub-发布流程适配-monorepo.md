@@ -4,11 +4,13 @@ title: ClawHub 发布流程适配 monorepo
 status: To Do
 assignee: []
 created_date: '2026-09-24 09:29'
+updated_date: '2026-09-24 10:36'
 labels:
   - release
 milestone: m-0
 dependencies:
   - TASK-1
+  - TASK-11
 references:
   - 需求/18-多宿主架构.md
 ordinal: 9000
@@ -25,3 +27,9 @@ ordinal: 9000
 - [ ] #1 npm run pack:check 在 openclaw 包下产物内容正确
 - [ ] #2 发布文档已更新
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+依赖补上 TASK-11：插件迁到 packages/openclaw 之后才有「openclaw 包」可发布。
+<!-- SECTION:NOTES:END -->
