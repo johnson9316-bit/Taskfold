@@ -4296,13 +4296,19 @@ var TaskfoldCoreStore = class {
     return await result;
   }
   async updateMetadata(id, mutate, options = {}) {
-    return await this.enqueueMutation(async () => {
-      const existing = await this.get(id);
-      if (!existing) {
-        throw new Error(`card not found: ${id}`);
-      }
-      return await this.updateCard(id, { metadata: mutate(existing) }, options);
-    });
+    return await this.retryOnRevisionConflict(
+      async () => await this.enqueueMutation(async () => {
+        const existing = await this.get(id);
+        if (!existing) {
+          throw new Error(`card not found: ${id}`);
+        }
+        return await this.updateCard(
+          id,
+          { metadata: mutate(existing) },
+          { ...options, expectedRevision: existing.revision }
+        );
+      })
+    );
   }
   async deleteDetachedAttachments(existing, next) {
     const nextIds = new Set(next.metadata?.attachments?.map((attachment) => attachment.id) ?? []);
@@ -4672,13 +4678,14 @@ var TaskfoldCoreStore = class {
     });
   }
   async update(id, patch, options = {}) {
-    return await this.enqueueMutation(
+    const run = async () => await this.enqueueMutation(
       async () => await this.updateCard(id, patch, {
         allowMetadataDependencyLinks: false,
         enforceStatusHolds: true,
         ...options.expectedRevision !== void 0 ? { expectedRevision: options.expectedRevision } : {}
       })
     );
+    return options.expectedRevision !== void 0 ? await run() : await this.retryOnRevisionConflict(run);
   }
   async updateCard(id, patch, options = {}) {
     const existing = await this.get(id);
@@ -4787,7 +4794,7 @@ var TaskfoldCoreStore = class {
     if (metadataIsEmpty(next.metadata)) {
       delete next.metadata;
     }
-    await this.persistCard(next, options.expectedRevision);
+    await this.persistCard(next, options.expectedRevision ?? existing.revision);
     await this.deleteDetachedAttachments(existing, next);
     return next;
   }
@@ -5044,7 +5051,7 @@ var TaskfoldCoreStore = class {
     });
   }
   async mutateSourceReferences(id, mutate) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -5064,9 +5071,9 @@ var TaskfoldCoreStore = class {
         delete next.sourceReferences;
       }
       next.events = appendEvent(next, { kind: "edited" }, now);
-      await this.store.register(next.id, { version: 1, card: next });
+      await this.persistCard(next, existing.revision);
       return next;
-    });
+    }));
   }
   async addLink(id, input) {
     const now = Date.now();
@@ -5329,7 +5336,7 @@ var TaskfoldCoreStore = class {
       ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
       events: appendEvent(card, { kind: "dispatch" }, now)
     });
-    await this.store.register(card.id, { version: 1, card: next });
+    await this.persistCard(next, card.revision);
     return next;
   }
   async recordOrchestrationCandidate(card, now) {
@@ -5355,7 +5362,7 @@ var TaskfoldCoreStore = class {
       ...!metadataIsEmpty(metadata) ? { metadata } : { metadata: void 0 },
       events: appendEvent(card, { kind: "orchestration" }, now)
     });
-    await this.store.register(card.id, { version: 1, card: next });
+    await this.persistCard(next, card.revision);
     return next;
   }
   async promoteDependencyReady(id, now = Date.now()) {
@@ -6118,9 +6125,6 @@ function registerTaskfoldProjectGatewayMethods(params) {
     { scope: WRITE_SCOPE2 }
   );
 }
-
-// src/backend/src/store.ts
-import { randomUUID as randomUUID11 } from "node:crypto";
 
 // src/backend/src/sqlite-store.ts
 import { randomUUID as randomUUID6 } from "node:crypto";
@@ -7970,6 +7974,9 @@ function createTaskfoldSqliteStores(options = {}) {
   };
 }
 
+// packages/core/src/store-dispatch.ts
+import { randomUUID as randomUUID11 } from "node:crypto";
+
 // packages/core/src/store-projects.ts
 init_contract();
 import { randomUUID as randomUUID10 } from "node:crypto";
@@ -8063,7 +8070,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
     });
   }
   async addAttachment(id, input, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8084,7 +8091,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
               -MAX_CARD_ATTACHMENTS
             )
           }
-        });
+        }, { expectedRevision: existing.revision });
         if (!updated.metadata?.attachments?.some((entry) => entry.id === attachment.id)) {
           await this.attachmentStore.delete(attachment.id);
           throw new Error("attachment metadata was trimmed before it could be indexed.");
@@ -8094,7 +8101,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
         await this.attachmentStore.delete(attachment.id);
         throw error;
       }
-    });
+    }));
   }
   async listAttachments(id) {
     const card = await this.get(id);
@@ -8109,7 +8116,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
     return entry?.version === 1 ? entry : void 0;
   }
   async deleteAttachment(cardId, attachmentId, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(cardId);
       if (!existing) {
         throw new Error(`card not found: ${cardId}`);
@@ -8120,13 +8127,17 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
         throw new Error(`attachment not found: ${attachmentId}`);
       }
       await this.attachmentStore.delete(attachmentId);
-      return await this.updateCard(cardId, {
-        metadata: {
-          ...existing.metadata,
-          attachments: attachments.filter((attachment) => attachment.id !== attachmentId)
-        }
-      });
-    });
+      return await this.updateCard(
+        cardId,
+        {
+          metadata: {
+            ...existing.metadata,
+            attachments: attachments.filter((attachment) => attachment.id !== attachmentId)
+          }
+        },
+        { expectedRevision: existing.revision }
+      );
+    }));
   }
   async addWorkerLog(id, input, scope) {
     const now = Date.now();
@@ -8154,7 +8165,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
     });
   }
   async recordProtocolViolation(id, input = {}, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
@@ -8201,8 +8212,8 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
             -MAX_CARD_NOTIFICATIONS
           )
         }
-      });
-    });
+      }, { expectedRevision: card.revision });
+    }));
   }
 };
 
@@ -8221,7 +8232,7 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
     });
   }
   async move(id, status, position, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8232,13 +8243,14 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
         { status },
         {
           allowMetadataDependencyLinks: false,
-          enforceStatusHolds: true
+          enforceStatusHolds: true,
+          expectedRevision: existing.revision
         }
       );
-    });
+    }));
   }
   async promote(id, input = {}, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8259,9 +8271,9 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
             stale: null
           }
         },
-        { enforceStatusHolds: input.force !== true }
+        { enforceStatusHolds: input.force !== true, expectedRevision: existing.revision }
       );
-    });
+    }));
   }
 };
 
@@ -8394,7 +8406,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     if (!requestedSessionKey) {
       throw new Error("requestedSessionKey is required.");
     }
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8436,14 +8448,14 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             automation: { ...existing.metadata?.automation, launch }
           }
         },
-        { allowAutomationLaunch: true }
+        { allowAutomationLaunch: true, expectedRevision: existing.revision }
       );
       const persisted = card.metadata?.automation?.launch;
       if (persisted?.phase !== "prepared") {
         throw new Error("prepared execution launch was not persisted.");
       }
       return { card, launch: persisted };
-    });
+    }));
   }
   /**
    * Advances a `prepared` launch to `accepted` (§5 edge ②) once
@@ -8576,7 +8588,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     });
   }
   async stopExecution(id, input = {}) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8591,19 +8603,23 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       }
       const now = Date.now();
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "stop reason") ?? "Taskfold execution stopped by operator.";
-      return await this.updateCard(id, {
-        execution: { ...existing.execution, status: "blocked", updatedAt: now },
-        metadata: {
-          ...existing.metadata,
-          claim: void 0,
-          attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
-          comments: [
-            ...existing.metadata?.comments ?? [],
-            { id: randomUUID9(), body: reason, createdAt: now }
-          ].slice(-MAX_CARD_COMMENTS)
-        }
-      });
-    });
+      return await this.updateCard(
+        id,
+        {
+          execution: { ...existing.execution, status: "blocked", updatedAt: now },
+          metadata: {
+            ...existing.metadata,
+            claim: void 0,
+            attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
+            comments: [
+              ...existing.metadata?.comments ?? [],
+              { id: randomUUID9(), body: reason, createdAt: now }
+            ].slice(-MAX_CARD_COMMENTS)
+          }
+        },
+        { expectedRevision: existing.revision }
+      );
+    }));
   }
   /**
    * Resolves a run's terminal outcome onto whichever card it belongs to
@@ -8621,7 +8637,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     if (!normalizedRunId && !targetSessionKey) {
       throw new Error("runId or targetSessionKey is required.");
     }
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = (await this.list()).find(
         (candidate) => taskfoldCardMatchesLifecycleLink(candidate, {
           runId: normalizedRunId,
@@ -8639,24 +8655,28 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       const outcome = normalizeOptionalString(input.outcome)?.toLowerCase();
       const succeeded = outcome === "ok";
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "execution end reason") ?? (succeeded ? void 0 : `Taskfold execution ended with ${outcome || "an unknown"} outcome.`);
-      return await this.updateCard(existing.id, {
-        execution: {
-          ...existing.execution,
-          status: succeeded ? "done" : "blocked",
-          updatedAt: endedAt
+      return await this.updateCard(
+        existing.id,
+        {
+          execution: {
+            ...existing.execution,
+            status: succeeded ? "done" : "blocked",
+            updatedAt: endedAt
+          },
+          metadata: {
+            ...existing.metadata,
+            claim: void 0,
+            attempts: closeRunningAttempts(
+              existing.metadata?.attempts,
+              endedAt,
+              succeeded ? "succeeded" : "blocked",
+              reason
+            )
+          }
         },
-        metadata: {
-          ...existing.metadata,
-          claim: void 0,
-          attempts: closeRunningAttempts(
-            existing.metadata?.attempts,
-            endedAt,
-            succeeded ? "succeeded" : "blocked",
-            reason
-          )
-        }
-      });
-    });
+        { expectedRevision: existing.revision }
+      );
+    }));
   }
   async claim(id, input, options = {}) {
     const ownerId = normalizeBoundedString(input.ownerId, void 0, 120, "claim owner");
@@ -8665,11 +8685,12 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     }
     const ttlSeconds = typeof input.ttlSeconds === "number" && Number.isFinite(input.ttlSeconds) ? Math.max(1, Math.trunc(input.ttlSeconds)) : void 0;
     const token = normalizeBoundedString(input.token, void 0, 160, "claim token") ?? randomUUID9();
+    const progress = { claimed: false };
     return await this.retryOnRevisionConflict(
-      async () => await this.claimOnce(id, { ownerId, ttlSeconds, token }, options)
+      async () => await this.claimOnce(id, { ownerId, ttlSeconds, token }, options, progress)
     );
   }
-  async claimOnce(id, input, options) {
+  async claimOnce(id, input, options, progress) {
     const { ownerId, ttlSeconds, token } = input;
     return await this.enqueueMutation(async () => {
       const now = Date.now();
@@ -8678,6 +8699,9 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         ttlSeconds ? secondsToDurationMs(ttlSeconds) : DEFAULT_CLAIM_TTL_MS
       );
       const guarded = await this.promoteDependencyReady(id, now);
+      if (progress.claimed && guarded.metadata?.claim?.token === token) {
+        return { card: await this.markClaimedCardRunning(guarded, ownerId), token };
+      }
       if (guarded.metadata?.archivedAt) {
         throw new Error("card is archived.");
       }
@@ -8725,12 +8749,19 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         // instead of silently overwriting a live worker's token.
         { expectedRevision: claimable.revision }
       );
-      const next = await this.updateCard(card.id, {
+      progress.claimed = true;
+      return { card: await this.markClaimedCardRunning(card, ownerId), token };
+    });
+  }
+  async markClaimedCardRunning(card, ownerId) {
+    return await this.updateCard(
+      card.id,
+      {
         status: card.status === "backlog" || card.status === "todo" || card.status === "ready" ? "running" : card.status,
         agentId: card.agentId ?? ownerId
-      });
-      return { card: next, token };
-    });
+      },
+      { expectedRevision: card.revision }
+    );
   }
   async heartbeat(id, input) {
     const note = normalizeBoundedString(input.note, void 0, 400, "heartbeat note");
@@ -8764,7 +8795,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     return card;
   }
   async releaseClaim(id, input = {}) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8780,12 +8811,14 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           status,
           metadata: { ...existing.metadata, claim: void 0 }
         },
-        { enforceStatusHolds: input.status !== void 0 }
+        { enforceStatusHolds: input.status !== void 0, expectedRevision: existing.revision }
       );
-    });
+    }));
   }
   async complete(id, input = {}, scope = input) {
-    return await this.enqueueMutation(async () => await this.completeDirect(id, input, scope));
+    return await this.retryOnRevisionConflict(
+      async () => await this.enqueueMutation(async () => await this.completeDirect(id, input, scope))
+    );
   }
   async completeDirect(id, input = {}, scope = input) {
     const existing = await this.get(id);
@@ -8859,12 +8892,13 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       },
       {
         enforceStatusHolds: true,
+        expectedRevision: existing.revision,
         ...proof ? { preserveProofId: proofId ?? proof.id } : {}
       }
     );
   }
   async block(id, input = {}, scope = input) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8883,38 +8917,46 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         ...cardRunId(existing) ? { runId: cardRunId(existing) } : {}
       };
       const execution = existing.execution?.status === "running" ? { ...existing.execution, status: "blocked", updatedAt: now } : existing.execution;
-      return await this.updateCard(id, {
-        status: "blocked",
-        ...execution ? { execution } : {},
-        metadata: {
-          ...metadata,
-          claim: void 0,
-          attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
-          failureCount: (metadata.failureCount ?? 0) + 1,
-          comments: [
-            ...metadata.comments ?? [],
-            { id: randomUUID9(), body: reason, createdAt: now }
-          ].slice(-MAX_CARD_COMMENTS),
-          notifications: [...metadata.notifications ?? [], notification].slice(
-            -MAX_CARD_NOTIFICATIONS
-          )
-        }
-      });
-    });
+      return await this.updateCard(
+        id,
+        {
+          status: "blocked",
+          ...execution ? { execution } : {},
+          metadata: {
+            ...metadata,
+            claim: void 0,
+            attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
+            failureCount: (metadata.failureCount ?? 0) + 1,
+            comments: [
+              ...metadata.comments ?? [],
+              { id: randomUUID9(), body: reason, createdAt: now }
+            ].slice(-MAX_CARD_COMMENTS),
+            notifications: [...metadata.notifications ?? [], notification].slice(
+              -MAX_CARD_NOTIFICATIONS
+            )
+          }
+        },
+        { expectedRevision: existing.revision }
+      );
+    }));
   }
   async unblock(id, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
       }
       assertCanMutateClaimedCard(existing, scope);
       const metadata = clearDiagnostics(existing.metadata, ["blocked_too_long"]);
-      return await this.updateCard(id, { status: "todo", metadata: { ...metadata, stale: null } });
-    });
+      return await this.updateCard(
+        id,
+        { status: "todo", metadata: { ...metadata, stale: null } },
+        { expectedRevision: existing.revision }
+      );
+    }));
   }
   async reassign(id, input = {}, scope) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8933,8 +8975,12 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           { id: randomUUID9(), body: reason, createdAt: Date.now() }
         ].slice(-MAX_CARD_COMMENTS) : baseMetadata?.comments
       };
-      return await this.updateCard(id, { agentId, status, metadata }, { enforceStatusHolds: true });
-    });
+      return await this.updateCard(
+        id,
+        { agentId, status, metadata },
+        { enforceStatusHolds: true, expectedRevision: existing.revision }
+      );
+    }));
   }
   async reclaim(id, input = {}, scope) {
     return await this.enqueueMutation(async () => {
@@ -8962,7 +9008,8 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             stale: null
           }
         },
-        { enforceStatusHolds: true }
+        // 可能写两次（这里 + 下面的依赖晋级），不自动重试：冲突照常抛给调用方（TASK-6）。
+        { enforceStatusHolds: true, expectedRevision: existing.revision }
       );
       return await this.promoteDependencyReady(reclaimed.id, now);
     });
@@ -9012,13 +9059,13 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           status: "todo",
           metadata
         },
-        { enforceStatusHolds: true }
+        { enforceStatusHolds: true, expectedRevision: existing.revision }
       );
       const specified = {
         ...updated,
         events: appendEvent(updated, { kind: "specified" }, now)
       };
-      await this.store.register(specified.id, { version: 1, card: specified });
+      await this.persistCard(specified, updated.revision);
       return specified;
     });
   }
@@ -9104,7 +9151,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           ...updatedParent,
           events: appendEvent(updatedParent, { kind: "decomposed" })
         };
-        await this.store.register(decomposedParent.id, { version: 1, card: decomposedParent });
+        await this.persistCard(decomposedParent, updatedParent.revision);
         return { parent: decomposedParent, children };
       } catch (error) {
         for (const child of children.toReversed()) {
@@ -9930,7 +9977,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
     });
   }
   async moveMilestone(id, input) {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
@@ -9964,9 +10011,9 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
           ...milestoneId ? { toMilestoneId: milestoneId } : {}
         });
       }
-      await this.store.register(next.id, { version: 1, card: next });
+      await this.persistCard(next, card.revision);
       return next;
-    });
+    }));
   }
   async moveProject(id, input) {
     return await this.enqueueMutation(async () => {
@@ -10020,7 +10067,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
         ...card.milestoneId ? { fromMilestoneId: card.milestoneId } : {},
         ...milestoneId ? { toMilestoneId: milestoneId } : {}
       });
-      await this.store.register(next.id, { version: 1, card: next });
+      await this.persistCard(next, card.revision);
       return next;
     });
   }
@@ -10225,8 +10272,8 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
   }
 };
 
-// src/backend/src/store.ts
-var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
+// packages/core/src/store-dispatch.ts
+var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
   async shouldAutoOrchestrate(card) {
     if (card.status !== "triage" || card.metadata?.archivedAt || card.metadata?.workerProtocol?.state === "idle") {
       return false;
@@ -10244,86 +10291,93 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
       const orchestrated = [];
       const orchestratedByBoard = /* @__PURE__ */ new Map();
       for (const card of await this.list({ boardId })) {
-        if (await this.isProjectArchived(cardBoardId(card))) {
-          continue;
-        }
-        if (card.metadata?.archivedAt) {
-          continue;
-        }
-        let latest = await this.promoteDependencyReady(card.id, now);
-        const wasPromoted = latest.status !== card.status;
-        const claim = latest.metadata?.claim;
-        const latestAttempt = latestRunningAttempt(latest);
-        const maxRuntimeSeconds = latest.metadata?.automation?.maxRuntimeSeconds;
-        const runtimeStartedAt = latestAttempt?.startedAt ?? claim?.claimedAt ?? latest.startedAt;
-        const timedOut = Boolean(maxRuntimeSeconds && runtimeStartedAt) && now - runtimeStartedAt > secondsToDurationMs(maxRuntimeSeconds);
-        const claimExpired = isTaskfoldClaimReclaimable(claim, now);
-        const retriesExhausted = retryBudgetExhausted(latest);
-        if (latest.status === "running" && (timedOut || claimExpired)) {
-          const reason = timedOut ? "Run exceeded the card max runtime." : "Claim expired without a recent heartbeat.";
-          const execution = latest.execution?.status === "running" ? { ...latest.execution, status: "blocked", updatedAt: now } : latest.execution;
-          latest = await this.updateCard(latest.id, {
-            status: "blocked",
-            ...execution ? { execution } : {},
-            metadata: {
-              ...latest.metadata,
-              claim: void 0,
-              attempts: closeRunningAttempts(latest.metadata?.attempts, now, "blocked", reason),
-              failureCount: (latest.metadata?.failureCount ?? 0) + 1,
-              notifications: [
-                ...latest.metadata?.notifications ?? [],
-                {
-                  id: randomUUID11(),
-                  kind: "failed",
-                  createdAt: now,
-                  sequence: this.nextNotificationSequence(now),
-                  message: reason
-                }
-              ].slice(-MAX_CARD_NOTIFICATIONS)
-            }
-          });
-          blocked.push(latest);
-        } else if (claimExpired) {
-          latest = await this.updateCard(latest.id, {
-            metadata: { ...latest.metadata, claim: void 0 }
-          });
-          reclaimed.push(latest);
-        }
-        if (!latest.metadata?.claim && retriesExhausted && isDependencyPromotableStatus(latest.status)) {
-          latest = await this.updateCard(latest.id, {
-            status: "blocked",
-            metadata: {
-              ...latest.metadata,
-              notifications: [
-                ...latest.metadata?.notifications ?? [],
-                {
-                  id: randomUUID11(),
-                  kind: "failed",
-                  createdAt: now,
-                  sequence: this.nextNotificationSequence(now),
-                  message: "Card exhausted its retry budget."
-                }
-              ].slice(-MAX_CARD_NOTIFICATIONS)
-            }
-          });
-          blocked.push(latest);
-        }
-        if (latest.status === "ready" && !latest.metadata?.archivedAt) {
-          latest = await this.recordDispatch(latest, now);
-        }
-        if (await this.shouldAutoOrchestrate(latest)) {
-          const latestBoardId = cardBoardId(latest);
-          const board = await this.boardStore.lookup(latestBoardId);
-          const cap = board?.board.orchestration?.autoDecomposePerDispatch ?? 3;
-          const boardCount = orchestratedByBoard.get(latestBoardId) ?? 0;
-          if (boardCount < cap) {
-            latest = await this.recordOrchestrationCandidate(latest, now);
-            orchestrated.push(latest);
-            orchestratedByBoard.set(latestBoardId, boardCount + 1);
+        try {
+          if (await this.isProjectArchived(cardBoardId(card))) {
+            continue;
           }
-        }
-        if (wasPromoted && latest.status !== "blocked") {
-          promoted.push(latest);
+          if (card.metadata?.archivedAt) {
+            continue;
+          }
+          let latest = await this.promoteDependencyReady(card.id, now);
+          const wasPromoted = latest.status !== card.status;
+          const claim = latest.metadata?.claim;
+          const latestAttempt = latestRunningAttempt(latest);
+          const maxRuntimeSeconds = latest.metadata?.automation?.maxRuntimeSeconds;
+          const runtimeStartedAt = latestAttempt?.startedAt ?? claim?.claimedAt ?? latest.startedAt;
+          const timedOut = Boolean(maxRuntimeSeconds && runtimeStartedAt) && now - runtimeStartedAt > secondsToDurationMs(maxRuntimeSeconds);
+          const claimExpired = isTaskfoldClaimReclaimable(claim, now);
+          const retriesExhausted = retryBudgetExhausted(latest);
+          if (latest.status === "running" && (timedOut || claimExpired)) {
+            const reason = timedOut ? "Run exceeded the card max runtime." : "Claim expired without a recent heartbeat.";
+            const execution = latest.execution?.status === "running" ? { ...latest.execution, status: "blocked", updatedAt: now } : latest.execution;
+            latest = await this.updateCard(latest.id, {
+              status: "blocked",
+              ...execution ? { execution } : {},
+              metadata: {
+                ...latest.metadata,
+                claim: void 0,
+                attempts: closeRunningAttempts(latest.metadata?.attempts, now, "blocked", reason),
+                failureCount: (latest.metadata?.failureCount ?? 0) + 1,
+                notifications: [
+                  ...latest.metadata?.notifications ?? [],
+                  {
+                    id: randomUUID11(),
+                    kind: "failed",
+                    createdAt: now,
+                    sequence: this.nextNotificationSequence(now),
+                    message: reason
+                  }
+                ].slice(-MAX_CARD_NOTIFICATIONS)
+              }
+            }, { expectedRevision: latest.revision });
+            blocked.push(latest);
+          } else if (claimExpired) {
+            latest = await this.updateCard(latest.id, {
+              metadata: { ...latest.metadata, claim: void 0 }
+            }, { expectedRevision: latest.revision });
+            reclaimed.push(latest);
+          }
+          if (!latest.metadata?.claim && retriesExhausted && isDependencyPromotableStatus(latest.status)) {
+            latest = await this.updateCard(latest.id, {
+              status: "blocked",
+              metadata: {
+                ...latest.metadata,
+                notifications: [
+                  ...latest.metadata?.notifications ?? [],
+                  {
+                    id: randomUUID11(),
+                    kind: "failed",
+                    createdAt: now,
+                    sequence: this.nextNotificationSequence(now),
+                    message: "Card exhausted its retry budget."
+                  }
+                ].slice(-MAX_CARD_NOTIFICATIONS)
+              }
+            }, { expectedRevision: latest.revision });
+            blocked.push(latest);
+          }
+          if (latest.status === "ready" && !latest.metadata?.archivedAt) {
+            latest = await this.recordDispatch(latest, now);
+          }
+          if (await this.shouldAutoOrchestrate(latest)) {
+            const latestBoardId = cardBoardId(latest);
+            const board = await this.boardStore.lookup(latestBoardId);
+            const cap = board?.board.orchestration?.autoDecomposePerDispatch ?? 3;
+            const boardCount = orchestratedByBoard.get(latestBoardId) ?? 0;
+            if (boardCount < cap) {
+              latest = await this.recordOrchestrationCandidate(latest, now);
+              orchestrated.push(latest);
+              orchestratedByBoard.set(latestBoardId, boardCount + 1);
+            }
+          }
+          if (wasPromoted && latest.status !== "blocked") {
+            promoted.push(latest);
+          }
+        } catch (error) {
+          if (error instanceof TaskfoldRevisionConflictError) {
+            continue;
+          }
+          throw error;
         }
       }
       return {
@@ -10392,7 +10446,7 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
           ...latest,
           metadata: metadataIsEmpty(metadata) ? void 0 : metadata
         });
-        await this.store.register(next.id, { version: 1, card: next });
+        await this.persistCard(next, latest.revision);
         if (diagnostics.length > 0) {
           rows.push({ card: next, diagnostics });
         }
@@ -10410,36 +10464,10 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldProjectStore {
     }
     return buildWorkerContext(card, await this.list());
   }
-  static open(openKeyedStore) {
-    return new _TaskfoldStore(
-      openKeyedStore({
-        namespace: "taskfold.cards",
-        maxEntries: MAX_CARDS
-      }),
-      {
-        boards: openKeyedStore({
-          namespace: "taskfold.boards",
-          maxEntries: 200
-        }),
-        milestones: openKeyedStore({
-          namespace: "taskfold.milestones",
-          maxEntries: 2e3
-        }),
-        documents: openKeyedStore({
-          namespace: "taskfold.project-documents",
-          maxEntries: 4e3
-        }),
-        subscriptions: openKeyedStore({
-          namespace: "taskfold.notify",
-          maxEntries: 2e3
-        }),
-        attachments: openKeyedStore({
-          namespace: "taskfold.attachments",
-          maxEntries: MAX_ATTACHMENT_ENTRIES
-        })
-      }
-    );
-  }
+};
+
+// src/backend/src/store.ts
+var TaskfoldStore = class _TaskfoldStore extends TaskfoldDispatchStore {
   static openSqlite() {
     return _TaskfoldStore.fromSqliteStores(createTaskfoldSqliteStores());
   }
@@ -11693,9 +11721,11 @@ async function reconcileTaskfoldCards(params) {
       if (isTaskfoldClaimReclaimable(card.metadata?.claim, now)) {
         const latest = await params.store.get(card.id);
         if (latest && isTaskfoldClaimReclaimable(latest.metadata?.claim, now)) {
-          await params.store.update(latest.id, {
-            metadata: { ...latest.metadata, claim: void 0 }
-          });
+          await params.store.update(
+            latest.id,
+            { metadata: { ...latest.metadata, claim: void 0 } },
+            { expectedRevision: latest.revision }
+          );
           outcome.reclaimed += 1;
         }
       }

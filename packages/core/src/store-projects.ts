@@ -669,7 +669,8 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
   }
 
   async moveMilestone(id: string, input: TaskfoldMoveMilestoneInput): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    // 单卡读改写：输给并发写入就重读重算（TASK-6）。
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
@@ -712,9 +713,9 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
           ...(milestoneId ? { toMilestoneId: milestoneId } : {}),
         });
       }
-      await this.store.register(next.id, { version: 1, card: next });
+      await this.persistCard(next, card.revision);
       return next;
-    });
+    }));
   }
 
   async moveProject(id: string, input: TaskfoldMoveProjectInput): Promise<TaskfoldCard> {
@@ -781,7 +782,8 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
         ...(card.milestoneId ? { fromMilestoneId: card.milestoneId } : {}),
         ...(milestoneId ? { toMilestoneId: milestoneId } : {}),
       });
-      await this.store.register(next.id, { version: 1, card: next });
+      // 多次写入（可能先建项目），不自动重试；以读到的 revision 做 CAS，冲突照常抛出（TASK-6）。
+      await this.persistCard(next, card.revision);
       return next;
     });
   }

@@ -46,11 +46,11 @@ describe("TaskfoldStore.compensateWorkspaceMutation", () => {
     };
     const store = createStore(cardStore);
     const created = await store.create({ title: "Compensation target", notes: "original" });
-    // register() (used by the plain store.update() fallback below) still
-    // works on this store; only compareAndSwap is wired to always conflict.
-    const written = await store.update(created.id, { notes: "changed by the operation" });
+    // TASK-6 起 store.update() 不带 expectedRevision 也走 CAS，在这个永远冲突的 store 上写不进去；
+    // 「操作已经写下的改动」直接经 register() 落进存储来模拟，只让补偿循环去撞 CAS。
+    const after = { ...created, notes: "changed by the operation", revision: created.revision + 1 };
+    await cardStore.register(created.id, { version: 1, card: after });
     const before = created;
-    const after = { ...created, notes: "changed by the operation", revision: written.revision };
 
     await expect(store.compensateWorkspaceMutation(before, after)).rejects.toThrow(
       `card changed repeatedly during compensation: ${created.id}`,

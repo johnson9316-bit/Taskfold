@@ -214,9 +214,13 @@ export async function reconcileTaskfoldCards(params: {
       if (isTaskfoldClaimReclaimable(card.metadata?.claim, now)) {
         const latest = await params.store.get(card.id);
         if (latest && isTaskfoldClaimReclaimable(latest.metadata?.claim, now)) {
-          await params.store.update(latest.id, {
-            metadata: { ...latest.metadata, claim: undefined },
-          });
+          // 以刚读到的 revision 做 CAS：输了说明有人（worker、CLI）刚写过，下面 catch 按预期跳过，
+          // 下一轮按最新状态重判（TASK-6）。
+          await params.store.update(
+            latest.id,
+            { metadata: { ...latest.metadata, claim: undefined } },
+            { expectedRevision: latest.revision },
+          );
           outcome.reclaimed += 1;
         }
       }

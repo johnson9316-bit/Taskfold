@@ -250,13 +250,22 @@ export class TaskfoldCoreStore {
     mutate: (existing: TaskfoldCard) => TaskfoldMetadata,
     options: { preserveProofId?: string } = {},
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
-      const existing = await this.get(id);
-      if (!existing) {
-        throw new Error(`card not found: ${id}`);
-      }
-      return await this.updateCard(id, { metadata: mutate(existing) }, options);
-    });
+    // 单卡读改写：metadata 由这次读到的卡算出，就以它的 revision 做 CAS；输给并发写入
+    // （别的进程、CLI）就整体重读重算，而不是拿旧快照覆盖对方（TASK-6）。
+    return await this.retryOnRevisionConflict(
+      async () =>
+        await this.enqueueMutation(async () => {
+          const existing = await this.get(id);
+          if (!existing) {
+            throw new Error(`card not found: ${id}`);
+          }
+          return await this.updateCard(
+            id,
+            { metadata: mutate(existing) },
+            { ...options, expectedRevision: existing.revision },
+          );
+        }),
+    );
   }
 
   protected async deleteDetachedAttachments(
@@ -700,16 +709,20 @@ export class TaskfoldCoreStore {
       expectedRevision?: number;
     } = {},
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(
-      async () =>
-        await this.updateCard(id, patch, {
-          allowMetadataDependencyLinks: false,
-          enforceStatusHolds: true,
-          ...(options.expectedRevision !== undefined
-            ? { expectedRevision: options.expectedRevision }
-            : {}),
-        }),
-    );
+    const run = async () =>
+      await this.enqueueMutation(
+        async () =>
+          await this.updateCard(id, patch, {
+            allowMetadataDependencyLinks: false,
+            enforceStatusHolds: true,
+            ...(options.expectedRevision !== undefined
+              ? { expectedRevision: options.expectedRevision }
+              : {}),
+          }),
+      );
+    // 调用方给了 expectedRevision：冲突要原样报给它（CLI、面板的 CAS），不重试。
+    // 没给：字段级 patch，输给并发写入就在最新版本上重放这份 patch（TASK-6）。
+    return options.expectedRevision !== undefined ? await run() : await this.retryOnRevisionConflict(run);
   }
 
   protected async updateCard(
@@ -899,7 +912,9 @@ export class TaskfoldCoreStore {
     if (metadataIsEmpty(next.metadata)) {
       delete next.metadata;
     }
-    await this.persistCard(next, options.expectedRevision);
+    // 调用方没给 expectedRevision 时，也以上面读到的 revision 做 CAS：读在锁外，读与写之间
+    // 别的进程（CLI、另一个宿主）写过，这次写就报冲突，不拿旧快照整卡覆盖（TASK-6）。
+    await this.persistCard(next, options.expectedRevision ?? existing.revision);
     await this.deleteDetachedAttachments(existing, next);
     return next;
   }
@@ -1220,7 +1235,7 @@ export class TaskfoldCoreStore {
     id: string,
     mutate: (references: TaskfoldSourceReference[]) => TaskfoldSourceReference[],
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -1240,9 +1255,9 @@ export class TaskfoldCoreStore {
         delete next.sourceReferences;
       }
       next.events = appendEvent(next, { kind: "edited" }, now);
-      await this.store.register(next.id, { version: 1, card: next });
+      await this.persistCard(next, existing.revision);
       return next;
-    });
+    }));
   }
 
   async addLink(id: string, input: TaskfoldLinkInput): Promise<TaskfoldCard> {
@@ -1555,7 +1570,7 @@ export class TaskfoldCoreStore {
       ...(!metadataIsEmpty(metadata) ? { metadata } : { metadata: undefined }),
       events: appendEvent(card, { kind: "dispatch" }, now),
     });
-    await this.store.register(card.id, { version: 1, card: next });
+    await this.persistCard(next, card.revision);
     return next;
   }
 
@@ -1585,7 +1600,7 @@ export class TaskfoldCoreStore {
       ...(!metadataIsEmpty(metadata) ? { metadata } : { metadata: undefined }),
       events: appendEvent(card, { kind: "orchestration" }, now),
     });
-    await this.store.register(card.id, { version: 1, card: next });
+    await this.persistCard(next, card.revision);
     return next;
   }
 

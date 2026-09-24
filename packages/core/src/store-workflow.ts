@@ -287,7 +287,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     if (!requestedSessionKey) {
       throw new Error("requestedSessionKey is required.");
     }
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -333,14 +333,14 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
             automation: { ...existing.metadata?.automation, launch },
           },
         },
-        { allowAutomationLaunch: true },
+        { allowAutomationLaunch: true, expectedRevision: existing.revision },
       );
       const persisted = card.metadata?.automation?.launch;
       if (persisted?.phase !== "prepared") {
         throw new Error("prepared execution launch was not persisted.");
       }
       return { card, launch: persisted };
-    });
+    }));
   }
 
   /**
@@ -515,7 +515,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     id: string,
     input: { expectedRunId?: unknown; reason?: unknown } = {},
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -532,19 +532,23 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       const reason =
         normalizeBoundedString(input.reason, undefined, 1000, "stop reason") ??
         "Taskfold execution stopped by operator.";
-      return await this.updateCard(id, {
-        execution: { ...existing.execution, status: "blocked", updatedAt: now },
-        metadata: {
-          ...existing.metadata,
-          claim: undefined,
-          attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
-          comments: [
-            ...(existing.metadata?.comments ?? []),
-            { id: randomUUID(), body: reason, createdAt: now },
-          ].slice(-MAX_CARD_COMMENTS),
+      return await this.updateCard(
+        id,
+        {
+          execution: { ...existing.execution, status: "blocked", updatedAt: now },
+          metadata: {
+            ...existing.metadata,
+            claim: undefined,
+            attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
+            comments: [
+              ...(existing.metadata?.comments ?? []),
+              { id: randomUUID(), body: reason, createdAt: now },
+            ].slice(-MAX_CARD_COMMENTS),
+          },
         },
-      });
-    });
+        { expectedRevision: existing.revision },
+      );
+    }));
   }
 
   /**
@@ -571,7 +575,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     if (!normalizedRunId && !targetSessionKey) {
       throw new Error("runId or targetSessionKey is required.");
     }
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = (await this.list()).find((candidate) =>
         taskfoldCardMatchesLifecycleLink(candidate, {
           runId: normalizedRunId,
@@ -598,24 +602,28 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         (succeeded
           ? undefined
           : `Taskfold execution ended with ${outcome || "an unknown"} outcome.`);
-      return await this.updateCard(existing.id, {
-        execution: {
-          ...existing.execution,
-          status: succeeded ? "done" : "blocked",
-          updatedAt: endedAt,
+      return await this.updateCard(
+        existing.id,
+        {
+          execution: {
+            ...existing.execution,
+            status: succeeded ? "done" : "blocked",
+            updatedAt: endedAt,
+          },
+          metadata: {
+            ...existing.metadata,
+            claim: undefined,
+            attempts: closeRunningAttempts(
+              existing.metadata?.attempts,
+              endedAt,
+              succeeded ? "succeeded" : "blocked",
+              reason,
+            ),
+          },
         },
-        metadata: {
-          ...existing.metadata,
-          claim: undefined,
-          attempts: closeRunningAttempts(
-            existing.metadata?.attempts,
-            endedAt,
-            succeeded ? "succeeded" : "blocked",
-            reason,
-          ),
-        },
-      });
-    });
+        { expectedRevision: existing.revision },
+      );
+    }));
   }
 
   async claim(
@@ -636,8 +644,9 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     // On a lost compare-and-swap the guards below re-evaluate against fresh
     // state, so a genuine competing claim surfaces as "already claimed" rather
     // than as a revision conflict the caller cannot act on.
+    const progress = { claimed: false };
     return await this.retryOnRevisionConflict(
-      async () => await this.claimOnce(id, { ownerId, ttlSeconds, token }, options),
+      async () => await this.claimOnce(id, { ownerId, ttlSeconds, token }, options, progress),
     );
   }
 
@@ -645,6 +654,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     id: string,
     input: { ownerId: string; ttlSeconds: number | undefined; token: string },
     options: TaskfoldClaimOptions,
+    /** 跨重试共享：这次 claim 调用是否已经写下了自己的 claim。 */
+    progress: { claimed: boolean },
   ): Promise<{ card: TaskfoldCard; token: string }> {
     const { ownerId, ttlSeconds, token } = input;
     return await this.enqueueMutation(async () => {
@@ -654,6 +665,12 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         ttlSeconds ? secondsToDurationMs(ttlSeconds) : DEFAULT_CLAIM_TTL_MS,
       );
       const guarded = await this.promoteDependencyReady(id, now);
+      if (progress.claimed && guarded.metadata?.claim?.token === token) {
+        // 上一轮已经写下了这次的 claim，只是随后「置为 running」那次写输给了并发写入
+        // （TASK-6：那次写也做 CAS 了）。不再重复 claim——否则会误报 already claimed——
+        // 只在最新版本上补完后续那次写。
+        return { card: await this.markClaimedCardRunning(guarded, ownerId), token };
+      }
       if (guarded.metadata?.archivedAt) {
         throw new Error("card is archived.");
       }
@@ -716,15 +733,23 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         // instead of silently overwriting a live worker's token.
         { expectedRevision: claimable.revision },
       );
-      const next = await this.updateCard(card.id, {
+      progress.claimed = true;
+      return { card: await this.markClaimedCardRunning(card, ownerId), token };
+    });
+  }
+
+  private async markClaimedCardRunning(card: TaskfoldCard, ownerId: string): Promise<TaskfoldCard> {
+    return await this.updateCard(
+      card.id,
+      {
         status:
           card.status === "backlog" || card.status === "todo" || card.status === "ready"
             ? "running"
             : card.status,
         agentId: card.agentId ?? ownerId,
-      });
-      return { card: next, token };
-    });
+      },
+      { expectedRevision: card.revision },
+    );
   }
 
   async heartbeat(id: string, input: TaskfoldHeartbeatInput): Promise<TaskfoldCard> {
@@ -769,7 +794,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     id: string,
     input: TaskfoldHeartbeatInput & { status?: unknown } = {},
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -788,9 +813,9 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           status,
           metadata: { ...existing.metadata, claim: undefined },
         },
-        { enforceStatusHolds: input.status !== undefined },
+        { enforceStatusHolds: input.status !== undefined, expectedRevision: existing.revision },
       );
-    });
+    }));
   }
 
   async complete(
@@ -798,7 +823,9 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     input: TaskfoldCompleteInput = {},
     scope: TaskfoldMutationScope | null | undefined = input,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => await this.completeDirect(id, input, scope));
+    return await this.retryOnRevisionConflict(
+      async () => await this.enqueueMutation(async () => await this.completeDirect(id, input, scope)),
+    );
   }
 
   private async completeDirect(
@@ -893,6 +920,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       },
       {
         enforceStatusHolds: true,
+        expectedRevision: existing.revision,
         ...(proof ? { preserveProofId: proofId ?? proof.id } : {}),
       },
     );
@@ -903,7 +931,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     input: TaskfoldBlockInput = {},
     scope: TaskfoldMutationScope | null | undefined = input,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -927,36 +955,44 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         existing.execution?.status === "running"
           ? { ...existing.execution, status: "blocked" as const, updatedAt: now }
           : existing.execution;
-      return await this.updateCard(id, {
-        status: "blocked",
-        ...(execution ? { execution } : {}),
-        metadata: {
-          ...metadata,
-          claim: undefined,
-          attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
-          failureCount: (metadata.failureCount ?? 0) + 1,
-          comments: [
-            ...(metadata.comments ?? []),
-            { id: randomUUID(), body: reason, createdAt: now },
-          ].slice(-MAX_CARD_COMMENTS),
-          notifications: [...(metadata.notifications ?? []), notification].slice(
-            -MAX_CARD_NOTIFICATIONS,
-          ),
+      return await this.updateCard(
+        id,
+        {
+          status: "blocked",
+          ...(execution ? { execution } : {}),
+          metadata: {
+            ...metadata,
+            claim: undefined,
+            attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
+            failureCount: (metadata.failureCount ?? 0) + 1,
+            comments: [
+              ...(metadata.comments ?? []),
+              { id: randomUUID(), body: reason, createdAt: now },
+            ].slice(-MAX_CARD_COMMENTS),
+            notifications: [...(metadata.notifications ?? []), notification].slice(
+              -MAX_CARD_NOTIFICATIONS,
+            ),
+          },
         },
-      });
-    });
+        { expectedRevision: existing.revision },
+      );
+    }));
   }
 
   async unblock(id: string, scope?: TaskfoldMutationScope): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
       }
       assertCanMutateClaimedCard(existing, scope);
       const metadata = clearDiagnostics(existing.metadata, ["blocked_too_long"]);
-      return await this.updateCard(id, { status: "todo", metadata: { ...metadata, stale: null } });
-    });
+      return await this.updateCard(
+        id,
+        { status: "todo", metadata: { ...metadata, stale: null } },
+        { expectedRevision: existing.revision },
+      );
+    }));
   }
 
   async reassign(
@@ -964,7 +1000,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
     input: TaskfoldReassignInput = {},
     scope?: TaskfoldMutationScope | null,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -991,8 +1027,12 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
             ].slice(-MAX_CARD_COMMENTS)
           : baseMetadata?.comments,
       };
-      return await this.updateCard(id, { agentId, status, metadata }, { enforceStatusHolds: true });
-    });
+      return await this.updateCard(
+        id,
+        { agentId, status, metadata },
+        { enforceStatusHolds: true, expectedRevision: existing.revision },
+      );
+    }));
   }
 
   async reclaim(
@@ -1032,7 +1072,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
             stale: null,
           },
         },
-        { enforceStatusHolds: true },
+        // 可能写两次（这里 + 下面的依赖晋级），不自动重试：冲突照常抛给调用方（TASK-6）。
+        { enforceStatusHolds: true, expectedRevision: existing.revision },
       );
       return await this.promoteDependencyReady(reclaimed.id, now);
     });
@@ -1094,13 +1135,14 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           status: "todo",
           metadata,
         },
-        { enforceStatusHolds: true },
+        { enforceStatusHolds: true, expectedRevision: existing.revision },
       );
       const specified = {
         ...updated,
         events: appendEvent(updated, { kind: "specified" }, now),
       };
-      await this.store.register(specified.id, { version: 1, card: specified });
+      // 两次写入，不自动重试；第二次以第一次写成的 revision 做 CAS，冲突照常抛出（TASK-6）。
+      await this.persistCard(specified, updated.revision);
       return specified;
     });
   }
@@ -1208,7 +1250,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           ...updatedParent,
           events: appendEvent(updatedParent, { kind: "decomposed" }),
         };
-        await this.store.register(decomposedParent.id, { version: 1, card: decomposedParent });
+        // 以刚写成的 revision 做 CAS；冲突走下面的 catch 回滚（TASK-6）。
+        await this.persistCard(decomposedParent, updatedParent.revision);
         return { parent: decomposedParent, children };
       } catch (error) {
         for (const child of children.toReversed()) {

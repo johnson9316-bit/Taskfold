@@ -146,7 +146,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
     input: TaskfoldAttachmentInput,
     scope?: TaskfoldMutationScope,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -167,7 +167,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
               -MAX_CARD_ATTACHMENTS,
             ),
           },
-        });
+        }, { expectedRevision: existing.revision });
         if (!updated.metadata?.attachments?.some((entry) => entry.id === attachment.id)) {
           await this.attachmentStore.delete(attachment.id);
           throw new Error("attachment metadata was trimmed before it could be indexed.");
@@ -177,7 +177,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
         await this.attachmentStore.delete(attachment.id);
         throw error;
       }
-    });
+    }));
   }
 
   async listAttachments(id: string): Promise<{
@@ -202,7 +202,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
     attachmentId: string,
     scope?: TaskfoldMutationScope,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(cardId);
       if (!existing) {
         throw new Error(`card not found: ${cardId}`);
@@ -213,13 +213,17 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
         throw new Error(`attachment not found: ${attachmentId}`);
       }
       await this.attachmentStore.delete(attachmentId);
-      return await this.updateCard(cardId, {
-        metadata: {
-          ...existing.metadata,
-          attachments: attachments.filter((attachment) => attachment.id !== attachmentId),
+      return await this.updateCard(
+        cardId,
+        {
+          metadata: {
+            ...existing.metadata,
+            attachments: attachments.filter((attachment) => attachment.id !== attachmentId),
+          },
         },
-      });
-    });
+        { expectedRevision: existing.revision },
+      );
+    }));
   }
 
   async addWorkerLog(
@@ -260,7 +264,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
     input: TaskfoldProtocolViolationInput = {},
     scope?: TaskfoldMutationScope,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
@@ -314,7 +318,7 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
             -MAX_CARD_NOTIFICATIONS,
           ),
         },
-      });
-    });
+      }, { expectedRevision: card.revision });
+    }));
   }
 }

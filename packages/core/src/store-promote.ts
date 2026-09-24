@@ -26,7 +26,7 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
     position: unknown,
     scope?: TaskfoldMutationScope,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -40,9 +40,10 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
         {
           allowMetadataDependencyLinks: false,
           enforceStatusHolds: true,
+          expectedRevision: existing.revision,
         },
       );
-    });
+    }));
   }
 
   async promote(
@@ -50,7 +51,7 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
     input: TaskfoldPromoteInput = {},
     scope?: TaskfoldMutationScope | null,
   ): Promise<TaskfoldCard> {
-    return await this.enqueueMutation(async () => {
+    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -73,8 +74,8 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
             stale: null,
           },
         },
-        { enforceStatusHolds: input.force !== true },
+        { enforceStatusHolds: input.force !== true, expectedRevision: existing.revision },
       );
-    });
+    }));
   }
 }
