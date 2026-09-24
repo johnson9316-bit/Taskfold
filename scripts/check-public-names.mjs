@@ -9,7 +9,6 @@ const activeFiles = [
   "src/backend/api.ts",
   "src/backend/runtime-api.ts",
   "src/backend/doctor-contract-api.ts",
-  "src/contract/index.ts",
   ...fs
     .readdirSync(path.join(root, "src/backend/src"), { recursive: true })
     .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))

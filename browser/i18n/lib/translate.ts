@@ -1,5 +1,4 @@
 // Control UI i18n module implements translate behavior.
-import { getSafeLocalStorage } from "../../local-storage.ts";
 import { en } from "../locales/en.ts";
 import {
   DEFAULT_LOCALE,
@@ -20,10 +19,19 @@ type SetLocaleOptions = {
   persist?: boolean;
 };
 
-const TASKFOLD_LOCALE_STORAGE_KEY = "taskfold.i18n.locale";
-const LEGACY_FLOWBOARD_LOCALE_STORAGE_KEY = "flowboard.i18n.locale";
-
 export type TaskfoldLocale = Extract<Locale, "en" | "zh-CN">;
+
+/**
+ * 语言偏好的来源与回写，由宿主提供（`TaskfoldHost.locale`，见 `browser/host.ts`）。
+ * 本模块不再直接读写 localStorage：OpenClaw 实现的 localStorage 读写在
+ * `browser/openclaw-host.ts`，其他宿主（如 VS Code 跟随编辑器语言）各自实现。
+ */
+export type TaskfoldLocalePreference = {
+  /** 启动时的语言，可以是任意语言标签，由 `resolveTaskfoldLocale` 归一为 en / zh-CN。 */
+  initial(): unknown;
+  /** 某个语言成功生效后回写偏好；不需要持久化的宿主可以空实现。 */
+  persist(locale: TaskfoldLocale): void;
+};
 
 export function resolveTaskfoldLocale(value: unknown): TaskfoldLocale {
   if (typeof value !== "string") {
@@ -62,55 +70,27 @@ class I18nManager {
   private localeLoadRecovery: LocaleLoadRecovery | undefined;
   private initialization: Promise<boolean> | null = null;
 
-  constructor(private readonly loadLocaleTranslation: LocaleTranslationLoader = loadLazyLocaleTranslation) {}
+  constructor(
+    private readonly loadLocaleTranslation: LocaleTranslationLoader = loadLazyLocaleTranslation,
+    private preference: TaskfoldLocalePreference | undefined = undefined,
+  ) {}
 
-  private readStoredLocale(): string | null {
-    const storage = getSafeLocalStorage();
-    if (!storage) {
-      return null;
-    }
-    try {
-      const taskfoldLocale = storage.getItem(TASKFOLD_LOCALE_STORAGE_KEY);
-      if (taskfoldLocale) {
-        return taskfoldLocale;
-      }
-      const legacyLocale = storage.getItem(LEGACY_FLOWBOARD_LOCALE_STORAGE_KEY);
-      if (legacyLocale) {
-        storage.setItem(TASKFOLD_LOCALE_STORAGE_KEY, legacyLocale);
-      }
-      return legacyLocale;
-    } catch {
-      return null;
-    }
+  private persistLocale(locale: TaskfoldLocale) {
+    this.preference?.persist(locale);
   }
 
-  private persistLocale(locale: Locale) {
-    const storage = getSafeLocalStorage();
-    if (!storage) {
-      return;
-    }
-    try {
-      storage.setItem(TASKFOLD_LOCALE_STORAGE_KEY, locale);
-    } catch {
-      // Ignore storage write failures in private/blocked contexts.
-    }
-  }
-
-  private resolveInitialLocale(hostLocale: unknown): TaskfoldLocale {
-    const language =
-      typeof globalThis.navigator?.language === "string" ? globalThis.navigator.language : null;
-    return resolveInitialTaskfoldLocale({
-      storedLocale: this.readStoredLocale(),
-      hostLocale,
-      browserLocale: language,
-    });
-  }
-
-  public initialize(hostLocale?: unknown): Promise<boolean> {
+  public initialize(preference?: TaskfoldLocalePreference): Promise<boolean> {
     if (this.initialization) {
       return this.initialization;
     }
-    this.initialization = this.applyLocale(this.resolveInitialLocale(hostLocale), false, true);
+    if (preference) {
+      this.preference = preference;
+    }
+    this.initialization = this.applyLocale(
+      resolveTaskfoldLocale(this.preference?.initial()),
+      false,
+      true,
+    );
     return this.initialization;
   }
 
@@ -250,8 +230,11 @@ export const t = (key: string, params?: Record<string, string>) => i18n.t(key, p
 
 if (typeof process !== "undefined" && (process.env?.VITEST || process.env?.NODE_ENV === "test")) {
   (globalThis as Record<PropertyKey, unknown>)[Symbol.for("openclaw.i18nManagerTestApi")] = {
-    createI18nManager(loadLocaleTranslation: LocaleTranslationLoader) {
-      return new I18nManager(loadLocaleTranslation);
+    createI18nManager(
+      loadLocaleTranslation: LocaleTranslationLoader,
+      preference?: TaskfoldLocalePreference,
+    ) {
+      return new I18nManager(loadLocaleTranslation, preference);
     },
   };
 }

@@ -22,7 +22,7 @@ import type {
   TaskfoldProjectDocumentType,
   TaskfoldProjectView,
   TaskfoldStatus,
-} from "../../../src/contract/index.ts";
+} from "@taskfold/core/contract/index.js";
 import "../../components/modal-dialog.ts";
 import { t, type TaskfoldLocale } from "../../i18n/index.ts";
 import {
@@ -30,6 +30,7 @@ import {
   taskfoldMarkdownToEditorHtml,
   renderTaskfoldMarkdown,
 } from "../../lib/markdown.ts";
+import { styleProperties } from "../../lib/style-properties.ts";
 import "../../styles/taskfold-project.css";
 
 const STATUSES: readonly TaskfoldStatus[] = [
@@ -170,6 +171,8 @@ export type TaskfoldProjectUiState = {
 export type TaskfoldProjectViewController = {
   state: TaskfoldProjectUiState;
   connected: boolean;
+  /** 宿主能力开关 `capabilities.execution`；关掉时执行区块与启动执行弹窗都不渲染。 */
+  executionEnabled: boolean;
   locale: TaskfoldLocale;
   requestUpdate: () => void;
   refresh: () => void;
@@ -581,7 +584,7 @@ function renderProjectToolbar(controller: TaskfoldProjectViewController) {
                       type="button"
                       @click=${() => controller.selectProject(project.id)}
                     >
-                      <span class="taskfold-project__project-color" style=${project.color ? `--project-color:${project.color}` : ""}></span>
+                      <span class="taskfold-project__project-color" ${styleProperties({ "--project-color": project.color })}></span>
                       <span class="taskfold-project__nav-project-name">${boardName(project)}</span>
                       ${project.archivedAt
                         ? html`<small>${t("taskfoldProject.archived")}</small>`
@@ -634,7 +637,7 @@ function renderOverview(controller: TaskfoldProjectViewController) {
                     @click=${() => controller.selectProject(project.id)}
                   >
                     <div class="taskfold-project__overview-item-top">
-                      <span class="taskfold-project__project-color" style=${project.color ? `--project-color:${project.color}` : ""}></span>
+                      <span class="taskfold-project__project-color" ${styleProperties({ "--project-color": project.color })}></span>
                       <span class="taskfold-project__overview-item-id">${project.id}</span>
                       ${project.archivedAt
                         ? html`<span class="taskfold-project__badge">${t("taskfoldProject.archived")}</span>`
@@ -1267,7 +1270,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
       <div class="taskfold-project__graph-viewport">
         ${state.graphMode === "mindmap"
           ? html`
-              <div class="taskfold-project__mindmap" style=${`--taskfold-graph-zoom:${zoom}`}>
+              <div class="taskfold-project__mindmap" ${styleProperties({ "--taskfold-graph-zoom": zoom })}>
                 <section
                   class="taskfold-project__graph-root"
                   @dragover=${(event: DragEvent) => event.preventDefault()}
@@ -1323,7 +1326,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
               </div>
             `
           : html`
-              <div class="taskfold-project__flowgraph" style=${`--taskfold-graph-zoom:${zoom}`}>
+              <div class="taskfold-project__flowgraph" ${styleProperties({ "--taskfold-graph-zoom": zoom })}>
                 <div class="taskfold-project__flow-nodes">
                   ${graphCards.map((card) => renderGraphNode(controller, card))}
                 </div>
@@ -1924,6 +1927,9 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
 }
 
 function renderExecutionSection(controller: TaskfoldProjectViewController, card: TaskfoldCard) {
+  if (!controller.executionEnabled) {
+    return nothing;
+  }
   const { state } = controller;
   const projectArchived = Boolean(state.project?.board.archivedAt);
   if (isRequirementCard(card)) {
@@ -2394,6 +2400,9 @@ function renderExecutionStartModal(
   controller: TaskfoldProjectViewController,
   modal: Extract<TaskfoldProjectModal, { kind: "execution-start" }>,
 ) {
+  if (!controller.executionEnabled) {
+    return nothing;
+  }
   const card = controller.state.project?.cards.find((candidate) => candidate.id === modal.cardId);
   if (!card) {
     return nothing;

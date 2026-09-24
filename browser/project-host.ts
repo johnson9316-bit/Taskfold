@@ -6,8 +6,8 @@ import type {
   TaskfoldProjectDocumentRead,
   TaskfoldProjectView,
   TaskfoldStatus,
-} from "../src/contract/index.ts";
-import { taskfoldHost } from "./host.ts";
+} from "@taskfold/core/contract/index.js";
+import { taskfoldHost, type TaskfoldHostEvent } from "./host.ts";
 import { i18n, type TaskfoldLocale } from "./i18n/index.ts";
 import { taskfoldEditorHtmlToMarkdown } from "./lib/markdown.ts";
 import {
@@ -19,16 +19,6 @@ import {
   type TaskfoldProjectUiState,
 } from "./pages/projects/project-view.ts";
 import "./host.css";
-
-type ChangeCursor = {
-  epoch: string;
-  revision: number;
-};
-
-type ChangeWaitResult = {
-  change?: ChangeCursor;
-  timedOut?: boolean;
-};
 
 type ProjectListResponse = {
   projects: TaskfoldBoardSummary[];
@@ -54,15 +44,6 @@ type CardExecutionPreparationResponse = TaskfoldCardExecutionPreparation;
 
 type CardExecutionInspectionResponse = TaskfoldCardExecutionInspection;
 
-function validChange(value: unknown): value is ChangeCursor {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      typeof (value as ChangeCursor).epoch === "string" &&
-      Number.isSafeInteger((value as ChangeCursor).revision),
-  );
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -85,9 +66,9 @@ function normalizeProjectDocumentRead(
 
 class TaskfoldProjectHost extends LitElement {
   private connectedToGateway = false;
+  // 宿主能力开关在挂载时读一次；render() 不直接碰宿主（卸载后仍可能有一次待执行的渲染）。
+  private executionEnabled = false;
   private stopped = false;
-  private changeLoopGeneration = 0;
-  private changeCursor: ChangeCursor | undefined;
   private refreshGeneration = 0;
   private executionRefreshTimer: number | null = null;
   private unsubscribeI18n?: () => void;
@@ -101,6 +82,7 @@ class TaskfoldProjectHost extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.stopped = false;
+    this.executionEnabled = taskfoldHost().capabilities.execution;
     this.unsubscribeI18n = i18n.subscribe((locale) => {
       document.documentElement.lang = locale;
       this.requestUpdate();
@@ -121,19 +103,15 @@ class TaskfoldProjectHost extends LitElement {
         }
       });
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
-    // Native injection shares the host shell's own already-authenticated Gateway
-    // connection (see `../需求/15.9-ControlUI注入调查.md` Q3), so there is no
-    // socket of our own to open here — only `host.connection.connected` to
-    // observe. `host.subscribe()` is the host's generic "something changed, you
-    // may want to re-render" signal; it does not fire on registration, so the
-    // initial state is synchronized with one explicit call below.
-    this.unsubscribeHost = taskfoldHost().subscribe(() => this.syncConnectionState());
+    // 宿主负责连接与变更感知（OpenClaw 实现里是共享 Gateway 连接 + `changes.wait`
+    // 长轮询，见 `openclaw-host.ts`）。`subscribe()` 注册时不回调，初始连接状态由
+    // 下面这一次显式调用同步。
+    this.unsubscribeHost = taskfoldHost().subscribe((event) => this.handleHostEvent(event));
     this.syncConnectionState();
   }
 
   disconnectedCallback() {
     this.stopped = true;
-    this.changeLoopGeneration += 1;
     this.refreshGeneration += 1;
     this.clearExecutionRefreshTimer();
     this.unsubscribeI18n?.();
@@ -172,56 +150,29 @@ class TaskfoldProjectHost extends LitElement {
       });
   }
 
+  private handleHostEvent(event: TaskfoldHostEvent) {
+    if (event.type === "changes") {
+      if (this.connectedToGateway) {
+        void this.refresh();
+      }
+      return;
+    }
+    this.syncConnectionState();
+  }
+
   private syncConnectionState() {
     const wasConnected = this.connectedToGateway;
-    const isConnected = taskfoldHost().connection.connected;
+    const isConnected = taskfoldHost().connected;
     this.connectedToGateway = isConnected;
     if (isConnected && !wasConnected) {
       void this.refresh();
-      this.startChangeWait();
     } else if (!isConnected && wasConnected) {
-      this.changeLoopGeneration += 1;
       // The host does not surface a disconnect reason string the way the old
       // self-managed WebSocket did; reuse the same "waiting on the Gateway"
       // copy `mutate()` already shows for the same underlying condition.
       this.state.error = i18n.t("taskfoldProject.connectionRequired");
     }
     this.requestUpdate();
-  }
-
-  private startChangeWait() {
-    const generation = ++this.changeLoopGeneration;
-    void this.waitForChanges(generation);
-  }
-
-  private async waitForChanges(generation: number) {
-    while (
-      !this.stopped &&
-      generation === this.changeLoopGeneration &&
-      this.connectedToGateway
-    ) {
-      try {
-        const result = await taskfoldHost().request<ChangeWaitResult>("taskfold.changes.wait", {
-          ...(this.changeCursor ? { after: this.changeCursor } : {}),
-          timeoutMs: 25_000,
-        });
-        if (generation !== this.changeLoopGeneration || !this.connectedToGateway) {
-          return;
-        }
-        if (validChange(result.change)) {
-          const wasUninitialized = this.changeCursor === undefined;
-          this.changeCursor = result.change;
-          if (!wasUninitialized && !result.timedOut) {
-            void this.refresh();
-          }
-        }
-      } catch {
-        if (generation !== this.changeLoopGeneration || !this.connectedToGateway) {
-          return;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
-      }
-    }
   }
 
   private async refresh() {
@@ -444,16 +395,16 @@ class TaskfoldProjectHost extends LitElement {
     }, { closeModal: false });
   }
 
-  private archiveProject(archived: boolean) {
+  private async archiveProject(archived: boolean) {
     const project = this.state.project;
     if (!project) {
       return;
     }
     if (
       archived &&
-      !window.confirm(
+      !(await taskfoldHost().confirm(
         i18n.t("taskfoldProject.archiveProjectConfirm"),
-      )
+      ))
     ) {
       return;
     }
@@ -837,8 +788,8 @@ class TaskfoldProjectHost extends LitElement {
     }, { closeModal: false });
   }
 
-  private deleteDocument(id: string) {
-    if (!window.confirm(i18n.t("common.delete"))) {
+  private async deleteDocument(id: string) {
+    if (!(await taskfoldHost().confirm(i18n.t("common.delete")))) {
       return;
     }
     void this.mutate(async () => {
@@ -863,6 +814,9 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private prepareCardExecution(id: string) {
+    if (!this.executionEnabled) {
+      return;
+    }
     if (!this.connectedToGateway) {
       this.state.error = i18n.t("taskfoldProject.connectionRequired");
       this.requestUpdate();
@@ -905,6 +859,9 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private startCardExecution(id: string) {
+    if (!this.executionEnabled) {
+      return;
+    }
     const preparation =
       this.state.executionPreparationCardId === id ? this.state.executionPreparation : null;
     if (!preparation) {
@@ -928,7 +885,11 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private refreshCardExecution(id: string) {
-    if (!this.connectedToGateway || this.state.executionInspectionLoading) {
+    if (
+      !this.executionEnabled ||
+      !this.connectedToGateway ||
+      this.state.executionInspectionLoading
+    ) {
       return;
     }
     this.state.executionInspectionCardId = id;
@@ -973,7 +934,7 @@ class TaskfoldProjectHost extends LitElement {
   }
 
   private steerCardExecution(id: string, message: string) {
-    if (!message.trim()) {
+    if (!this.executionEnabled || !message.trim()) {
       return;
     }
     void this.mutate(
@@ -999,8 +960,11 @@ class TaskfoldProjectHost extends LitElement {
     );
   }
 
-  private abortCardExecution(id: string) {
-    if (!window.confirm(i18n.t("taskfoldProject.stopExecutionConfirm"))) {
+  private async abortCardExecution(id: string) {
+    if (
+      !this.executionEnabled ||
+      !(await taskfoldHost().confirm(i18n.t("taskfoldProject.stopExecutionConfirm")))
+    ) {
       return;
     }
     void this.mutate(
@@ -1086,6 +1050,7 @@ class TaskfoldProjectHost extends LitElement {
     return html`${renderTaskfoldProjects({
       state: this.state,
       connected: this.connectedToGateway,
+      executionEnabled: this.executionEnabled,
       requestUpdate: () => this.requestUpdate(),
       refresh: () => void this.refresh(),
       locale: i18n.getLocale(),
