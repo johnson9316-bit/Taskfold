@@ -86,9 +86,8 @@ export class TaskfoldChangeTracker {
   }
 
   track<T>(store: TaskfoldKeyedStore<T>): TaskfoldKeyedStore<T> {
-    // The wrapper exposes `compareAndSwap` exactly when `store` does, so it satisfies
-    // the same (T-dependent) required/optional CAS shape; TS cannot see that through
-    // the conditional type in persistence-types.ts, hence the cast.
+    // CAS 在所有 store 上都是必选方法（persistence-types.ts），包装层无条件透传，不再需要
+    // 条件展开与类型断言（TASK-2 备注①的收口：SQLite 运行时后端下线后恢复）。
     return {
       register: async (key, value) => {
         await store.register(key, value);
@@ -103,22 +102,18 @@ export class TaskfoldChangeTracker {
         return deleted;
       },
       entries: async () => await store.entries(),
-      ...(store.compareAndSwap
-        ? {
-            compareAndSwap: async (
-              key: string,
-              expectedRevision: number,
-              value: T,
-              onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
-            ) => {
-              const swapped = await store.compareAndSwap!(key, expectedRevision, value, onReject);
-              if (swapped) {
-                this.mutationRevision += 1;
-              }
-              return swapped;
-            },
-          }
-        : {}),
+      compareAndSwap: async (
+        key: string,
+        expectedRevision: number,
+        value: T,
+        onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
+      ) => {
+        const swapped = await store.compareAndSwap(key, expectedRevision, value, onReject);
+        if (swapped) {
+          this.mutationRevision += 1;
+        }
+        return swapped;
+      },
       ...(store.registerIfAbsent
         ? {
             registerIfAbsent: async (key: string, value: T) => {
@@ -130,7 +125,7 @@ export class TaskfoldChangeTracker {
             },
           }
         : {}),
-    } as TaskfoldKeyedStore<T>;
+    };
   }
 
   subscribe(listener: (change: TaskfoldChange) => void): () => void {

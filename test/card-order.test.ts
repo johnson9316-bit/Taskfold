@@ -11,7 +11,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
-import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "./helpers/legacy-sqlite-store.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];

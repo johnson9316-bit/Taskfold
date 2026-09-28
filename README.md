@@ -112,17 +112,18 @@ normally either way.
 
 ## Data and Execution
 
-Taskfold stores its SQLite state under:
+Taskfold stores project cards and documents under each repository's main checkout:
 
 ```text
-plugins/taskfold/taskfold.sqlite
+<repo>/.taskfold/
 ```
 
-relative to `OPENCLAW_STATE_DIR`. It uses its own data, commands, tools, RPC
-methods, UI route, and database namespace. The bundled OpenClaw Workboard can
-remain enabled.
+The OpenClaw project registry remains under `OPENCLAW_STATE_DIR/plugins/taskfold/`.
+The old `taskfold.sqlite` is retained as a migration backup; it is no longer the
+runtime store. Taskfold uses its own commands, tools, and RPC methods. The bundled
+OpenClaw Workboard can remain enabled.
 
-### Planned: Markdown-Native Storage
+### Markdown Storage
 
 Taskfold sits between two tools that each cover half of this problem. OpenClaw's
 Workboard supplies the execution side — managed worktrees, subagent dispatch,
@@ -130,21 +131,21 @@ claim and reconciliation — while keeping its state in a database. Backlog.md
 keeps tasks as plain Markdown in the repository, readable and diffable next to
 the code, but has no execution layer.
 
-The planned direction combines the two: keep the execution orchestration, and
-move card storage to Markdown files under `<repo>/.taskfold/`, format-compatible
-with Backlog.md so that both tools can operate on the same files.
+Taskfold keeps execution orchestration and stores cards as Markdown under
+`<repo>/.taskfold/`. The file format draws on Backlog.md, but its CLI does not
+operate on Taskfold cards. `.taskfold/.runtime/` and `.taskfold/.locks/` stay out
+of Git. Project-local paths saved in cards and documents use `./` relative to
+the main checkout; existing absolute paths remain readable.
 
-This describes planned work, not current behavior — cards are stored in SQLite
-today. The full design is in `需求/16-文件存储改造.md` (Chinese).
+The design is in `需求/16-文件存储改造.md` and `需求/18-多宿主架构.md` (Chinese).
 
-### Migrating From Flowboard
+### Migrating Existing SQLite Data
 
-Taskfold `0.2.0` is the renamed successor to the local Flowboard plugin. Before
-the first Taskfold startup, disable the old `flowboard` plugin and restart the
-Gateway. If `plugins/flowboard/flowboard.sqlite` exists and the Taskfold
-database does not, Taskfold makes a consistent SQLite snapshot at
-`plugins/taskfold/taskfold.sqlite` and upgrades its private table names. The
-old database is left untouched as a rollback copy.
+For an existing Taskfold SQLite installation, stop the Gateway, then run
+`openclaw taskfold migrate-sqlite --dry-run` and
+`openclaw taskfold migrate-sqlite --apply`. The apply command backs up the
+Taskfold SQLite files before writing project data. Start the Gateway after the
+migration. Flowboard's historical database is not modified.
 
 When a card starts OpenClaw-native execution, Taskfold only supports a
 managed Git worktree. It does not fall back to running directly in the primary
@@ -156,8 +157,8 @@ not automatically infer delivery, validation, or release facts.
 `packages/cli` builds a standalone `taskfold` command that reads and writes the cards in a
 repository's `.taskfold/` directory without OpenClaw or the Gateway. It is the write path
 for AI agents: `--json` output with a versioned schema, stable error codes on stderr, and
-`taskfold guidelines` to add a short usage block to `AGENTS.md` / `CLAUDE.md`. Until the
-plugin itself moves to the file store, the CLI and the plugin do not share cards.
+`taskfold guidelines` to add a short usage block to `AGENTS.md` / `CLAUDE.md`.
+The CLI, VS Code extension, and OpenClaw plugin now read the same files.
 
 ```bash
 npm run build:cli
@@ -175,7 +176,8 @@ commands and the output contract.
 repositories in your workspace. Like the CLI it works on `.taskfold/` directly, without
 OpenClaw or the Gateway. Cards are editable, and every write, including drag and drop, is
 checked against the revision the board last read. A conflict offers Reload, Overwrite or
-View Diff. Build a self-contained `.vsix` and install it:
+View Diff. The document library also supports project Markdown documents. Build a
+self-contained `.vsix` and install it:
 
 ```bash
 npm run package -w packages/vscode

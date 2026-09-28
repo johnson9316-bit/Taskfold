@@ -12,6 +12,8 @@
 import path from "node:path";
 import type { TaskfoldProjectDocument } from "./contract/index.js";
 import type { PersistedTaskfoldProjectDocument, TaskfoldKeyedStore } from "./persistence-types.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
+import { mapDocumentProjectPath } from "./file-store-project-paths.js";
 import {
   listFileNamesSafe,
   readFileIfExists,
@@ -31,12 +33,12 @@ function documentFileName(document: TaskfoldProjectDocument): string {
   return `${document.key}${DOCUMENT_EXTENSION}`;
 }
 
-function readDocumentAt(filePath: string): TaskfoldProjectDocument | undefined {
+function readDocumentAt(filePath: string, projectRoot: string): TaskfoldProjectDocument | undefined {
   const content = readFileIfExists(filePath);
   if (content === undefined) {
     return undefined;
   }
-  return JSON.parse(content) as TaskfoldProjectDocument;
+  return mapDocumentProjectPath(projectRoot, JSON.parse(content) as TaskfoldProjectDocument, "read");
 }
 
 function listDocumentFiles(documentsDir: string): string[] {
@@ -45,10 +47,10 @@ function listDocumentFiles(documentsDir: string): string[] {
   );
 }
 
-function findDocumentFilePathById(documentsDir: string, id: string): string | undefined {
+function findDocumentFilePathById(documentsDir: string, projectRoot: string, id: string): string | undefined {
   for (const fileName of listDocumentFiles(documentsDir)) {
     const filePath = path.join(documentsDir, fileName);
-    if (readDocumentAt(filePath)?.id === id) {
+    if (readDocumentAt(filePath, projectRoot)?.id === id) {
       return filePath;
     }
   }
@@ -57,43 +59,47 @@ function findDocumentFilePathById(documentsDir: string, id: string): string | un
 
 export function createTaskfoldFileDocumentStore(options: {
   documentsDir: string;
+  projectRoot: string;
 }): TaskfoldKeyedStore<PersistedTaskfoldProjectDocument> {
-  const { documentsDir } = options;
+  const { documentsDir, projectRoot } = options;
 
   return {
     async register(key, value) {
       assertValidDocumentPayload(key, value);
-      const existingPath = findDocumentFilePathById(documentsDir, key);
+      const existingPath = findDocumentFilePathById(documentsDir, projectRoot, key);
       const newPath = path.join(documentsDir, documentFileName(value.document));
-      writeFileAtomic(newPath, JSON.stringify(value.document, null, 2));
+      writeFileAtomic(newPath, JSON.stringify(mapDocumentProjectPath(projectRoot, value.document, "write"), null, 2));
       if (existingPath && existingPath !== newPath) {
         removeFileIfExists(existingPath);
       }
     },
 
     async lookup(key) {
-      const filePath = findDocumentFilePathById(documentsDir, key);
+      const filePath = findDocumentFilePathById(documentsDir, projectRoot, key);
       if (!filePath) {
         return undefined;
       }
-      const document = readDocumentAt(filePath);
+      const document = readDocumentAt(filePath, projectRoot);
       return document ? { version: 1, document } : undefined;
     },
 
     async delete(key) {
-      const filePath = findDocumentFilePathById(documentsDir, key);
+      const filePath = findDocumentFilePathById(documentsDir, projectRoot, key);
       return filePath ? removeFileIfExists(filePath) : false;
     },
 
     async entries() {
       const results: Array<{ key: string; value: PersistedTaskfoldProjectDocument }> = [];
       for (const fileName of listDocumentFiles(documentsDir)) {
-        const document = readDocumentAt(path.join(documentsDir, fileName));
+        const document = readDocumentAt(path.join(documentsDir, fileName), projectRoot);
         if (document) {
           results.push({ key: document.id, value: { version: 1, document } });
         }
       }
       return results;
     },
+
+    // 没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 }

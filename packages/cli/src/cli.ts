@@ -14,11 +14,13 @@ import type { TaskfoldProjectStore } from "@taskfold/core/store-projects.js";
 import {
   boardsInUse,
   defaultBoardFor,
+  readCardDisplayIds,
   resolveCard,
   resolveCreateBoard,
   toCardDetail,
   toCardSummary,
   updateCardWithRetry,
+  type CardDisplayIds,
 } from "./cards.js";
 import { TASKFOLD_CLI_EXIT_CODES, TaskfoldCliError, toCliError } from "./errors.js";
 import {
@@ -129,18 +131,19 @@ async function readTextSource(source: string, run: RunCliOptions, flag: string):
 // 人读文本
 // ---------------------------------------------------------------------------
 
-function cardLine(out: CliOutput, card: TaskfoldCard): string {
-  const view = toCardSummary(card);
+function cardLine(out: CliOutput, card: TaskfoldCard, displayIds: CardDisplayIds): string {
+  const view = toCardSummary(card, displayIds);
   const labels = view.labels.length ? `  [${view.labels.join(", ")}]` : "";
   const archived = view.archived ? "  (archived)" : "";
-  return `${out.dim(view.shortId)}  ${out.status(view.status, 9)} ${view.priority.padEnd(6)}  ${view.boardId}  ${view.title}${labels}${archived}`;
+  return `${out.dim(view.displayId ?? view.shortId)}  ${out.status(view.status, 9)} ${view.priority.padEnd(6)}  ${view.boardId}  ${view.title}${labels}${archived}`;
 }
 
-function printCardDetail(out: CliOutput, card: TaskfoldCard): void {
-  const view = toCardDetail(card);
+function printCardDetail(out: CliOutput, card: TaskfoldCard, displayIds: CardDisplayIds): void {
+  const view = toCardDetail(card, displayIds);
   out.line(out.bold(view.title));
   const rows: Array<[string, string]> = [
     ["id", view.id],
+    ["number", view.displayId ?? "-"],
     ["status", out.status(view.status)],
     ["priority", view.priority],
     ["labels", view.labels.length ? view.labels.join(", ") : "-"],
@@ -178,9 +181,9 @@ function helpText(sections: { reads?: string; writes?: string; examples: string[
 }
 
 /** 打开 `cwd` 所属仓库的 `.taskfold/`，跑一个命令。 */
-async function withProject<T>(run: RunCliOptions, body: (store: TaskfoldProjectStore) => Promise<T>): Promise<T> {
-  const { store } = openTaskfoldProject(run.cwd);
-  return await body(store);
+async function withProject<T>(run: RunCliOptions, body: (store: TaskfoldProjectStore, displayIds: CardDisplayIds, dataDir: string) => Promise<T>): Promise<T> {
+  const { store, dataDir } = openTaskfoldProject(run.cwd);
+  return await body(store, readCardDisplayIds(dataDir), dataDir);
 }
 
 function buildProgram(run: RunCliOptions, out: CliOutput): Command {
@@ -263,7 +266,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
       async (options: JsonFlag & { status?: string[]; label?: string; board?: string; includeArchived?: boolean }) => {
         await withProject(
           run,
-          async (store) => {
+          async (store, displayIds) => {
             const cards = (await store.list(options.board ? { boardId: options.board } : {})).filter(
               (card) =>
                 (options.includeArchived || !card.metadata?.archivedAt) &&
@@ -271,14 +274,14 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
                 (!options.label || card.labels.includes(options.label)),
             );
             if (options.json) {
-              out.json("card-list", { boardId: options.board ?? null, cards: cards.map(toCardSummary) });
+              out.json("card-list", { boardId: options.board ?? null, cards: cards.map((card) => toCardSummary(card, displayIds)) });
               return;
             }
             if (cards.length === 0) {
               out.line("No cards.");
             }
             for (const card of cards) {
-              out.line(cardLine(out, card));
+              out.line(cardLine(out, card, displayIds));
             }
           }
         );
@@ -287,26 +290,26 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
 
   program
     .command("show")
-    .argument("<id>", "card id or a unique prefix of it (e.g. the 8-character short id)")
+    .argument("<id>", "card UUID, unique UUID prefix, or card-N display number")
     .description("show one card, including its notes (the card body) and current revision")
     .option("--json", "print one JSON object (kind: card)")
     .addHelpText(
       "after",
       helpText({
         reads: "the card's file under .taskfold/cards/",
-        examples: ["taskfold show 1a2b3c4d", "taskfold show 1a2b3c4d --json"],
+        examples: ["taskfold show card-1", "taskfold show 1a2b3c4d --json"],
       }),
     )
     .action(async (id: string, options: JsonFlag) => {
       await withProject(
         run,
-        async (store) => {
-          const card = await resolveCard(store, id);
+        async (store, displayIds) => {
+          const card = await resolveCard(store, id, displayIds);
           if (options.json) {
-            out.json("card", { card: toCardDetail(card) });
+            out.json("card", { card: toCardDetail(card, displayIds) });
             return;
           }
-          printCardDetail(out, card);
+          printCardDetail(out, card, displayIds);
         }
       );
     });
@@ -357,7 +360,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
           options.notesFile !== undefined ? await readTextSource(options.notesFile, run, "--notes-file") : options.notes;
         await withProject(
           run,
-          async (store) => {
+          async (store, displayIds, dataDir) => {
             const boardId = await resolveCreateBoard(store, options.board);
             const created = await store.create({
               title: titleWords.join(" "),
@@ -371,11 +374,12 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
             // 按落盘后的样子输出：md 里 created_date 只到分钟，不重读的话这里的 createdAt 与之后
             // `show` 看到的不一致。
             const card = (await store.get(created.id)) ?? created;
+            displayIds = readCardDisplayIds(dataDir);
             if (options.json) {
-              out.json("card", { card: toCardDetail(card) });
+              out.json("card", { card: toCardDetail(card, displayIds) });
               return;
             }
-            printCardDetail(out, card);
+            printCardDetail(out, card, displayIds);
           }
         );
       },
@@ -383,7 +387,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
 
   program
     .command("update")
-    .argument("<id>", "card id or a unique prefix of it")
+    .argument("<id>", "card UUID, unique UUID prefix, or card-N display number")
     .description(
       "change a card. Field flags are incremental and need no revision; replacing the whole " +
         "body (--notes / --notes-file) requires --expect-revision",
@@ -476,8 +480,8 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
         }
         await withProject(
           run,
-          async (store) => {
-            const target = await resolveCard(store, id);
+          async (store, displayIds) => {
+            const target = await resolveCard(store, id, displayIds);
             const card = await updateCardWithRetry(
               store,
               target.id,
@@ -502,10 +506,10 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
               options.expectRevision,
             );
             if (options.json) {
-              out.json("card", { card: toCardDetail(card) });
+              out.json("card", { card: toCardDetail(card, displayIds) });
               return;
             }
-            printCardDetail(out, card);
+            printCardDetail(out, card, displayIds);
           }
         );
       },
@@ -513,7 +517,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
 
   program
     .command("delete")
-    .argument("<id>", "card id or a unique prefix of it")
+    .argument("<id>", "card UUID, unique UUID prefix, or card-N display number")
     .description("delete a card permanently (its file and runtime state)")
     .option("--json", "print one JSON object (kind: card-deleted)")
     .addHelpText(
@@ -529,8 +533,8 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (id: string, options: JsonFlag) => {
       await withProject(
         run,
-        async (store) => {
-          const card = await resolveCard(store, id);
+        async (store, displayIds) => {
+          const card = await resolveCard(store, id, displayIds);
           const { deleted } = await store.delete(card.id);
           if (!deleted) {
             throw new TaskfoldCliError("NOT_FOUND", `card not found: ${card.id}`, { id: card.id });
@@ -558,7 +562,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (options: JsonFlag) => {
       await withProject(
         run,
-        async (store) => {
+        async (store, displayIds) => {
           const cards = await store.list();
           const inUse = new Set(boardsInUse(cards));
           const defaultBoardId = defaultBoardFor(cards) ?? null;

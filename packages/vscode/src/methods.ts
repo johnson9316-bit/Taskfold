@@ -11,6 +11,7 @@
 //   Reload / Overwrite / View Diff，结果按 packages/ui/src/host.ts 的 `TaskfoldCardWriteResult` 返回；
 // - 项目管理、资料库、执行相关的 method 不实现，前端按能力开关不显示对应界面。
 import fs from "node:fs";
+import path from "node:path";
 import { toCliError } from "@taskfold/cli/errors.js";
 import { redactClaimToken } from "@taskfold/core/card-redaction.js";
 import type {
@@ -19,7 +20,9 @@ import type {
   TaskfoldBoardViewSettings,
   TaskfoldCard,
   TaskfoldMilestone,
+  TaskfoldProjectDocument,
 } from "@taskfold/core/contract/index.js";
+import { readTaskfoldProjectDocument, writeTaskfoldProjectDocumentPath } from "@taskfold/core/project-document-reader.js";
 import { splitCardRuntime } from "@taskfold/core/file-store-card-runtime.js";
 import { findCardFilePath } from "@taskfold/core/file-store-cards.js";
 import { createMarkdownCardCodec } from "@taskfold/core/file-store-codec.js";
@@ -212,6 +215,19 @@ export function createTaskfoldVscodeMethods(deps: {
     card: presentCard(project, card),
   });
 
+  const documentPathAccess = (project: TaskfoldVscodeProject) => async (filePath: string) => {
+    const root = fs.realpathSync(projectRootDir(project));
+    const relative = path.relative(root, filePath);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("project document path is outside the workspace.");
+    }
+  };
+
+  const presentDocument = (project: TaskfoldVscodeProject, document: TaskfoldProjectDocument) => ({
+    ...document,
+    boardId: project.key,
+  });
+
   const methods: Record<string, (params: Params) => Promise<unknown>> = {
     "taskfold.projects.list": async () => {
       const projects = await registry.refresh();
@@ -254,6 +270,64 @@ export function createTaskfoldVscodeMethods(deps: {
       const board = await project.store.updateProject({ id: project.boardId, boardView: params.boardView });
       await viewState.update(boardViewStateKey(project), board.boardView);
       return { board: presentBoard(project, board) };
+    },
+
+    "taskfold.projects.documents.list": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      const result = await project.store.listProjectDocuments(project.boardId, { includeHidden: params.includeHidden });
+      return { documents: result.documents.map((document) => presentDocument(project, document)) };
+    },
+    "taskfold.projects.documents.read": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      const preview = await readTaskfoldProjectDocument({ document, assertPathAllowed: documentPathAccess(project) });
+      return { preview: { ...preview, document: presentDocument(project, preview.document) } };
+    },
+    "taskfold.projects.documents.write": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      const assertPathAllowed = documentPathAccess(project);
+      if (document.type === "markdown") {
+        const current = await readTaskfoldProjectDocument({ document, assertPathAllowed });
+        if (typeof params.expectedRevision !== "string" || params.expectedRevision !== current.revision) {
+          throw new Error("project document changed; reload it before saving.");
+        }
+        const updated = await project.store.updateProjectDocument(document.id, { content: params.content });
+        const preview = await readTaskfoldProjectDocument({ document: updated, assertPathAllowed });
+        return { preview: { ...preview, document: presentDocument(project, preview.document) } };
+      }
+      const preview = await writeTaskfoldProjectDocumentPath({
+        document, content: params.content, expectedRevision: params.expectedRevision, assertPathAllowed,
+      });
+      return { preview: { ...preview, document: presentDocument(project, preview.document) } };
+    },
+    "taskfold.projects.documents.create": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      const document = await project.store.createProjectDocument({
+        ...pick(params, ["key", "section", "title", "type", "summary", "target", "content"]),
+        boardId: project.boardId,
+      });
+      return { document: presentDocument(project, document) };
+    },
+    "taskfold.projects.documents.update": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      const updated = await project.store.updateProjectDocument(document.id, pick(params, ["title", "type", "summary", "target", "content"]));
+      return { document: presentDocument(project, updated) };
+    },
+    "taskfold.projects.documents.reorder": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      const result = await project.store.reorderProjectDocuments({ boardId: project.boardId, documentIds: params.documentIds });
+      return { documents: result.documents.map((document) => presentDocument(project, document)) };
+    },
+    "taskfold.projects.documents.hide": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      return { document: presentDocument(project, await project.store.hideProjectDocument(document.id, true)) };
+    },
+    "taskfold.projects.documents.restore": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      return { document: presentDocument(project, await project.store.hideProjectDocument(document.id, false)) };
+    },
+    "taskfold.projects.documents.delete": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      return await project.store.deleteProjectDocument(document.id);
     },
 
     "taskfold.projects.milestones.create": async (params) => {

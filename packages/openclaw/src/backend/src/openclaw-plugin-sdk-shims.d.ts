@@ -6,40 +6,8 @@
 // calls, sourced by reading the compiled implementation directly. Delete the
 // relevant block once upstream restores a `types` export for that subpath.
 
-// "openclaw/plugin-sdk/runtime-doctor": PluginDoctorStateMigration is still
-// read and invoked by the host exactly as before (see
-// node_modules/openclaw/dist/state-migrations.plugin-doctor-*.mjs, which
-// still calls `entry.migration.detectLegacyState(...)` with this shape) and
-// the host ships an equivalent first-party plugin doctor contract module
-// (node_modules/openclaw/dist/extensions/*/doctor-contract-api.js) built on
-// the identical { id, label, detectLegacyState, migrateLegacyState } shape
-// with openPluginStateKeyedStore — only the .d.ts export was dropped.
-declare module "openclaw/plugin-sdk/runtime-doctor" {
-  import type { TaskfoldKeyedStore } from "@taskfold/core/persistence-types.js";
-
-  export interface PluginDoctorStateMigrationContext {
-    openPluginStateKeyedStore<T>(options: {
-      namespace: string;
-      maxEntries: number;
-      env?: NodeJS.ProcessEnv;
-    }): TaskfoldKeyedStore<T>;
-  }
-
-  export interface PluginDoctorStateMigration {
-    id: string;
-    label: string;
-    detectLegacyState(params: {
-      context: PluginDoctorStateMigrationContext;
-      env: NodeJS.ProcessEnv;
-      stateDir: string;
-    }): Promise<{ preview: string[] } | null>;
-    migrateLegacyState(params: {
-      context: PluginDoctorStateMigrationContext;
-      env: NodeJS.ProcessEnv;
-      stateDir: string;
-    }): Promise<{ changes: string[]; warnings: string[] }>;
-  }
-}
+// （"openclaw/plugin-sdk/runtime-doctor" 的 shim 已随 TASK-10 第二段一起删除：.28 KV→SQLite
+// doctor 迁移没有落点——数据真相源已是文件，且它依赖的 createTaskfoldSqliteStores 写路径已下线。）
 
 // "openclaw/plugin-sdk/number-runtime": signatures confirmed against
 // node_modules/openclaw/dist/number-coercion-*.mjs.

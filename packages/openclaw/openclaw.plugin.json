@@ -7,13 +7,6 @@
       "hasSubcommands": true
     }
   ],
-  "doctorContract": {
-    "stateMigrations": [
-      {
-        "id": "taskfold-28-kv-to-sqlite"
-      }
-    ]
-  },
   "enabledByDefault": false,
   "activation": {
     "onStartup": true,

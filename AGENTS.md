@@ -4,7 +4,7 @@
 
 ## 环境事实
 
-核实日期：2026-09-18。
+核实日期：2026-09-28。
 
 | 项 | 值 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | `enabledByDefault` | `false`（`packages/openclaw/openclaw.plugin.json`）—— 每次插件 id 改名（Flowboard → Taskfold）都要手动 `openclaw plugins enable taskfold`，宿主不会自动跟随 |
 | Capability shape | `non-capability` —— `enable` 不需要 `--accept-capabilities` |
 | Trust 状态 | `reason=record-missing`，本地路径加载会有一条 WARN「can't verify where this plugin came from」，属预期，不是错误 |
-| 数据库 | `~/.openclaw/plugins/taskfold/taskfold.sqlite` |
+| 数据存储 | 项目主 checkout 的 `.taskfold/`；`~/.openclaw/plugins/taskfold/projects.json` 保存 OpenClaw 项目注册表。旧 `taskfold.sqlite` 只供迁移或回滚，不参与运行 |
 
 ## 与内置 workboard 并存
 
@@ -27,7 +27,7 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 - RPC 方法前缀 `taskfold.*` vs `workboard.*`
 - 工具前缀 `taskfold_*` vs `workboard_*`
 - 命令别名 `taskfold` vs `workboard`
-- 各自独立的 SQLite 数据库
+- 各自独立的数据存储（Taskfold 文件，stock workboard SQLite）
 - Webhooks 路由 `/plugins/webhooks/workboard` 绑定的是 stock workboard，与 Taskfold 无关
 
 `npm run check:public-names`（`scripts/check-public-names.mjs`）是这条隔离边界的守门人，会校验没有未迁移的公共 `workboard` 残留名，且 manifest 声明的工具面与源码工具名集合完全一致。
@@ -61,10 +61,12 @@ Control UI 已迁到宿主原生注入（前端源码 `packages/ui/src/` → 产
 
 | 文件 | 大小 | 状态 |
 | --- | --- | --- |
-| `taskfold/taskfold.sqlite` | ~600K | **在用** |
-| `flowboard/flowboard.sqlite` | ~784K | 迁移前回滚副本，`sqlite-store.ts` 的 `copyLegacyFlowboardDatabase` 只在目标库不存在时才会读它，正常运行不会再碰它 |
+| `taskfold/taskfold.sqlite` | ~600K | 已迁移的旧库，仅供回滚；生产从项目 `.taskfold/` 读写 |
+| `flowboard/flowboard.sqlite` | ~784K | 更早的回滚副本，当前代码不读取 |
 | `gsdboard/gsdboard.sqlite` | ~164K | 更早一次改名留下的旧数据，与当前迁移路径无关 |
 | `workboard/workboard.sqlite` | ~204K | 属于 stock `workboard` 插件自己的数据，与 Taskfold 无关 |
+
+本仓库的 `.taskfold/` 已整理为可入库数据：卡片工作区和资料路径以 `./` 表示项目根相对路径，读取时解析到当前主 checkout；`.runtime/`、`.locks/` 继续忽略。procloud 的 `.taskfold/` 未作同类整理。
 
 已核实：`taskfold_*` 与 `flowboard_*` 的 22 张对应表行数一致（`cards` 102、`boards` 4、`milestones` 12、`project_documents` 58），且 `taskfold_schema_migrations` 比 `flowboard_schema_migrations` 更新（`schema-8` vs `schema-7`）—— 数据没有丢失，迁移已完成。**后续不要再动 `flowboard`/`gsdboard`/`workboard` 这三份数据库。**
 

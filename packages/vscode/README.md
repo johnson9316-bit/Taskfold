@@ -32,6 +32,9 @@ Run **Taskfold: Open Board** from the Command Palette.
 - **Editing**: drag cards between columns, change status or milestone, and use **Edit card** in
   the card details to change the title, priority and body. **Open in editor** opens the card's
   Markdown file in a normal VS Code editor.
+- **Documents**: browse, create, edit, reorder, hide and delete project documents. Markdown
+  files can be previewed and edited when they are inside the project checkout; saving checks
+  the document revision and rejects an outdated draft.
 - **Language** follows VS Code's display language (English or Simplified Chinese).
 
 ## Conflicts
@@ -53,7 +56,7 @@ while it is visible.
 ## Not in this version
 
 Starting or steering executions, creating / archiving / reordering projects, project settings,
-moving cards between projects, and the document library are hidden in VS Code. The board view
+moving cards between projects are hidden in VS Code. The board view
 settings (group by / sort) are remembered per workspace.
 
 WSL drvfs paths (`/mnt/c/...`) and `\\wsl$` paths are not supported (see the CLI README).

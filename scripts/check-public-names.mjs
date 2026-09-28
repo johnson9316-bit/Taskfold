@@ -10,7 +10,6 @@ const activeFiles = [
   `${backendDir}/index.ts`,
   `${backendDir}/api.ts`,
   `${backendDir}/runtime-api.ts`,
-  `${backendDir}/doctor-contract-api.ts`,
   ...fs
     .readdirSync(path.join(root, backendDir, "src"), { recursive: true })
     .filter((entry) => typeof entry === "string" && entry.endsWith(".ts"))

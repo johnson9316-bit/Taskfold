@@ -415,28 +415,25 @@ Please report this to https://github.com/markedjs/marked.`,o){let a="<p>An error
         <label>
           ${s("taskfoldProject.groupBy")}
           <select
-            .value=${a.groupBy}
             @change=${d=>{let c=d.currentTarget.value;o.updateBoardView({groupBy:c,sortBy:c==="milestone"?a.sortBy:a.sortBy==="manual"?"priority":a.sortBy,sortDirection:a.sortDirection})}}
           >
-            ${tl.map(d=>h`<option value=${d}>${s(`taskfoldProject.groupBy${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
+            ${tl.map(d=>h`<option value=${d} .selected=${d===a.groupBy}>${s(`taskfoldProject.groupBy${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
           </select>
         </label>
         <label>
           ${s("taskfoldProject.sortBy")}
           <select
-            .value=${a.sortBy}
             @change=${d=>o.updateBoardView({...a,sortBy:d.currentTarget.value})}
           >
-            ${ol.filter(d=>a.groupBy==="milestone"||d!=="manual").map(d=>h`<option value=${d}>${s(`taskfoldProject.sortBy${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
+            ${ol.filter(d=>a.groupBy==="milestone"||d!=="manual").map(d=>h`<option value=${d} .selected=${d===a.sortBy}>${s(`taskfoldProject.sortBy${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
           </select>
         </label>
         <label>
           ${s("taskfoldProject.sortDirection")}
           <select
-            .value=${a.sortDirection}
             @change=${d=>o.updateBoardView({...a,sortDirection:d.currentTarget.value})}
           >
-            ${al.map(d=>h`<option value=${d}>${s(`taskfoldProject.sortDirection${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
+            ${al.map(d=>h`<option value=${d} .selected=${d===a.sortDirection}>${s(`taskfoldProject.sortDirection${d[0].toUpperCase()}${d.slice(1)}`)}</option>`)}
           </select>
         </label>
       </div>

@@ -1,10 +1,10 @@
 ---
 id: TASK-10
 title: OpenClaw 生产后端切到文件存储 + SQLite 旧数据迁移
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-24 10:36'
-updated_date: '2026-09-24 13:27'
+updated_date: '2026-09-28 16:45'
 labels:
   - openclaw
   - storage
@@ -27,10 +27,10 @@ ordinal: 10000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 迁移支持 dry-run，输出各实体计数并与 SQLite 一致（AGENTS.md 记录：cards 102、boards 4、milestones 12、project_documents 58，以迁移当时实测为准）
-- [ ] #2 迁移前自动备份 taskfold.sqlite；不读不写 flowboard/gsdboard/workboard 三份历史库
-- [ ] #3 切换后本机 Gateway 加载正常，Control UI 看到的项目/卡片/里程碑与迁移前一致
-- [ ] #4 SQLite 下线后 compareAndSwap 对卡片 store 无条件必选，typecheck 通过
+- [x] #1 迁移支持 dry-run，输出各实体计数并与 SQLite 一致（AGENTS.md 记录：cards 102、boards 4、milestones 12、project_documents 58，以迁移当时实测为准）
+- [x] #2 迁移前自动备份 taskfold.sqlite；不读不写 flowboard/gsdboard/workboard 三份历史库
+- [x] #3 切换后本机 Gateway 加载正常，Control UI 看到的项目/卡片/里程碑与迁移前一致
+- [x] #4 SQLite 下线后 compareAndSwap 对卡片 store 无条件必选，typecheck 通过
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -46,3 +46,9 @@ TASK-6 移交：同步全局锁在锁争用时最多阻塞 Gateway 事件循环�
 
 2026-09-24 第一段进展：切换代码（组合 store、无 workspace 项目落插件目录、createdAt 毫秒、确定性排序、异步锁、migrate-sqlite 子命令、启动 WARN）已提交，测试 378 通过/15 跳过（关 e2e）；真实数据 dry-run 5 个项目计数 identical、blockers none。**真实 --apply 被 Claude Code auto mode 分类器以 Modify Shared Resources 拦截（子代理与主代理各一次），未执行、未写任何文件**。为防 Gateway 意外重启加载空文件后端，dist/ 刻意保留 SQLite 构建（HEAD 版），迁移前不要跑 build:backend 后重启 Gateway。待用户执行：npm run build:backend → openclaw gateway stop → openclaw taskfold migrate-sqlite --apply → openclaw gateway start；之后再做 RPC 基线比对（scratchpad/baseline-before.json、compare.mjs）、临时项目上的 Gateway+CLI 并发复验、e2e，以及第二段（删 SQLite 运行时后端）。注意：迁移前若 Gateway 以新构建启动并被打开 UI，会生成 projects.json，迁移随即拒绝执行，需先挪走它。
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+文件后端已接管生产路径；SQLite 仅保留迁移命令的只读访问，测试中的旧写入实现仅作迁移夹具。迁移前自动备份及五项目数据核对已完成；本仓库 21 张卡和 4 份资料的路径改为项目根相对路径，procloud 未改。CAS 对卡片为必选真实比较交换，其他实体明确返回 unsupported。Gateway 从新包路径加载，43 个工具。
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,6 +1,9 @@
 // 卡片的读写与 `--json` 视图。只用 core 的卡片增删改查与状态流转，不碰执行
 // （claim / dispatch / launch 等，需求/18 §3.2）。
+import fs from "node:fs";
+import path from "node:path";
 import { resolveTaskfoldCardByIdOrPrefix } from "@taskfold/core/card-lookup.js";
+import { extractTaskfoldSectionUuid } from "@taskfold/core/markdown-card-format.js";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
@@ -13,6 +16,7 @@ import { TaskfoldCliError, toCliError } from "./errors.js";
 export type TaskfoldCliCardSummary = {
   id: string;
   shortId: string;
+  displayId: string | null;
   title: string;
   status: string;
   priority: string;
@@ -35,10 +39,28 @@ function isoTime(epochMs: number): string {
   return Number.isFinite(epochMs) ? new Date(epochMs).toISOString() : new Date(0).toISOString();
 }
 
-export function toCardSummary(card: TaskfoldCard): TaskfoldCliCardSummary {
+export type CardDisplayIds = Map<string, string>;
+
+/** 展示编号属于文件名，不在 `TaskfoldCard` 里；每次 CLI 命令扫描一次。 */
+export function readCardDisplayIds(dataDir: string): CardDisplayIds {
+  const ids: CardDisplayIds = new Map();
+  for (const directory of [path.join(dataDir, "cards"), path.join(dataDir, "archive", "cards")]) {
+    if (!fs.existsSync(directory)) continue;
+    for (const name of fs.readdirSync(directory)) {
+      const match = /^(card-\d+)(?:\s+-\s+.*)?\.md$/i.exec(name);
+      if (!match) continue;
+      const uuid = extractTaskfoldSectionUuid(fs.readFileSync(path.join(directory, name), "utf8"));
+      if (uuid) ids.set(uuid, match[1]!.toLowerCase());
+    }
+  }
+  return ids;
+}
+
+export function toCardSummary(card: TaskfoldCard, displayIds: CardDisplayIds = new Map()): TaskfoldCliCardSummary {
   return {
     id: card.id,
     shortId: card.id.slice(0, SHORT_ID_LENGTH),
+    displayId: displayIds.get(card.id) ?? null,
     title: card.title,
     status: card.status,
     priority: card.priority,
@@ -53,12 +75,12 @@ export function toCardSummary(card: TaskfoldCard): TaskfoldCliCardSummary {
   };
 }
 
-export function toCardDetail(card: TaskfoldCard): TaskfoldCliCardDetail {
-  return { ...toCardSummary(card), notes: card.notes ?? "" };
+export function toCardDetail(card: TaskfoldCard, displayIds: CardDisplayIds = new Map()): TaskfoldCliCardDetail {
+  return { ...toCardSummary(card, displayIds), notes: card.notes ?? "" };
 }
 
 /** 完整 id 或唯一前缀 → 卡片；不存在 NOT_FOUND，前缀命中多张 AMBIGUOUS。 */
-export async function resolveCard(store: TaskfoldProjectStore, idOrPrefix: string): Promise<TaskfoldCard> {
+export async function resolveCard(store: TaskfoldProjectStore, idOrPrefix: string, displayIds: CardDisplayIds = new Map()): Promise<TaskfoldCard> {
   const query = idOrPrefix.trim();
   if (!query) {
     throw new TaskfoldCliError("INVALID_ARGUMENT", "card id must not be empty.");
@@ -68,6 +90,13 @@ export async function resolveCard(store: TaskfoldProjectStore, idOrPrefix: strin
     return exact;
   }
   const cards = await store.list();
+  if (/^card-\d+$/i.test(query)) {
+    const matches = cards.filter((candidate) => displayIds.get(candidate.id) === query.toLowerCase());
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      throw new TaskfoldCliError("AMBIGUOUS", `card number is ambiguous: ${query}`, { id: query, matches: matches.map((card) => card.id) });
+    }
+  }
   const { card, error } = resolveTaskfoldCardByIdOrPrefix(cards, query);
   if (card) {
     return card;

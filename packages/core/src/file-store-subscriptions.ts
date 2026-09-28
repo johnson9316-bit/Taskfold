@@ -6,6 +6,7 @@
 import path from "node:path";
 import type { TaskfoldNotificationSubscription } from "./contract/index.js";
 import type { PersistedTaskfoldNotificationSubscription, TaskfoldKeyedStore } from "./persistence-types.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
 import { listFileNamesSafe, readFileIfExists, removeFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
 
 const SUBSCRIPTION_EXTENSION = ".json";
@@ -62,5 +63,8 @@ export function createTaskfoldFileSubscriptionStore(options: {
       }
       return results;
     },
+
+    // 没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 }

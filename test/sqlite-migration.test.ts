@@ -18,7 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TaskfoldCard, TaskfoldMilestone, TaskfoldProjectDocument } from "@taskfold/core/contract/index.js";
-import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "./helpers/legacy-sqlite-store.js";
 import { createTaskfoldProjectRoutedStores } from "../packages/openclaw/src/backend/src/project-routed-stores.js";
 import { runTaskfoldSqliteMigration } from "../packages/openclaw/src/backend/src/sqlite-migration.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";

@@ -105,7 +105,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("手工改文件后能检测到并推进 revision", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const created = await store.create({ title: "外部编辑测试卡" });
@@ -122,7 +122,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("重盖后用旧 expectedRevision 做 CAS 会失败——不会静默覆盖用户的手工改动", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const created = await store.create({ title: "CAS 冲突测试卡" });
@@ -149,7 +149,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("重盖不丢用户改动：手工改过的标题原样保留", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const created = await store.create({ title: "改动保留测试卡" });
@@ -167,7 +167,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("防自激：连续调两次，第二次不产生新的写", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const created = await store.create({ title: "防自激测试卡" });
@@ -189,7 +189,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("git checkout 式批量替换：一次改多个文件，每张改过的卡各自重盖一次，没改的不受影响", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const cardA = await store.create({ title: "批量卡A" });
@@ -219,7 +219,7 @@ describe("TaskfoldStore.reconcileExternalChanges()：R4 端到端", () => {
   it("外部删除文件：能感知到变化、查询返回 undefined，且不抛错、不死循环", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
     const cardsDir = path.join(dataDir, "cards");
 
     const created = await store.create({ title: "待删除测试卡" });

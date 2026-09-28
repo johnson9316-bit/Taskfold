@@ -10,7 +10,7 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
 } from "@taskfold/core/persistence-types.js";
-import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "./helpers/legacy-sqlite-store.js";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { normalizeAutomation } from "@taskfold/core/store-normalizers.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
@@ -144,7 +144,7 @@ describe("Taskfold launch state", () => {
       const dbPath = path.join(root, "taskfold.sqlite");
 
       const stores = createTaskfoldSqliteStores({ dbPath });
-      const store = TaskfoldStore.fromSqliteStores(stores);
+      const store = TaskfoldStore.fromStores(stores);
       const card = await store.create({ title: "Sqlite round trip", status: "ready" });
       const claimed = await store.claimExecution(card.id, {
         ownerId: "owner-a",
@@ -156,7 +156,7 @@ describe("Taskfold launch state", () => {
       stores.close();
 
       const reopened = createTaskfoldSqliteStores({ dbPath });
-      const reopenedStore = TaskfoldStore.fromSqliteStores(reopened);
+      const reopenedStore = TaskfoldStore.fromStores(reopened);
       const reloaded = await reopenedStore.get(card.id);
       reopened.close();
 

@@ -1134,7 +1134,6 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         <label>
           ${t("taskfoldProject.groupBy")}
           <select
-            .value=${view.groupBy}
             @change=${(event: Event) => {
               const groupBy = (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardGroupBy;
               controller.updateBoardView({
@@ -1151,14 +1150,13 @@ function renderBoard(controller: TaskfoldProjectViewController) {
           >
             ${BOARD_GROUPS.map(
               (groupBy) =>
-                html`<option value=${groupBy}>${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</option>`,
+                html`<option value=${groupBy} .selected=${groupBy === view.groupBy}>${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</option>`,
             )}
           </select>
         </label>
         <label>
           ${t("taskfoldProject.sortBy")}
           <select
-            .value=${view.sortBy}
             @change=${(event: Event) =>
               controller.updateBoardView({
                 ...view,
@@ -1167,14 +1165,13 @@ function renderBoard(controller: TaskfoldProjectViewController) {
           >
             ${BOARD_SORTS.filter((sortBy) => view.groupBy === "milestone" || sortBy !== "manual").map(
               (sortBy) =>
-                html`<option value=${sortBy}>${t(`taskfoldProject.sortBy${sortBy[0].toUpperCase()}${sortBy.slice(1)}`)}</option>`,
+                html`<option value=${sortBy} .selected=${sortBy === view.sortBy}>${t(`taskfoldProject.sortBy${sortBy[0].toUpperCase()}${sortBy.slice(1)}`)}</option>`,
             )}
           </select>
         </label>
         <label>
           ${t("taskfoldProject.sortDirection")}
           <select
-            .value=${view.sortDirection}
             @change=${(event: Event) =>
               controller.updateBoardView({
                 ...view,
@@ -1183,7 +1180,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
           >
             ${BOARD_SORT_DIRECTIONS.map(
               (direction) =>
-                html`<option value=${direction}>${t(`taskfoldProject.sortDirection${direction[0].toUpperCase()}${direction.slice(1)}`)}</option>`,
+                html`<option value=${direction} .selected=${direction === view.sortDirection}>${t(`taskfoldProject.sortDirection${direction[0].toUpperCase()}${direction.slice(1)}`)}</option>`,
             )}
           </select>
         </label>

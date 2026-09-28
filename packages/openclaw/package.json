@@ -36,7 +36,7 @@
   ],
   "scripts": {
     "build": "npm run build:backend && npm run build:control-ui",
-    "build:backend": "esbuild src/backend/index.ts src/backend/doctor-contract-api.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/* '--banner:js=import { createRequire as __taskfoldCreateRequire } from \"node:module\"; const require = __taskfoldCreateRequire(import.meta.url);'",
+    "build:backend": "esbuild src/backend/index.ts --bundle --format=esm --platform=node --target=node22 --outdir=dist --external:openclaw --external:openclaw/* '--banner:js=import { createRequire as __taskfoldCreateRequire } from \"node:module\"; const require = __taskfoldCreateRequire(import.meta.url);'",
     "build:control-ui": "node scripts/build-control-ui.mjs",
     "prepare-release-files": "node scripts/release-files.mjs copy",
     "clean-release-files": "node scripts/release-files.mjs clean",

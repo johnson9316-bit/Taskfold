@@ -71,7 +71,7 @@ describe("webview host (browser/vscode-host.ts)", () => {
       cardRevisionCheck: true,
       cardEditing: true,
       projectManagement: false,
-      documents: false,
+      documents: true,
       openCardFile: true,
     });
   });

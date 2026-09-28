@@ -33,7 +33,7 @@ function tempRoots(): { repoDir: string; dataDir: string; pluginDir: string } {
 }
 
 function openStore(dataDir: string, pluginDir: string): TaskfoldStore {
-  return TaskfoldStore.fromSqliteStores(createTaskfoldFileStores({ dataDir, pluginDir }));
+  return TaskfoldStore.fromStores(createTaskfoldFileStores({ dataDir, pluginDir }));
 }
 
 function onlyCardFile(dataDir: string): string {

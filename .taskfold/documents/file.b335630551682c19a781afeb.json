@@ -1,0 +1,15 @@
+{
+  "id": "93ee47a5-61b8-48aa-8a67-e09d6e10d51f",
+  "boardId": "flowboard",
+  "key": "file.b335630551682c19a781afeb",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "README",
+  "position": 1000,
+  "createdAt": 1785467793983,
+  "updatedAt": 1785467793983,
+  "summary": "README.md",
+  "target": "./README.md",
+  "system": true
+}

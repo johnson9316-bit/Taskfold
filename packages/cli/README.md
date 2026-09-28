@@ -9,8 +9,7 @@ It is the write path for AI agents (Claude Code, Codex, ...): agents call the CL
 the shell, and the CLI takes the same cross-process locks and revision checks as every
 other Taskfold host.
 
-> The OpenClaw plugin still keeps its cards in SQLite until its switch to the file store
-> lands. Until then the CLI and the plugin do not see each other's cards.
+The OpenClaw plugin and VS Code extension use the same `.taskfold/` files.
 
 ## Build and run
 
@@ -60,7 +59,8 @@ and `.gitignore`; the rest is created on demand.
 
 Every command's `--help` lists its flags, what it reads and writes, and examples.
 
-- **Ids**: card ids are UUIDs; any unique prefix works (e.g. the 8-character `shortId`).
+- **Ids**: `show`, `update`, and `delete` accept a UUID, unique UUID prefix, or the
+  `card-N` display number shown by `list` and `--json` (`displayId`).
 - **Project discovery**: the CLI looks for `.taskfold/` from the current directory up to
   the repository root. Inside a git worktree it maps the current directory to the main
   checkout first (`git rev-parse --git-common-dir`), so reads and writes always hit the
@@ -91,7 +91,7 @@ Every command's `--help` lists its flags, what it reads and writes, and examples
 
 | kind | command | payload |
 | --- | --- | --- |
-| `card` | show, create, update | `card`: id, shortId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
+| `card` | show, create, update | `card`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | `card-list` | list | `boardId` (null = all), `cards` (same fields, without notes) |
 | `card-deleted` | delete | `id` |
 | `board-list` | boards | `defaultBoardId` (null if ambiguous), `boards`: id, total, active, archived, byStatus |

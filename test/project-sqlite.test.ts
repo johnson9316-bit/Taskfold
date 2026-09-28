@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "./helpers/legacy-sqlite-store.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
@@ -164,7 +164,7 @@ describe("Taskfold SQLite schema migrations", () => {
     const legacyDbPath = path.join(root, "flowboard.sqlite");
     const taskfoldDbPath = path.join(root, "taskfold.sqlite");
     const legacyStores = createTaskfoldSqliteStores({ dbPath: legacyDbPath });
-    const legacyStore = TaskfoldStore.fromSqliteStores(legacyStores);
+    const legacyStore = TaskfoldStore.fromStores(legacyStores);
     const legacyCard = await legacyStore.create({
       title: "Preserve this card",
       status: "done",

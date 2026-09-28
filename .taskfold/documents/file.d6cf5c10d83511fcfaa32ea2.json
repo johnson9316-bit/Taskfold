@@ -1,0 +1,15 @@
+{
+  "id": "9486e5c9-3ea8-4cfa-b0b7-cb04badcd746",
+  "boardId": "flowboard",
+  "key": "file.d6cf5c10d83511fcfaa32ea2",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "VERIFICATION",
+  "position": 3000,
+  "createdAt": 1785467793983,
+  "updatedAt": 1785467793983,
+  "summary": "VERIFICATION.md",
+  "target": "./VERIFICATION.md",
+  "system": true
+}

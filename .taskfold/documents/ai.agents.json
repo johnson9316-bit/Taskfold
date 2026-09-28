@@ -1,0 +1,15 @@
+{
+  "id": "f2942f60-f7c0-4f55-a98e-fd6031bf8437",
+  "boardId": "flowboard",
+  "key": "ai.agents",
+  "section": "project",
+  "source": "ai_system",
+  "type": "path",
+  "title": "AGENTS",
+  "position": 4000,
+  "createdAt": 1789710570432,
+  "updatedAt": 1789710570432,
+  "summary": "AI instruction file.",
+  "target": "./AGENTS.md",
+  "system": true
+}

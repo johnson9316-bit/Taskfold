@@ -1,68 +1,120 @@
-import { createRequire as __taskfoldCreateRequire } from "node:module"; const require = __taskfoldCreateRequire(import.meta.url);
-
-// src/backend/src/sqlite-store.ts
+// @ts-nocheck
+// 仅供迁移兼容测试造旧 SQLite 数据；生产包不引用此模块。
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import type {
+  TaskfoldArtifact,
+  TaskfoldAttachment,
+  TaskfoldCard,
+  TaskfoldCardKind,
+  TaskfoldComment,
+  TaskfoldDiagnostic,
+  TaskfoldDelivery,
+  TaskfoldEvent,
+  TaskfoldExecution,
+  TaskfoldLink,
+  TaskfoldMetadata,
+  TaskfoldMilestone,
+  TaskfoldNotification,
+  TaskfoldProof,
+  TaskfoldProjectDocument,
+  TaskfoldRunAttempt,
+  TaskfoldSourceReference,
+  TaskfoldWorkerLog,
+} from "@taskfold/core/contract/index.js";
 import { configureSqliteConnectionPragmas } from "openclaw/plugin-sdk/plugin-state-runtime";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
-var TASKFOLD_DB_RELATIVE_PATH = ["plugins", "taskfold", "taskfold.sqlite"];
-var LEGACY_FLOWBOARD_DB_RELATIVE_PATH = ["plugins", "flowboard", "flowboard.sqlite"];
-var SCHEMA_VERSION = 8;
-var TASKFOLD_SQLITE_BUSY_TIMEOUT_MS = 5e3;
-var TASKFOLD_SQLITE_DIR_MODE = 448;
-var TASKFOLD_SQLITE_FILE_MODE = 384;
-function resolveTaskfoldSqlitePath(env = process.env) {
+import type {
+  PersistedTaskfoldAttachment,
+  PersistedTaskfoldBoard,
+  PersistedTaskfoldCard,
+  PersistedTaskfoldMilestone,
+  PersistedTaskfoldNotificationSubscription,
+  PersistedTaskfoldProjectDocument,
+  TaskfoldKeyedStore,
+} from "@taskfold/core/persistence-types.js";
+const TASKFOLD_DB_RELATIVE_PATH = ["plugins", "taskfold", "taskfold.sqlite"] as const;
+const LEGACY_FLOWBOARD_DB_RELATIVE_PATH = ["plugins", "flowboard", "flowboard.sqlite"] as const;
+const SCHEMA_VERSION = 8;
+const TASKFOLD_SQLITE_BUSY_TIMEOUT_MS = 5000;
+const TASKFOLD_SQLITE_DIR_MODE = 0o700;
+const TASKFOLD_SQLITE_FILE_MODE = 0o600;
+type Row = Record<string, unknown>;
+type TaskfoldSqliteStores = {
+  cards: TaskfoldKeyedStore;
+  boards: TaskfoldKeyedStore<PersistedTaskfoldBoard>;
+  milestones: TaskfoldKeyedStore<PersistedTaskfoldMilestone>;
+  documents: TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>;
+  subscriptions: TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>;
+  attachments: TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+  dataVersion: () => number;
+  changeEpoch: string;
+  reserveChangeRevisions: (count: number) => number;
+  close: () => void;
+};
+
+export function resolveTaskfoldSqlitePath(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(resolveStateDir(env), ...TASKFOLD_DB_RELATIVE_PATH);
 }
-function resolveLegacyFlowboardSqlitePath(env = process.env) {
+
+export function resolveLegacyFlowboardSqlitePath(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(resolveStateDir(env), ...LEGACY_FLOWBOARD_DB_RELATIVE_PATH);
 }
-function jsonValue(value) {
-  return value === void 0 ? null : JSON.stringify(value);
+
+function jsonValue(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
 }
-function parseJson(value) {
+
+function parseJson(value: unknown): unknown {
   if (typeof value !== "string" || !value) {
-    return void 0;
+    return undefined;
   }
-  return JSON.parse(value);
+  return JSON.parse(value) as unknown;
 }
-function stringValue(row, key) {
+
+function stringValue(row: Row, key: string): string | undefined {
   const value = row[key];
-  return typeof value === "string" && value.length > 0 ? value : void 0;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
-function numberValue(row, key) {
+
+function numberValue(row: Row, key: string): number | undefined {
   const value = row[key];
   if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
+    return Number.isFinite(value) ? value : undefined;
   }
   if (typeof value === "bigint") {
     return Number(value);
   }
-  return void 0;
+  return undefined;
 }
-function requiredString(row, key) {
+
+function requiredString(row: Row, key: string): string {
   const value = stringValue(row, key);
   if (!value) {
     throw new Error(`taskfold sqlite row missing ${key}`);
   }
   return value;
 }
-function requiredNumber(row, key) {
+
+function requiredNumber(row: Row, key: string): number {
   const value = numberValue(row, key);
-  if (value === void 0) {
+  if (value === undefined) {
     throw new Error(`taskfold sqlite row missing ${key}`);
   }
   return value;
 }
-function optional(value) {
-  return Object.keys(value).length > 0 ? value : void 0;
+
+function optional<T extends object>(value: T): T | undefined {
+  return Object.keys(value).length > 0 ? value : undefined;
 }
-function asBlobContent(value) {
+
+function asBlobContent(value: string): Uint8Array {
   return Buffer.from(value, "base64");
 }
-function blobToBase64(value) {
+
+function blobToBase64(value: unknown): string {
   if (value instanceof Uint8Array) {
     return Buffer.from(value).toString("base64");
   }
@@ -71,7 +123,8 @@ function blobToBase64(value) {
   }
   return "";
 }
-function runTransaction(db, run) {
+
+function runTransaction<T>(db: DatabaseSync, run: () => T): T {
   db.exec("BEGIN IMMEDIATE");
   try {
     const result = run();
@@ -82,26 +135,31 @@ function runTransaction(db, run) {
     throw error;
   }
 }
-function quoteIdentifier(value) {
+
+function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
-function quoteSqlString(value) {
+
+function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
-function tableColumns(db, tableName) {
+
+function tableColumns(db: DatabaseSync, tableName: string): Set<string> {
   return new Set(
-    db.prepare(`PRAGMA table_info(${tableName})`).all().flatMap(
-      (row) => typeof row.name === "string" ? [row.name] : []
-    )
+    (db.prepare(`PRAGMA table_info(${tableName})`).all() as Row[]).flatMap((row) =>
+      typeof row.name === "string" ? [row.name] : [],
+    ),
   );
 }
-function ensureColumn(db, tableName, columnName, definition) {
+
+function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
   if (tableColumns(db, tableName).has(columnName)) {
     return;
   }
   db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
 }
-var TASKFOLD_SCHEMA_SQL = `
+
+const TASKFOLD_SCHEMA_SQL = `
     CREATE TABLE IF NOT EXISTS taskfold_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -394,13 +452,14 @@ var TASKFOLD_SCHEMA_SQL = `
     CREATE INDEX IF NOT EXISTS taskfold_project_documents_board_section_position_idx
       ON taskfold_project_documents(board_id, section, position);
   `;
-function ensureTaskfoldSchema(db) {
+
+function ensureTaskfoldSchema(db: DatabaseSync): void {
   db.exec(TASKFOLD_SCHEMA_SQL);
   ensureColumn(
     db,
     "taskfold_cards",
     "lifecycle_status_source_updated_at",
-    "lifecycle_status_source_updated_at INTEGER"
+    "lifecycle_status_source_updated_at INTEGER",
   );
   ensureColumn(db, "taskfold_cards", "milestone_id", "milestone_id TEXT");
   ensureColumn(db, "taskfold_card_events", "from_milestone_id", "from_milestone_id TEXT");
@@ -419,10 +478,16 @@ function ensureTaskfoldSchema(db) {
     db,
     "taskfold_project_documents",
     "source",
-    "source TEXT NOT NULL DEFAULT 'project'"
+    "source TEXT NOT NULL DEFAULT 'project'",
   );
+  // Optimistic-concurrency token. Rows written before this column existed read
+  // back as 0, which the revision helper treats as "not yet stamped".
   ensureColumn(db, "taskfold_cards", "revision", "revision INTEGER NOT NULL DEFAULT 0");
+  // Claim owner is also inside claim_json, but only a real column can be indexed
+  // for the dispatcher's per-owner capacity aggregate.
   ensureColumn(db, "taskfold_cards", "claim_owner_id", "claim_owner_id TEXT");
+  // Which worker-prompt version drove an attempt. Absent on attempts recorded
+  // before prompt versioning existed.
   ensureColumn(db, "taskfold_card_attempts", "prompt_version", "prompt_version INTEGER");
   db.exec(`
     CREATE INDEX IF NOT EXISTS taskfold_cards_board_milestone_position_idx
@@ -447,53 +512,89 @@ function ensureTaskfoldSchema(db) {
       ON taskfold_worker_logs(card_id, ordinal);
   `);
   const migrationId = `schema-${SCHEMA_VERSION}`;
-  const current = db.prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?").get(migrationId);
+  const current = db
+    .prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?")
+    .get(migrationId);
   if (!current) {
     db.prepare(
-      "INSERT OR IGNORE INTO taskfold_schema_migrations (id, applied_at) VALUES (?, ?)"
+      "INSERT OR IGNORE INTO taskfold_schema_migrations (id, applied_at) VALUES (?, ?)",
     ).run(migrationId, Date.now());
   }
 }
-function ensureChangeEpoch(db) {
-  const existing = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
-  const current = existing ? stringValue(existing, "value") : void 0;
+
+/**
+ * Change-cursor identity for this database, created once and then reused by every
+ * process that opens it. A per-process identity would invalidate every connected
+ * UI's long-wait cursor on each Gateway restart and force a full board reload.
+ */
+function ensureChangeEpoch(db: DatabaseSync): string {
+  const existing = db
+    .prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'")
+    .get() as Row | undefined;
+  const current = existing ? stringValue(existing, "value") : undefined;
   if (current) {
     return current;
   }
   const epoch = randomUUID();
   db.prepare("INSERT OR IGNORE INTO taskfold_meta (key, value) VALUES ('change_epoch', ?)").run(
-    epoch
+    epoch,
   );
-  const stored = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
-  return (stored ? stringValue(stored, "value") : void 0) ?? epoch;
+  const stored = db
+    .prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'")
+    .get() as Row | undefined;
+  // Another process may have inserted first; its value is the one that counts.
+  return (stored ? stringValue(stored, "value") : undefined) ?? epoch;
 }
-function reserveChangeRevisions(db, count) {
+
+/**
+ * Hands out a reserved range of change revisions and durably records that it is
+ * spent, so a restarted process resumes above every revision any previous process
+ * emitted. Reserving in blocks keeps this to one write per block rather than one
+ * per change; a clock-derived seed was rejected because two processes starting in
+ * the same millisecond can otherwise reuse a revision a client already saw.
+ */
+function reserveChangeRevisions(db: DatabaseSync, count: number): number {
   return runTransaction(db, () => {
-    const row = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_revision'").get();
-    const stored = Number.parseInt(row ? stringValue(row, "value") ?? "" : "", 10);
+    const row = db
+      .prepare("SELECT value FROM taskfold_meta WHERE key = 'change_revision'")
+      .get() as Row | undefined;
+    const stored = Number.parseInt(row ? (stringValue(row, "value") ?? "") : "", 10);
     const base = Number.isSafeInteger(stored) && stored > 0 ? stored : 0;
     db.prepare(
       `
         INSERT INTO taskfold_meta (key, value) VALUES ('change_revision', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `
+      `,
     ).run(String(base + count));
     return base;
   });
 }
-function chmodIfExists(targetPath, mode) {
+
+function chmodIfExists(targetPath: string, mode: number): void {
   try {
     fs.chmodSync(targetPath, mode);
   } catch (err) {
-    if (err.code !== "ENOENT") {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       throw err;
     }
   }
 }
-function copyLegacyFlowboardDatabase(dbPath, legacyDbPath) {
-  if (!legacyDbPath || path.resolve(legacyDbPath) === path.resolve(dbPath) || fs.existsSync(dbPath) || !fs.existsSync(legacyDbPath)) {
+
+function copyLegacyFlowboardDatabase(
+  dbPath: string,
+  legacyDbPath: string | undefined,
+): void {
+  if (
+    !legacyDbPath ||
+    path.resolve(legacyDbPath) === path.resolve(dbPath) ||
+    fs.existsSync(dbPath) ||
+    !fs.existsSync(legacyDbPath)
+  ) {
     return;
   }
+
+  // VACUUM INTO snapshots a WAL-mode source consistently; copying the main file
+  // alone would silently lose writes that are still in its WAL.
   const source = new DatabaseSync(legacyDbPath);
   try {
     source.exec(`VACUUM INTO ${quoteSqlString(dbPath)}`);
@@ -501,54 +602,75 @@ function copyLegacyFlowboardDatabase(dbPath, legacyDbPath) {
     source.close();
   }
 }
-function migrateLegacyFlowboardTables(db) {
-  const legacyTables = db.prepare(
-    `
+
+function migrateLegacyFlowboardTables(db: DatabaseSync): void {
+  const legacyTables = (
+    db
+      .prepare(
+        `
           SELECT name
           FROM sqlite_master
           WHERE type = 'table' AND name LIKE 'flowboard!_%' ESCAPE '!'
           ORDER BY name ASC
-        `
-  ).all().flatMap((row) => {
+        `,
+      )
+      .all() as Row[]
+  ).flatMap((row) => {
     const name = stringValue(row, "name");
     return name ? [name] : [];
   });
   if (legacyTables.length === 0) {
     return;
   }
+
   const taskfoldTables = new Set(
-    db.prepare(
-      `
+    (
+      db
+        .prepare(
+          `
             SELECT name
             FROM sqlite_master
             WHERE type = 'table' AND name LIKE 'taskfold!_%' ESCAPE '!'
-          `
-    ).all().flatMap((row) => {
+          `,
+        )
+        .all() as Row[]
+    ).flatMap((row) => {
       const name = stringValue(row, "name");
       return name ? [name] : [];
-    })
+    }),
   );
-  const conflicts = legacyTables.map((name) => name.replace(/^flowboard_/, "taskfold_")).filter((name) => taskfoldTables.has(name));
+  const conflicts = legacyTables
+    .map((name) => name.replace(/^flowboard_/, "taskfold_"))
+    .filter((name) => taskfoldTables.has(name));
   if (conflicts.length > 0) {
     throw new Error(
-      `cannot migrate legacy Flowboard database because Taskfold tables already exist: ${conflicts.join(", ")}`
+      `cannot migrate legacy Flowboard database because Taskfold tables already exist: ${conflicts.join(", ")}`,
     );
   }
+
   runTransaction(db, () => {
     for (const legacyTable of legacyTables) {
       const taskfoldTable = legacyTable.replace(/^flowboard_/, "taskfold_");
       db.exec(
-        `ALTER TABLE ${quoteIdentifier(legacyTable)} RENAME TO ${quoteIdentifier(taskfoldTable)}`
+        `ALTER TABLE ${quoteIdentifier(legacyTable)} RENAME TO ${quoteIdentifier(taskfoldTable)}`,
       );
     }
-    const legacyIndexes = db.prepare(
-      `
+
+    // Renaming a table preserves its indexes but not their names. Drop only the
+    // old explicitly named indexes; ensureTaskfoldSchema recreates their Taskfold
+    // equivalents immediately afterward.
+    const legacyIndexes = (
+      db
+        .prepare(
+          `
             SELECT name
             FROM sqlite_master
             WHERE type = 'index' AND name LIKE 'flowboard!_%' ESCAPE '!'
             ORDER BY name ASC
-          `
-    ).all().flatMap((row) => {
+          `,
+        )
+        .all() as Row[]
+    ).flatMap((row) => {
       const name = stringValue(row, "name");
       return name ? [name] : [];
     });
@@ -557,14 +679,19 @@ function migrateLegacyFlowboardTables(db) {
     }
   });
 }
-function hardenTaskfoldDatabaseFiles(dbPath) {
+
+function hardenTaskfoldDatabaseFiles(dbPath: string): void {
   fs.chmodSync(path.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
   chmodIfExists(dbPath, TASKFOLD_SQLITE_FILE_MODE);
   chmodIfExists(`${dbPath}-wal`, TASKFOLD_SQLITE_FILE_MODE);
   chmodIfExists(`${dbPath}-shm`, TASKFOLD_SQLITE_FILE_MODE);
   chmodIfExists(`${dbPath}-journal`, TASKFOLD_SQLITE_FILE_MODE);
 }
-function createDatabase(dbPath, legacyDbPath) {
+
+function createDatabase(dbPath: string, legacyDbPath?: string): {
+  db: DatabaseSync;
+  maintenance: ReturnType<typeof configureSqliteConnectionPragmas>;
+} {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: TASKFOLD_SQLITE_DIR_MODE });
   chmodIfExists(path.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
   copyLegacyFlowboardDatabase(dbPath, legacyDbPath);
@@ -572,7 +699,7 @@ function createDatabase(dbPath, legacyDbPath) {
     fs.closeSync(fs.openSync(dbPath, "a", TASKFOLD_SQLITE_FILE_MODE));
   }
   const db = new DatabaseSync(dbPath);
-  let maintenance;
+  let maintenance: ReturnType<typeof configureSqliteConnectionPragmas> | undefined;
   try {
     maintenance = configureSqliteConnectionPragmas(db, {
       busyTimeoutMs: TASKFOLD_SQLITE_BUSY_TIMEOUT_MS,
@@ -580,7 +707,7 @@ function createDatabase(dbPath, legacyDbPath) {
       databaseLabel: "taskfold database",
       databasePath: dbPath,
       foreignKeys: true,
-      synchronous: "NORMAL"
+      synchronous: "NORMAL",
     });
     migrateLegacyFlowboardTables(db);
     ensureTaskfoldSchema(db);
@@ -595,21 +722,26 @@ function createDatabase(dbPath, legacyDbPath) {
     throw error;
   }
 }
-function childRows(db, table, cardId) {
-  return db.prepare(`SELECT * FROM ${table} WHERE card_id = ? ORDER BY ordinal ASC`).all(cardId);
+
+function childRows(db: DatabaseSync, table: string, cardId: string): Row[] {
+  return db
+    .prepare(`SELECT * FROM ${table} WHERE card_id = ? ORDER BY ordinal ASC`)
+    .all(cardId) as Row[];
 }
-function readLabels(db, cardId) {
+
+function readLabels(db: DatabaseSync, cardId: string): string[] {
   return childRows(db, "taskfold_card_labels", cardId).flatMap((row) => {
     const label = stringValue(row, "label");
     return label ? [label] : [];
   });
 }
-function readEvents(db, cardId) {
+
+function readEvents(db: DatabaseSync, cardId: string): TaskfoldEvent[] | undefined {
   const events = childRows(db, "taskfold_card_events", cardId).map((row) => {
-    const event = {
+    const event: TaskfoldEvent = {
       id: requiredString(row, "id"),
-      kind: requiredString(row, "kind"),
-      at: requiredNumber(row, "at")
+      kind: requiredString(row, "kind") as TaskfoldEvent["kind"],
+      at: requiredNumber(row, "at"),
     };
     const fromStatus = stringValue(row, "from_status");
     const toStatus = stringValue(row, "to_status");
@@ -618,10 +750,10 @@ function readEvents(db, cardId) {
     const sessionKey = stringValue(row, "session_key");
     const runId = stringValue(row, "run_id");
     if (fromStatus) {
-      event.fromStatus = fromStatus;
+      event.fromStatus = fromStatus as TaskfoldEvent["fromStatus"];
     }
     if (toStatus) {
-      event.toStatus = toStatus;
+      event.toStatus = toStatus as TaskfoldEvent["toStatus"];
     }
     if (fromMilestoneId) {
       event.fromMilestoneId = fromMilestoneId;
@@ -637,33 +769,41 @@ function readEvents(db, cardId) {
     }
     return event;
   });
-  return events.length > 0 ? events : void 0;
+  return events.length > 0 ? events : undefined;
 }
-function readExecution(row) {
+
+function readExecution(row: Row): TaskfoldExecution | undefined {
   const id = stringValue(row, "execution_id");
   if (!id) {
-    return void 0;
+    return undefined;
   }
   return {
     id,
     kind: "agent-session",
-    mode: requiredString(row, "execution_mode"),
-    status: requiredString(row, "execution_status"),
-    ...stringValue(row, "execution_engine") ? { engine: stringValue(row, "execution_engine") } : {},
-    ...stringValue(row, "execution_model") ? { model: stringValue(row, "execution_model") } : {},
-    ...stringValue(row, "execution_session_key") ? { sessionKey: stringValue(row, "execution_session_key") } : {},
-    ...stringValue(row, "execution_run_id") ? { runId: stringValue(row, "execution_run_id") } : {},
+    mode: requiredString(row, "execution_mode") as TaskfoldExecution["mode"],
+    status: requiredString(row, "execution_status") as TaskfoldExecution["status"],
+    ...(stringValue(row, "execution_engine")
+      ? { engine: stringValue(row, "execution_engine") }
+      : {}),
+    ...(stringValue(row, "execution_model") ? { model: stringValue(row, "execution_model") } : {}),
+    ...(stringValue(row, "execution_session_key")
+      ? { sessionKey: stringValue(row, "execution_session_key") }
+      : {}),
+    ...(stringValue(row, "execution_run_id")
+      ? { runId: stringValue(row, "execution_run_id") }
+      : {}),
     startedAt: requiredNumber(row, "execution_started_at"),
-    updatedAt: requiredNumber(row, "execution_updated_at")
+    updatedAt: requiredNumber(row, "execution_updated_at"),
   };
 }
-function readMetadata(db, row) {
+
+function readMetadata(db: DatabaseSync, row: Row): TaskfoldMetadata | undefined {
   const cardId = requiredString(row, "id");
   const attempts = childRows(db, "taskfold_card_attempts", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldRunAttempt = {
       id: requiredString(child, "id"),
-      status: requiredString(child, "status"),
-      startedAt: requiredNumber(child, "started_at")
+      status: requiredString(child, "status") as TaskfoldRunAttempt["status"],
+      startedAt: requiredNumber(child, "started_at"),
     };
     const endedAt = numberValue(child, "ended_at");
     const engine = stringValue(child, "engine");
@@ -673,17 +813,17 @@ function readMetadata(db, row) {
     const runId = stringValue(child, "run_id");
     const error = stringValue(child, "error");
     const promptVersion = numberValue(child, "prompt_version");
-    if (promptVersion !== void 0) {
+    if (promptVersion !== undefined) {
       entry.promptVersion = promptVersion;
     }
-    if (endedAt !== void 0) {
+    if (endedAt !== undefined) {
       entry.endedAt = endedAt;
     }
     if (engine) {
-      entry.engine = engine;
+      entry.engine = engine as TaskfoldRunAttempt["engine"];
     }
     if (mode) {
-      entry.mode = mode;
+      entry.mode = mode as TaskfoldRunAttempt["mode"];
     }
     if (model) {
       entry.model = model;
@@ -700,22 +840,22 @@ function readMetadata(db, row) {
     return entry;
   });
   const comments = childRows(db, "taskfold_card_comments", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldComment = {
       id: requiredString(child, "id"),
       body: requiredString(child, "body"),
-      createdAt: requiredNumber(child, "created_at")
+      createdAt: requiredNumber(child, "created_at"),
     };
     const updatedAt = numberValue(child, "updated_at");
-    if (updatedAt !== void 0) {
+    if (updatedAt !== undefined) {
       entry.updatedAt = updatedAt;
     }
     return entry;
   });
   const links = childRows(db, "taskfold_card_links", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldLink = {
       id: requiredString(child, "id"),
-      type: requiredString(child, "type"),
-      createdAt: requiredNumber(child, "created_at")
+      type: requiredString(child, "type") as TaskfoldLink["type"],
+      createdAt: requiredNumber(child, "created_at"),
     };
     const targetCardId = stringValue(child, "target_card_id");
     const title = stringValue(child, "title");
@@ -732,10 +872,10 @@ function readMetadata(db, row) {
     return entry;
   });
   const proof = childRows(db, "taskfold_card_proof", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldProof = {
       id: requiredString(child, "id"),
-      status: requiredString(child, "status"),
-      createdAt: requiredNumber(child, "created_at")
+      status: requiredString(child, "status") as TaskfoldProof["status"],
+      createdAt: requiredNumber(child, "created_at"),
     };
     const label = stringValue(child, "label");
     const command = stringValue(child, "command");
@@ -756,9 +896,9 @@ function readMetadata(db, row) {
     return entry;
   });
   const artifacts = childRows(db, "taskfold_card_artifacts", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldArtifact = {
       id: requiredString(child, "id"),
-      createdAt: requiredNumber(child, "created_at")
+      createdAt: requiredNumber(child, "created_at"),
     };
     const label = stringValue(child, "label");
     const url = stringValue(child, "url");
@@ -779,12 +919,12 @@ function readMetadata(db, row) {
     return entry;
   });
   const attachments = childRows(db, "taskfold_card_attachments", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldAttachment = {
       id: requiredString(child, "id"),
       cardId: requiredString(child, "card_id"),
       createdAt: requiredNumber(child, "created_at"),
       fileName: requiredString(child, "file_name"),
-      byteSize: requiredNumber(child, "byte_size")
+      byteSize: requiredNumber(child, "byte_size"),
     };
     const mimeType = stringValue(child, "mime_type");
     const note = stringValue(child, "note");
@@ -797,11 +937,11 @@ function readMetadata(db, row) {
     return entry;
   });
   const workerLogs = childRows(db, "taskfold_worker_logs", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldWorkerLog = {
       id: requiredString(child, "id"),
       createdAt: requiredNumber(child, "created_at"),
-      level: requiredString(child, "level"),
-      message: requiredString(child, "message")
+      level: requiredString(child, "level") as TaskfoldWorkerLog["level"],
+      message: requiredString(child, "message"),
     };
     const sessionKey = stringValue(child, "session_key");
     const runId = stringValue(child, "run_id");
@@ -814,26 +954,26 @@ function readMetadata(db, row) {
     return entry;
   });
   const diagnostics = childRows(db, "taskfold_card_diagnostics", cardId).map((child) => ({
-    kind: requiredString(child, "kind"),
-    severity: requiredString(child, "severity"),
+    kind: requiredString(child, "kind") as TaskfoldDiagnostic["kind"],
+    severity: requiredString(child, "severity") as TaskfoldDiagnostic["severity"],
     title: requiredString(child, "title"),
     detail: requiredString(child, "detail"),
     firstSeenAt: requiredNumber(child, "first_seen_at"),
     lastSeenAt: requiredNumber(child, "last_seen_at"),
     count: requiredNumber(child, "count"),
-    actions: parseJson(child.actions_json) ?? []
+    actions: (parseJson(child.actions_json) as TaskfoldDiagnostic["actions"] | undefined) ?? [],
   }));
   const notifications = childRows(db, "taskfold_card_notifications", cardId).map((child) => {
-    const entry = {
+    const entry: TaskfoldNotification = {
       id: requiredString(child, "id"),
-      kind: requiredString(child, "kind"),
+      kind: requiredString(child, "kind") as TaskfoldNotification["kind"],
       createdAt: requiredNumber(child, "created_at"),
-      message: requiredString(child, "message")
+      message: requiredString(child, "message"),
     };
     const sequence = numberValue(child, "sequence");
     const sessionKey = stringValue(child, "session_key");
     const runId = stringValue(child, "run_id");
-    if (sequence !== void 0) {
+    if (sequence !== undefined) {
       entry.sequence = sequence;
     }
     if (sessionKey) {
@@ -844,44 +984,59 @@ function readMetadata(db, row) {
     }
     return entry;
   });
-  const protocol = db.prepare("SELECT * FROM taskfold_worker_protocol WHERE card_id = ?").get(cardId);
-  const automation = parseJson(row.automation_json);
-  const claim = parseJson(row.claim_json);
-  const stale = parseJson(row.stale_json);
+  const protocol = db
+    .prepare("SELECT * FROM taskfold_worker_protocol WHERE card_id = ?")
+    .get(cardId) as Row | undefined;
+  const automation = parseJson(row.automation_json) as TaskfoldMetadata["automation"] | undefined;
+  const claim = parseJson(row.claim_json) as TaskfoldMetadata["claim"] | undefined;
+  const stale = parseJson(row.stale_json) as TaskfoldMetadata["stale"] | undefined;
   const lifecycleStatusSourceUpdatedAt = numberValue(row, "lifecycle_status_source_updated_at");
   return optional({
-    ...attempts.length > 0 ? { attempts } : {},
-    ...comments.length > 0 ? { comments } : {},
-    ...links.length > 0 ? { links } : {},
-    ...proof.length > 0 ? { proof } : {},
-    ...artifacts.length > 0 ? { artifacts } : {},
-    ...attachments.length > 0 ? { attachments } : {},
-    ...workerLogs.length > 0 ? { workerLogs } : {},
-    ...protocol ? {
-      workerProtocol: {
-        state: requiredString(protocol, "state"),
-        updatedAt: requiredNumber(protocol, "updated_at"),
-        ...stringValue(protocol, "detail") ? { detail: stringValue(protocol, "detail") } : {}
-      }
-    } : {},
-    ...automation ? { automation } : {},
-    ...claim ? { claim } : {},
-    ...diagnostics.length > 0 ? { diagnostics } : {},
-    ...notifications.length > 0 ? { notifications } : {},
-    ...stringValue(row, "template_id") ? { templateId: stringValue(row, "template_id") } : {},
-    ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {},
-    ...stale ? { stale } : {},
-    ...lifecycleStatusSourceUpdatedAt !== void 0 ? { lifecycleStatusSourceUpdatedAt } : {},
-    ...numberValue(row, "failure_count") !== void 0 ? { failureCount: numberValue(row, "failure_count") } : {}
+    ...(attempts.length > 0 ? { attempts } : {}),
+    ...(comments.length > 0 ? { comments } : {}),
+    ...(links.length > 0 ? { links } : {}),
+    ...(proof.length > 0 ? { proof } : {}),
+    ...(artifacts.length > 0 ? { artifacts } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(workerLogs.length > 0 ? { workerLogs } : {}),
+    ...(protocol
+      ? {
+          workerProtocol: {
+            state: requiredString(protocol, "state") as NonNullable<
+              TaskfoldMetadata["workerProtocol"]
+            >["state"],
+            updatedAt: requiredNumber(protocol, "updated_at"),
+            ...(stringValue(protocol, "detail") ? { detail: stringValue(protocol, "detail") } : {}),
+          },
+        }
+      : {}),
+    ...(automation ? { automation } : {}),
+    ...(claim ? { claim } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    ...(notifications.length > 0 ? { notifications } : {}),
+    ...(stringValue(row, "template_id")
+      ? { templateId: stringValue(row, "template_id") as TaskfoldMetadata["templateId"] }
+      : {}),
+    ...(numberValue(row, "archived_at") !== undefined
+      ? { archivedAt: numberValue(row, "archived_at") }
+      : {}),
+    ...(stale ? { stale } : {}),
+    ...(lifecycleStatusSourceUpdatedAt !== undefined ? { lifecycleStatusSourceUpdatedAt } : {}),
+    ...(numberValue(row, "failure_count") !== undefined
+      ? { failureCount: numberValue(row, "failure_count") }
+      : {}),
   });
 }
-function readDelivery(db, cardId) {
-  const row = db.prepare("SELECT * FROM taskfold_card_delivery WHERE card_id = ?").get(cardId);
+
+function readDelivery(db: DatabaseSync, cardId: string): TaskfoldDelivery | undefined {
+  const row = db
+    .prepare("SELECT * FROM taskfold_card_delivery WHERE card_id = ?")
+    .get(cardId) as Row | undefined;
   if (!row) {
-    return void 0;
+    return undefined;
   }
-  const delivery = {
-    updatedAt: requiredNumber(row, "updated_at")
+  const delivery: TaskfoldDelivery = {
+    updatedAt: requiredNumber(row, "updated_at"),
   };
   const objective = stringValue(row, "objective");
   const deliverySummary = stringValue(row, "delivery_summary");
@@ -899,25 +1054,27 @@ function readDelivery(db, cardId) {
     delivery.openItems = openItems;
   }
   if (implementationState) {
-    delivery.implementationState = implementationState;
+    delivery.implementationState =
+      implementationState as TaskfoldDelivery["implementationState"];
   }
   if (verificationState) {
-    delivery.verificationState = verificationState;
+    delivery.verificationState = verificationState as TaskfoldDelivery["verificationState"];
   }
   if (releaseState) {
-    delivery.releaseState = releaseState;
+    delivery.releaseState = releaseState as TaskfoldDelivery["releaseState"];
   }
   return delivery;
 }
-function readSourceReferences(db, cardId) {
+
+function readSourceReferences(db: DatabaseSync, cardId: string): TaskfoldSourceReference[] {
   return childRows(db, "taskfold_card_source_references", cardId).map((child) => {
-    const reference = {
+    const reference: TaskfoldSourceReference = {
       id: requiredString(child, "id"),
       label: requiredString(child, "label"),
       target: requiredString(child, "target"),
       position: requiredNumber(child, "position"),
       createdAt: requiredNumber(child, "created_at"),
-      updatedAt: requiredNumber(child, "updated_at")
+      updatedAt: requiredNumber(child, "updated_at"),
     };
     const note = stringValue(child, "note");
     if (note) {
@@ -926,54 +1083,78 @@ function readSourceReferences(db, cardId) {
     return reference;
   });
 }
-function readCard(db, row) {
-  const card = {
+
+function readCard(db: DatabaseSync, row: Row): TaskfoldCard {
+  const card: TaskfoldCard = {
     id: requiredString(row, "id"),
     title: requiredString(row, "title"),
-    status: requiredString(row, "status"),
-    priority: requiredString(row, "priority"),
+    status: requiredString(row, "status") as TaskfoldCard["status"],
+    priority: requiredString(row, "priority") as TaskfoldCard["priority"],
     labels: readLabels(db, requiredString(row, "id")),
     position: requiredNumber(row, "position"),
     createdAt: requiredNumber(row, "created_at"),
     updatedAt: requiredNumber(row, "updated_at"),
-    revision: numberValue(row, "revision") ?? 0
+    revision: numberValue(row, "revision") ?? 0,
   };
   const metadata = readMetadata(db, row);
   const delivery = readDelivery(db, card.id);
   const sourceReferences = readSourceReferences(db, card.id);
   return {
     ...card,
-    ...stringValue(row, "card_kind") ? { kind: stringValue(row, "card_kind") } : {},
-    ...stringValue(row, "notes") ? { notes: stringValue(row, "notes") } : {},
-    ...stringValue(row, "agent_id") ? { agentId: stringValue(row, "agent_id") } : {},
-    ...stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {},
-    ...stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {},
-    ...stringValue(row, "task_id") ? { taskId: stringValue(row, "task_id") } : {},
-    ...stringValue(row, "source_url") ? { sourceUrl: stringValue(row, "source_url") } : {},
-    ...stringValue(row, "milestone_id") ? { milestoneId: stringValue(row, "milestone_id") } : {},
-    ...readExecution(row) ? { execution: readExecution(row) } : {},
-    ...delivery ? { delivery } : {},
-    ...sourceReferences.length ? { sourceReferences } : {},
-    ...numberValue(row, "started_at") !== void 0 ? { startedAt: numberValue(row, "started_at") } : {},
-    ...numberValue(row, "completed_at") !== void 0 ? { completedAt: numberValue(row, "completed_at") } : {},
-    ...readEvents(db, card.id) ? { events: readEvents(db, card.id) } : {},
-    ...metadata ? { metadata } : {}
+    ...(stringValue(row, "card_kind")
+      ? { kind: stringValue(row, "card_kind") as TaskfoldCardKind }
+      : {}),
+    ...(stringValue(row, "notes") ? { notes: stringValue(row, "notes") } : {}),
+    ...(stringValue(row, "agent_id") ? { agentId: stringValue(row, "agent_id") } : {}),
+    ...(stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {}),
+    ...(stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {}),
+    ...(stringValue(row, "task_id") ? { taskId: stringValue(row, "task_id") } : {}),
+    ...(stringValue(row, "source_url") ? { sourceUrl: stringValue(row, "source_url") } : {}),
+    ...(stringValue(row, "milestone_id") ? { milestoneId: stringValue(row, "milestone_id") } : {}),
+    ...(readExecution(row) ? { execution: readExecution(row) } : {}),
+    ...(delivery ? { delivery } : {}),
+    ...(sourceReferences.length ? { sourceReferences } : {}),
+    ...(numberValue(row, "started_at") !== undefined
+      ? { startedAt: numberValue(row, "started_at") }
+      : {}),
+    ...(numberValue(row, "completed_at") !== undefined
+      ? { completedAt: numberValue(row, "completed_at") }
+      : {}),
+    ...(readEvents(db, card.id) ? { events: readEvents(db, card.id) } : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
-function cardBoardId(card) {
+
+function cardBoardId(card: TaskfoldCard): string {
   return card.metadata?.automation?.boardId ?? "default";
 }
-function bindNull(value) {
-  if (value === void 0 || value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint" || value instanceof Uint8Array) {
-    return value ?? null;
+
+function bindNull(value: unknown): SQLInputValue {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    value instanceof Uint8Array
+  ) {
+    return (value ?? null) as SQLInputValue;
   }
   return JSON.stringify(value);
 }
-function insertChildren(db, table, cardId, entries, insert) {
+
+function insertChildren<T>(
+  db: DatabaseSync,
+  table: string,
+  cardId: string,
+  entries: readonly T[] | undefined,
+  insert: (entry: T, ordinal: number) => void,
+): void {
   db.prepare(`DELETE FROM ${table} WHERE card_id = ?`).run(cardId);
   entries?.forEach(insert);
 }
-function insertCard(db, card) {
+
+function insertCard(db: DatabaseSync, card: TaskfoldCard): void {
   const execution = card.execution;
   const metadata = card.metadata;
   db.prepare(
@@ -1030,7 +1211,7 @@ function insertCard(db, card) {
         failure_count = excluded.failure_count,
         revision = excluded.revision,
         claim_owner_id = excluded.claim_owner_id
-    `
+    `,
   ).run({
     id: card.id,
     board_id: cardBoardId(card),
@@ -1068,13 +1249,14 @@ function insertCard(db, card) {
     lifecycle_status_source_updated_at: bindNull(metadata?.lifecycleStatusSourceUpdatedAt),
     failure_count: bindNull(metadata?.failureCount),
     revision: card.revision,
-    claim_owner_id: bindNull(metadata?.claim?.ownerId)
+    claim_owner_id: bindNull(metadata?.claim?.ownerId),
   });
+
   insertChildren(db, "taskfold_card_labels", card.id, card.labels, (label, ordinal) => {
     db.prepare("INSERT INTO taskfold_card_labels (card_id, ordinal, label) VALUES (?, ?, ?)").run(
       card.id,
       ordinal,
-      label
+      label,
     );
   });
   insertChildren(db, "taskfold_card_events", card.id, card.events, (event, ordinal) => {
@@ -1083,7 +1265,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_card_events
           (id, card_id, ordinal, kind, at, from_status, to_status, from_milestone_id, to_milestone_id, session_key, run_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       event.id,
       card.id,
@@ -1095,7 +1277,7 @@ function insertCard(db, card) {
       bindNull(event.fromMilestoneId),
       bindNull(event.toMilestoneId),
       bindNull(event.sessionKey),
-      bindNull(event.runId)
+      bindNull(event.runId),
     );
   });
   insertChildren(db, "taskfold_card_attempts", card.id, metadata?.attempts, (entry, ordinal) => {
@@ -1104,7 +1286,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_card_attempts
           (id, card_id, ordinal, status, started_at, ended_at, engine, mode, model, session_key, run_id, error, prompt_version)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       entry.id,
       card.id,
@@ -1118,7 +1300,7 @@ function insertCard(db, card) {
       bindNull(entry.sessionKey),
       bindNull(entry.runId),
       bindNull(entry.error),
-      bindNull(entry.promptVersion)
+      bindNull(entry.promptVersion),
     );
   });
   insertChildren(db, "taskfold_card_comments", card.id, metadata?.comments, (entry, ordinal) => {
@@ -1126,7 +1308,7 @@ function insertCard(db, card) {
       `
         INSERT INTO taskfold_card_comments (id, card_id, ordinal, body, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(entry.id, card.id, ordinal, entry.body, entry.createdAt, bindNull(entry.updatedAt));
   });
   insertChildren(db, "taskfold_card_links", card.id, metadata?.links, (entry, ordinal) => {
@@ -1135,7 +1317,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_card_links
           (id, card_id, ordinal, type, target_card_id, title, url, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       entry.id,
       card.id,
@@ -1144,7 +1326,7 @@ function insertCard(db, card) {
       bindNull(entry.targetCardId),
       bindNull(entry.title),
       bindNull(entry.url),
-      entry.createdAt
+      entry.createdAt,
     );
   });
   insertChildren(db, "taskfold_card_proof", card.id, metadata?.proof, (entry, ordinal) => {
@@ -1153,7 +1335,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_card_proof
           (id, card_id, ordinal, status, label, command, url, note, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       entry.id,
       card.id,
@@ -1163,7 +1345,7 @@ function insertCard(db, card) {
       bindNull(entry.command),
       bindNull(entry.url),
       bindNull(entry.note),
-      entry.createdAt
+      entry.createdAt,
     );
   });
   insertChildren(db, "taskfold_card_artifacts", card.id, metadata?.artifacts, (entry, ordinal) => {
@@ -1172,7 +1354,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_card_artifacts
           (id, card_id, ordinal, label, url, path, mime_type, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       entry.id,
       card.id,
@@ -1181,7 +1363,7 @@ function insertCard(db, card) {
       bindNull(entry.url),
       bindNull(entry.path),
       bindNull(entry.mimeType),
-      entry.createdAt
+      entry.createdAt,
     );
   });
   db.prepare("DELETE FROM taskfold_card_delivery WHERE card_id = ?").run(card.id);
@@ -1192,7 +1374,7 @@ function insertCard(db, card) {
           (card_id, objective, delivery_summary, open_items, implementation_state,
            verification_state, release_state, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       card.id,
       bindNull(card.delivery.objective),
@@ -1201,7 +1383,7 @@ function insertCard(db, card) {
       bindNull(card.delivery.implementationState),
       bindNull(card.delivery.verificationState),
       bindNull(card.delivery.releaseState),
-      card.delivery.updatedAt
+      card.delivery.updatedAt,
     );
   }
   insertChildren(
@@ -1215,7 +1397,7 @@ function insertCard(db, card) {
           INSERT INTO taskfold_card_source_references
             (id, card_id, ordinal, label, target, note, position, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
+        `,
       ).run(
         entry.id,
         card.id,
@@ -1225,9 +1407,9 @@ function insertCard(db, card) {
         bindNull(entry.note),
         entry.position,
         entry.createdAt,
-        entry.updatedAt
+        entry.updatedAt,
       );
-    }
+    },
   );
   insertChildren(
     db,
@@ -1240,7 +1422,7 @@ function insertCard(db, card) {
           INSERT INTO taskfold_card_attachments
             (id, card_id, ordinal, file_name, byte_size, mime_type, note, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `
+        `,
       ).run(
         entry.id,
         entry.cardId,
@@ -1249,9 +1431,9 @@ function insertCard(db, card) {
         entry.byteSize,
         bindNull(entry.mimeType),
         bindNull(entry.note),
-        entry.createdAt
+        entry.createdAt,
       );
-    }
+    },
   );
   insertChildren(
     db,
@@ -1264,7 +1446,7 @@ function insertCard(db, card) {
           INSERT INTO taskfold_card_diagnostics
             (card_id, ordinal, kind, severity, title, detail, first_seen_at, last_seen_at, count, actions_json)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
+        `,
       ).run(
         card.id,
         ordinal,
@@ -1275,9 +1457,9 @@ function insertCard(db, card) {
         entry.firstSeenAt,
         entry.lastSeenAt,
         entry.count,
-        JSON.stringify(entry.actions)
+        JSON.stringify(entry.actions),
       );
-    }
+    },
   );
   insertChildren(
     db,
@@ -1290,7 +1472,7 @@ function insertCard(db, card) {
           INSERT INTO taskfold_card_notifications
             (id, card_id, ordinal, kind, message, created_at, sequence, session_key, run_id)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
+        `,
       ).run(
         entry.id,
         card.id,
@@ -1300,9 +1482,9 @@ function insertCard(db, card) {
         entry.createdAt,
         bindNull(entry.sequence),
         bindNull(entry.sessionKey),
-        bindNull(entry.runId)
+        bindNull(entry.runId),
       );
-    }
+    },
   );
   insertChildren(db, "taskfold_worker_logs", card.id, metadata?.workerLogs, (entry, ordinal) => {
     db.prepare(
@@ -1310,7 +1492,7 @@ function insertCard(db, card) {
         INSERT INTO taskfold_worker_logs
           (id, card_id, ordinal, level, message, created_at, session_key, run_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
+      `,
     ).run(
       entry.id,
       card.id,
@@ -1319,7 +1501,7 @@ function insertCard(db, card) {
       entry.message,
       entry.createdAt,
       bindNull(entry.sessionKey),
-      bindNull(entry.runId)
+      bindNull(entry.runId),
     );
   });
   db.prepare("DELETE FROM taskfold_worker_protocol WHERE card_id = ?").run(card.id);
@@ -1328,31 +1510,40 @@ function insertCard(db, card) {
       `
         INSERT INTO taskfold_worker_protocol (card_id, state, updated_at, detail)
         VALUES (?, ?, ?, ?)
-      `
+      `,
     ).run(
       card.id,
       metadata.workerProtocol.state,
       metadata.workerProtocol.updatedAt,
-      bindNull(metadata.workerProtocol.detail)
+      bindNull(metadata.workerProtocol.detail),
     );
   }
 }
-var TaskfoldSqliteCardStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+
+class TaskfoldSqliteCardStore implements TaskfoldKeyedStore {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldCard): Promise<void> {
     if (value.version !== 1 || value.card.id !== key) {
       throw new Error("invalid taskfold card payload");
     }
     runTransaction(this.db, () => insertCard(this.db, value.card));
   }
-  async compareAndSwap(key, expectedRevision, value) {
+
+  async compareAndSwap(
+    key: string,
+    expectedRevision: number,
+    value: PersistedTaskfoldCard,
+  ): Promise<boolean> {
     if (value.version !== 1 || value.card.id !== key) {
       throw new Error("invalid taskfold card payload");
     }
+    // BEGIN IMMEDIATE takes the write lock before the revision is read, so a
+    // concurrent process in another Gateway cannot pass the same check.
     return runTransaction(this.db, () => {
-      const row = this.db.prepare("SELECT revision FROM taskfold_cards WHERE id = ?").get(key);
+      const row = this.db.prepare("SELECT revision FROM taskfold_cards WHERE id = ?").get(key) as
+        | Row
+        | undefined;
       if (!row || (numberValue(row, "revision") ?? 0) !== expectedRevision) {
         return false;
       }
@@ -1360,10 +1551,13 @@ var TaskfoldSqliteCardStore = class {
       return true;
     });
   }
-  async registerIfAbsent(key, value) {
+
+  async registerIfAbsent(key: string, value: PersistedTaskfoldCard): Promise<boolean> {
     if (value.version !== 1 || value.card.id !== key) {
       throw new Error("invalid taskfold card payload");
     }
+    // BEGIN IMMEDIATE takes the write lock before the existence check, so a
+    // concurrent process in another Gateway cannot pass the same check.
     return runTransaction(this.db, () => {
       const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
       if (row) {
@@ -1373,42 +1567,54 @@ var TaskfoldSqliteCardStore = class {
       return true;
     });
   }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key);
-    return row ? { version: 1, card: readCard(this.db, row) } : void 0;
+
+  async lookup(key: string): Promise<PersistedTaskfoldCard | undefined> {
+    const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key) as
+      | Row
+      | undefined;
+    return row ? { version: 1, card: readCard(this.db, row) } : undefined;
   }
-  async delete(key) {
+
+  async delete(key: string): Promise<boolean> {
     const result = runTransaction(this.db, () => {
-      this.db.prepare(
-        `
+      this.db
+        .prepare(
+          `
             DELETE FROM taskfold_attachment_blobs
             WHERE attachment_id IN (
               SELECT id FROM taskfold_card_attachments WHERE card_id = ?
             )
-          `
-      ).run(key);
+          `,
+        )
+        .run(key);
       return this.db.prepare("DELETE FROM taskfold_cards WHERE id = ?").run(key);
     });
     return result.changes > 0;
   }
-  async entries() {
-    return this.db.prepare("SELECT * FROM taskfold_cards ORDER BY created_at ASC, id ASC").all().map((row) => ({
+
+  async entries(): Promise<Array<{ key: string; value: PersistedTaskfoldCard }>> {
+    return (
+      this.db
+        .prepare("SELECT * FROM taskfold_cards ORDER BY created_at ASC, id ASC")
+        .all() as Row[]
+    ).map((row) => ({
       key: requiredString(row, "id"),
-      value: { version: 1, card: readCard(this.db, row) }
+      value: { version: 1, card: readCard(this.db, row) },
     }));
   }
-};
-var TaskfoldSqliteBoardStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+}
+
+class TaskfoldSqliteBoardStore implements TaskfoldKeyedStore<PersistedTaskfoldBoard> {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldBoard): Promise<void> {
     if (value.version !== 1 || value.board.id !== key) {
       throw new Error("invalid taskfold board payload");
     }
     const board = value.board;
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
           INSERT INTO taskfold_boards (
             id, name, description, icon, color, position, version, current_objective, core_value,
             source_of_truth, repository_url, planning_path, homepage_url,
@@ -1434,69 +1640,97 @@ var TaskfoldSqliteBoardStore = class {
             created_at = excluded.created_at,
             updated_at = excluded.updated_at,
             archived_at = excluded.archived_at
-        `
-    ).run(
-      board.id,
-      bindNull(board.name),
-      bindNull(board.description),
-      bindNull(board.icon),
-      bindNull(board.color),
-      bindNull(board.position),
-      bindNull(board.version),
-      bindNull(board.currentObjective),
-      bindNull(board.coreValue),
-      bindNull(board.sourceOfTruth),
-      bindNull(board.repositoryUrl),
-      bindNull(board.planningPath),
-      bindNull(board.homepageUrl),
-      jsonValue(board.defaultWorkspace),
-      jsonValue(board.orchestration),
-      jsonValue(board.boardView),
-      board.createdAt,
-      board.updatedAt,
-      bindNull(board.archivedAt)
-    );
+        `,
+      )
+      .run(
+        board.id,
+        bindNull(board.name),
+        bindNull(board.description),
+        bindNull(board.icon),
+        bindNull(board.color),
+        bindNull(board.position),
+        bindNull(board.version),
+        bindNull(board.currentObjective),
+        bindNull(board.coreValue),
+        bindNull(board.sourceOfTruth),
+        bindNull(board.repositoryUrl),
+        bindNull(board.planningPath),
+        bindNull(board.homepageUrl),
+        jsonValue(board.defaultWorkspace),
+        jsonValue(board.orchestration),
+        jsonValue(board.boardView),
+        board.createdAt,
+        board.updatedAt,
+        bindNull(board.archivedAt),
+      );
   }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_boards WHERE id = ?").get(key);
+
+  async lookup(key: string): Promise<PersistedTaskfoldBoard | undefined> {
+    const row = this.db.prepare("SELECT * FROM taskfold_boards WHERE id = ?").get(key) as
+      | Row
+      | undefined;
     if (!row) {
-      return void 0;
+      return undefined;
     }
-    const defaultWorkspace = parseJson(row.default_workspace_json);
-    const orchestration = parseJson(row.orchestration_json);
-    const boardView = parseJson(row.board_view_json);
+    const defaultWorkspace = parseJson(row.default_workspace_json) as
+      | PersistedTaskfoldBoard["board"]["defaultWorkspace"]
+      | undefined;
+    const orchestration = parseJson(row.orchestration_json) as
+      | PersistedTaskfoldBoard["board"]["orchestration"]
+      | undefined;
+    const boardView = parseJson(row.board_view_json) as
+      | PersistedTaskfoldBoard["board"]["boardView"]
+      | undefined;
     return {
       version: 1,
       board: {
         id: requiredString(row, "id"),
-        ...stringValue(row, "name") ? { name: stringValue(row, "name") } : {},
-        ...stringValue(row, "description") ? { description: stringValue(row, "description") } : {},
-        ...stringValue(row, "icon") ? { icon: stringValue(row, "icon") } : {},
-        ...stringValue(row, "color") ? { color: stringValue(row, "color") } : {},
-        ...numberValue(row, "position") !== void 0 ? { position: numberValue(row, "position") } : {},
-        ...stringValue(row, "version") ? { version: stringValue(row, "version") } : {},
-        ...stringValue(row, "current_objective") ? { currentObjective: stringValue(row, "current_objective") } : {},
-        ...stringValue(row, "core_value") ? { coreValue: stringValue(row, "core_value") } : {},
-        ...stringValue(row, "source_of_truth") ? { sourceOfTruth: stringValue(row, "source_of_truth") } : {},
-        ...stringValue(row, "repository_url") ? { repositoryUrl: stringValue(row, "repository_url") } : {},
-        ...stringValue(row, "planning_path") ? { planningPath: stringValue(row, "planning_path") } : {},
-        ...stringValue(row, "homepage_url") ? { homepageUrl: stringValue(row, "homepage_url") } : {},
-        ...defaultWorkspace ? { defaultWorkspace } : {},
-        ...orchestration ? { orchestration } : {},
-        ...boardView ? { boardView } : {},
+        ...(stringValue(row, "name") ? { name: stringValue(row, "name") } : {}),
+        ...(stringValue(row, "description")
+          ? { description: stringValue(row, "description") }
+          : {}),
+        ...(stringValue(row, "icon") ? { icon: stringValue(row, "icon") } : {}),
+        ...(stringValue(row, "color") ? { color: stringValue(row, "color") } : {}),
+        ...(numberValue(row, "position") !== undefined
+          ? { position: numberValue(row, "position") }
+          : {}),
+        ...(stringValue(row, "version") ? { version: stringValue(row, "version") } : {}),
+        ...(stringValue(row, "current_objective")
+          ? { currentObjective: stringValue(row, "current_objective") }
+          : {}),
+        ...(stringValue(row, "core_value") ? { coreValue: stringValue(row, "core_value") } : {}),
+        ...(stringValue(row, "source_of_truth")
+          ? { sourceOfTruth: stringValue(row, "source_of_truth") }
+          : {}),
+        ...(stringValue(row, "repository_url")
+          ? { repositoryUrl: stringValue(row, "repository_url") }
+          : {}),
+        ...(stringValue(row, "planning_path")
+          ? { planningPath: stringValue(row, "planning_path") }
+          : {}),
+        ...(stringValue(row, "homepage_url")
+          ? { homepageUrl: stringValue(row, "homepage_url") }
+          : {}),
+        ...(defaultWorkspace ? { defaultWorkspace } : {}),
+        ...(orchestration ? { orchestration } : {}),
+        ...(boardView ? { boardView } : {}),
         createdAt: requiredNumber(row, "created_at"),
         updatedAt: requiredNumber(row, "updated_at"),
-        ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {}
-      }
+        ...(numberValue(row, "archived_at") !== undefined
+          ? { archivedAt: numberValue(row, "archived_at") }
+          : {}),
+      },
     };
   }
-  async delete(key) {
+
+  async delete(key: string): Promise<boolean> {
     const result = this.db.prepare("DELETE FROM taskfold_boards WHERE id = ?").run(key);
     return result.changes > 0;
   }
-  async entries() {
-    const rows = this.db.prepare("SELECT id FROM taskfold_boards ORDER BY id ASC").all();
-    const entries = [];
+
+  async entries(): Promise<Array<{ key: string; value: PersistedTaskfoldBoard }>> {
+    const rows = this.db.prepare("SELECT id FROM taskfold_boards ORDER BY id ASC").all() as Row[];
+    const entries: Array<{ key: string; value: PersistedTaskfoldBoard }> = [];
     for (const row of rows) {
       const key = requiredString(row, "id");
       const value = await this.lookup(key);
@@ -1506,33 +1740,39 @@ var TaskfoldSqliteBoardStore = class {
     }
     return entries;
   }
-};
-function readMilestone(row) {
+}
+
+function readMilestone(row: Row): TaskfoldMilestone {
   return {
     id: requiredString(row, "id"),
     boardId: requiredString(row, "board_id"),
     title: requiredString(row, "title"),
     position: requiredNumber(row, "position"),
-    state: requiredString(row, "state"),
+    state: requiredString(row, "state") as TaskfoldMilestone["state"],
     createdAt: requiredNumber(row, "created_at"),
     updatedAt: requiredNumber(row, "updated_at"),
-    ...stringValue(row, "description") ? { description: stringValue(row, "description") } : {},
-    ...stringValue(row, "color") ? { color: stringValue(row, "color") } : {},
-    ...numberValue(row, "completed_at") !== void 0 ? { completedAt: numberValue(row, "completed_at") } : {},
-    ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {}
+    ...(stringValue(row, "description") ? { description: stringValue(row, "description") } : {}),
+    ...(stringValue(row, "color") ? { color: stringValue(row, "color") } : {}),
+    ...(numberValue(row, "completed_at") !== undefined
+      ? { completedAt: numberValue(row, "completed_at") }
+      : {}),
+    ...(numberValue(row, "archived_at") !== undefined
+      ? { archivedAt: numberValue(row, "archived_at") }
+      : {}),
   };
 }
-var TaskfoldSqliteMilestoneStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+
+class TaskfoldSqliteMilestoneStore implements TaskfoldKeyedStore<PersistedTaskfoldMilestone> {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldMilestone): Promise<void> {
     if (value.version !== 1 || value.milestone.id !== key) {
       throw new Error("invalid taskfold milestone payload");
     }
     const milestone = value.milestone;
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
           INSERT INTO taskfold_milestones (
             id, board_id, title, description, color, position, state, created_at, updated_at,
             completed_at, archived_at
@@ -1548,66 +1788,82 @@ var TaskfoldSqliteMilestoneStore = class {
             updated_at = excluded.updated_at,
             completed_at = excluded.completed_at,
             archived_at = excluded.archived_at
-        `
-    ).run(
-      milestone.id,
-      milestone.boardId,
-      milestone.title,
-      bindNull(milestone.description),
-      bindNull(milestone.color),
-      milestone.position,
-      milestone.state,
-      milestone.createdAt,
-      milestone.updatedAt,
-      bindNull(milestone.completedAt),
-      bindNull(milestone.archivedAt)
-    );
+        `,
+      )
+      .run(
+        milestone.id,
+        milestone.boardId,
+        milestone.title,
+        bindNull(milestone.description),
+        bindNull(milestone.color),
+        milestone.position,
+        milestone.state,
+        milestone.createdAt,
+        milestone.updatedAt,
+        bindNull(milestone.completedAt),
+        bindNull(milestone.archivedAt),
+      );
   }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_milestones WHERE id = ?").get(key);
-    return row ? { version: 1, milestone: readMilestone(row) } : void 0;
+
+  async lookup(key: string): Promise<PersistedTaskfoldMilestone | undefined> {
+    const row = this.db.prepare("SELECT * FROM taskfold_milestones WHERE id = ?").get(key) as
+      | Row
+      | undefined;
+    return row ? { version: 1, milestone: readMilestone(row) } : undefined;
   }
-  async delete(key) {
+
+  async delete(key: string): Promise<boolean> {
     const result = this.db.prepare("DELETE FROM taskfold_milestones WHERE id = ?").run(key);
     return result.changes > 0;
   }
-  async entries() {
-    return this.db.prepare("SELECT * FROM taskfold_milestones ORDER BY board_id ASC, position ASC, id ASC").all().map((row) => ({
+
+  async entries(): Promise<Array<{ key: string; value: PersistedTaskfoldMilestone }>> {
+    return (
+      this.db
+        .prepare("SELECT * FROM taskfold_milestones ORDER BY board_id ASC, position ASC, id ASC")
+        .all() as Row[]
+    ).map((row) => ({
       key: requiredString(row, "id"),
-      value: { version: 1, milestone: readMilestone(row) }
+      value: { version: 1, milestone: readMilestone(row) },
     }));
   }
-};
-function readProjectDocument(row) {
+}
+
+function readProjectDocument(row: Row): TaskfoldProjectDocument {
   return {
     id: requiredString(row, "id"),
     boardId: requiredString(row, "board_id"),
     key: requiredString(row, "document_key"),
-    section: requiredString(row, "section"),
-    source: stringValue(row, "source") ?? "project",
-    type: requiredString(row, "type"),
+    section: requiredString(row, "section") as TaskfoldProjectDocument["section"],
+    source: (stringValue(row, "source") ?? "project") as TaskfoldProjectDocument["source"],
+    type: requiredString(row, "type") as TaskfoldProjectDocument["type"],
     title: requiredString(row, "title"),
     position: requiredNumber(row, "position"),
     createdAt: requiredNumber(row, "created_at"),
     updatedAt: requiredNumber(row, "updated_at"),
-    ...stringValue(row, "summary") ? { summary: stringValue(row, "summary") } : {},
-    ...stringValue(row, "target") ? { target: stringValue(row, "target") } : {},
-    ...stringValue(row, "content") ? { content: stringValue(row, "content") } : {},
-    ...numberValue(row, "hidden_at") !== void 0 ? { hiddenAt: numberValue(row, "hidden_at") } : {},
-    ...numberValue(row, "system") === 1 ? { system: true } : {}
+    ...(stringValue(row, "summary") ? { summary: stringValue(row, "summary") } : {}),
+    ...(stringValue(row, "target") ? { target: stringValue(row, "target") } : {}),
+    ...(stringValue(row, "content") ? { content: stringValue(row, "content") } : {}),
+    ...(numberValue(row, "hidden_at") !== undefined
+      ? { hiddenAt: numberValue(row, "hidden_at") }
+      : {}),
+    ...(numberValue(row, "system") === 1 ? { system: true } : {}),
   };
 }
-var TaskfoldSqliteProjectDocumentStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+
+class TaskfoldSqliteProjectDocumentStore
+  implements TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>
+{
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldProjectDocument): Promise<void> {
     if (value.version !== 1 || value.document.id !== key) {
       throw new Error("invalid taskfold project document payload");
     }
     const document = value.document;
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
           INSERT INTO taskfold_project_documents (
             id, board_id, document_key, section, source, type, title, summary, target, content,
             position, hidden_at, system, created_at, updated_at
@@ -1627,53 +1883,64 @@ var TaskfoldSqliteProjectDocumentStore = class {
             system = excluded.system,
             created_at = excluded.created_at,
             updated_at = excluded.updated_at
-        `
-    ).run(
-      document.id,
-      document.boardId,
-      document.key,
-      document.section,
-      document.source,
-      document.type,
-      document.title,
-      bindNull(document.summary),
-      bindNull(document.target),
-      bindNull(document.content),
-      document.position,
-      bindNull(document.hiddenAt),
-      document.system ? 1 : 0,
-      document.createdAt,
-      document.updatedAt
-    );
+        `,
+      )
+      .run(
+        document.id,
+        document.boardId,
+        document.key,
+        document.section,
+        document.source,
+        document.type,
+        document.title,
+        bindNull(document.summary),
+        bindNull(document.target),
+        bindNull(document.content),
+        document.position,
+        bindNull(document.hiddenAt),
+        document.system ? 1 : 0,
+        document.createdAt,
+        document.updatedAt,
+      );
   }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_project_documents WHERE id = ?").get(key);
-    return row ? { version: 1, document: readProjectDocument(row) } : void 0;
+
+  async lookup(key: string): Promise<PersistedTaskfoldProjectDocument | undefined> {
+    const row = this.db
+      .prepare("SELECT * FROM taskfold_project_documents WHERE id = ?")
+      .get(key) as Row | undefined;
+    return row ? { version: 1, document: readProjectDocument(row) } : undefined;
   }
-  async delete(key) {
+
+  async delete(key: string): Promise<boolean> {
     const result = this.db.prepare("DELETE FROM taskfold_project_documents WHERE id = ?").run(key);
     return result.changes > 0;
   }
-  async entries() {
-    return this.db.prepare(
-      "SELECT * FROM taskfold_project_documents ORDER BY board_id ASC, section ASC, position ASC, id ASC"
-    ).all().map((row) => ({
+
+  async entries(): Promise<Array<{ key: string; value: PersistedTaskfoldProjectDocument }>> {
+    return (
+      this.db
+        .prepare(
+          "SELECT * FROM taskfold_project_documents ORDER BY board_id ASC, section ASC, position ASC, id ASC",
+        )
+        .all() as Row[]
+    ).map((row) => ({
       key: requiredString(row, "id"),
-      value: { version: 1, document: readProjectDocument(row) }
+      value: { version: 1, document: readProjectDocument(row) },
     }));
   }
-};
-var TaskfoldSqliteSubscriptionStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+}
+
+class TaskfoldSqliteSubscriptionStore implements TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription> {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldNotificationSubscription): Promise<void> {
     if (value.version !== 1 || value.subscription.id !== key) {
       throw new Error("invalid taskfold notification subscription payload");
     }
     const subscription = value.subscription;
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
           INSERT INTO taskfold_notification_subscriptions (
             id, board_id, card_id, session_key, run_id, target, event_kinds_json,
             last_event_at, last_event_id, last_event_sequence, delivered_event_ids_json,
@@ -1692,58 +1959,80 @@ var TaskfoldSqliteSubscriptionStore = class {
             delivered_event_ids_json = excluded.delivered_event_ids_json,
             created_at = excluded.created_at,
             updated_at = excluded.updated_at
-        `
-    ).run(
-      subscription.id,
-      subscription.boardId,
-      bindNull(subscription.cardId),
-      bindNull(subscription.sessionKey),
-      bindNull(subscription.runId),
-      bindNull(subscription.target),
-      jsonValue(subscription.eventKinds),
-      bindNull(subscription.lastEventAt),
-      bindNull(subscription.lastEventId),
-      bindNull(subscription.lastEventSequence),
-      jsonValue(subscription.deliveredEventIds),
-      subscription.createdAt,
-      subscription.updatedAt
-    );
+        `,
+      )
+      .run(
+        subscription.id,
+        subscription.boardId,
+        bindNull(subscription.cardId),
+        bindNull(subscription.sessionKey),
+        bindNull(subscription.runId),
+        bindNull(subscription.target),
+        jsonValue(subscription.eventKinds),
+        bindNull(subscription.lastEventAt),
+        bindNull(subscription.lastEventId),
+        bindNull(subscription.lastEventSequence),
+        jsonValue(subscription.deliveredEventIds),
+        subscription.createdAt,
+        subscription.updatedAt,
+      );
   }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_notification_subscriptions WHERE id = ?").get(key);
+
+  async lookup(key: string): Promise<PersistedTaskfoldNotificationSubscription | undefined> {
+    const row = this.db
+      .prepare("SELECT * FROM taskfold_notification_subscriptions WHERE id = ?")
+      .get(key) as Row | undefined;
     if (!row) {
-      return void 0;
+      return undefined;
     }
-    const eventKinds = parseJson(row.event_kinds_json);
-    const deliveredEventIds = parseJson(row.delivered_event_ids_json);
+    const eventKinds = parseJson(row.event_kinds_json) as
+      | PersistedTaskfoldNotificationSubscription["subscription"]["eventKinds"]
+      | undefined;
+    const deliveredEventIds = parseJson(row.delivered_event_ids_json) as
+      | PersistedTaskfoldNotificationSubscription["subscription"]["deliveredEventIds"]
+      | undefined;
     return {
       version: 1,
       subscription: {
         id: requiredString(row, "id"),
         boardId: requiredString(row, "board_id"),
-        ...stringValue(row, "card_id") ? { cardId: stringValue(row, "card_id") } : {},
-        ...stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {},
-        ...stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {},
-        ...stringValue(row, "target") ? { target: stringValue(row, "target") } : {},
-        ...eventKinds ? { eventKinds } : {},
-        ...numberValue(row, "last_event_at") !== void 0 ? { lastEventAt: numberValue(row, "last_event_at") } : {},
-        ...stringValue(row, "last_event_id") ? { lastEventId: stringValue(row, "last_event_id") } : {},
-        ...numberValue(row, "last_event_sequence") !== void 0 ? { lastEventSequence: numberValue(row, "last_event_sequence") } : {},
-        ...deliveredEventIds ? { deliveredEventIds } : {},
+        ...(stringValue(row, "card_id") ? { cardId: stringValue(row, "card_id") } : {}),
+        ...(stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {}),
+        ...(stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {}),
+        ...(stringValue(row, "target") ? { target: stringValue(row, "target") } : {}),
+        ...(eventKinds ? { eventKinds } : {}),
+        ...(numberValue(row, "last_event_at") !== undefined
+          ? { lastEventAt: numberValue(row, "last_event_at") }
+          : {}),
+        ...(stringValue(row, "last_event_id")
+          ? { lastEventId: stringValue(row, "last_event_id") }
+          : {}),
+        ...(numberValue(row, "last_event_sequence") !== undefined
+          ? { lastEventSequence: numberValue(row, "last_event_sequence") }
+          : {}),
+        ...(deliveredEventIds ? { deliveredEventIds } : {}),
         createdAt: requiredNumber(row, "created_at"),
-        updatedAt: requiredNumber(row, "updated_at")
-      }
+        updatedAt: requiredNumber(row, "updated_at"),
+      },
     };
   }
-  async delete(key) {
-    const result = this.db.prepare("DELETE FROM taskfold_notification_subscriptions WHERE id = ?").run(key);
+
+  async delete(key: string): Promise<boolean> {
+    const result = this.db
+      .prepare("DELETE FROM taskfold_notification_subscriptions WHERE id = ?")
+      .run(key);
     return result.changes > 0;
   }
-  async entries() {
-    const rows = this.db.prepare(
-      "SELECT id FROM taskfold_notification_subscriptions ORDER BY created_at ASC, id ASC"
-    ).all();
-    const entries = [];
+
+  async entries(): Promise<
+    Array<{ key: string; value: PersistedTaskfoldNotificationSubscription }>
+  > {
+    const rows = this.db
+      .prepare(
+        "SELECT id FROM taskfold_notification_subscriptions ORDER BY created_at ASC, id ASC",
+      )
+      .all() as Row[];
+    const entries: Array<{ key: string; value: PersistedTaskfoldNotificationSubscription }> = [];
     for (const row of rows) {
       const key = requiredString(row, "id");
       const value = await this.lookup(key);
@@ -1753,35 +2042,40 @@ var TaskfoldSqliteSubscriptionStore = class {
     }
     return entries;
   }
-};
-var TaskfoldSqliteAttachmentStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
+}
+
+class TaskfoldSqliteAttachmentStore implements TaskfoldKeyedStore<PersistedTaskfoldAttachment> {
+  constructor(private readonly db: DatabaseSync) {}
+
+  async register(key: string, value: PersistedTaskfoldAttachment): Promise<void> {
     if (value.version !== 1 || value.attachment.id !== key) {
       throw new Error("invalid taskfold attachment payload");
     }
     const attachment = value.attachment;
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
           INSERT INTO taskfold_attachment_blobs (attachment_id, content)
           VALUES (?, ?)
           ON CONFLICT(attachment_id) DO UPDATE SET content = excluded.content
-        `
-    ).run(attachment.id, asBlobContent(value.contentBase64));
+        `,
+      )
+      .run(attachment.id, asBlobContent(value.contentBase64));
   }
-  async lookup(key) {
-    const row = this.db.prepare(
-      `
+
+  async lookup(key: string): Promise<PersistedTaskfoldAttachment | undefined> {
+    const row = this.db
+      .prepare(
+        `
           SELECT a.*, b.content
           FROM taskfold_card_attachments a
           JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
           WHERE a.id = ?
-        `
-    ).get(key);
+        `,
+      )
+      .get(key) as Row | undefined;
     if (!row) {
-      return void 0;
+      return undefined;
     }
     return {
       version: 1,
@@ -1791,29 +2085,33 @@ var TaskfoldSqliteAttachmentStore = class {
         createdAt: requiredNumber(row, "created_at"),
         fileName: requiredString(row, "file_name"),
         byteSize: requiredNumber(row, "byte_size"),
-        ...stringValue(row, "mime_type") ? { mimeType: stringValue(row, "mime_type") } : {},
-        ...stringValue(row, "note") ? { note: stringValue(row, "note") } : {}
+        ...(stringValue(row, "mime_type") ? { mimeType: stringValue(row, "mime_type") } : {}),
+        ...(stringValue(row, "note") ? { note: stringValue(row, "note") } : {}),
       },
-      contentBase64: blobToBase64(row.content)
+      contentBase64: blobToBase64(row.content),
     };
   }
-  async delete(key) {
+
+  async delete(key: string): Promise<boolean> {
     const deleted = runTransaction(this.db, () => {
       this.db.prepare("DELETE FROM taskfold_attachment_blobs WHERE attachment_id = ?").run(key);
       return this.db.prepare("DELETE FROM taskfold_card_attachments WHERE id = ?").run(key);
     });
     return deleted.changes > 0;
   }
-  async entries() {
-    const rows = this.db.prepare(
-      `
+
+  async entries(): Promise<Array<{ key: string; value: PersistedTaskfoldAttachment }>> {
+    const rows = this.db
+      .prepare(
+        `
           SELECT a.id
           FROM taskfold_card_attachments a
           JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
           ORDER BY a.created_at ASC, a.id ASC
-        `
-    ).all();
-    const entries = [];
+        `,
+      )
+      .all() as Row[];
+    const entries: Array<{ key: string; value: PersistedTaskfoldAttachment }> = [];
     for (const row of rows) {
       const key = requiredString(row, "id");
       const value = await this.lookup(key);
@@ -1823,12 +2121,38 @@ var TaskfoldSqliteAttachmentStore = class {
     }
     return entries;
   }
-};
-function createTaskfoldSqliteStores(options = {}) {
+}
+
+/**
+ * 只读打开一份 Taskfold SQLite 库（TASK-10 迁移工具用）：`readOnly` 连接，不建目录、不跑 schema
+ * 迁移、不设 pragma、不碰旧 flowboard 库（不经过 {@link createDatabase}）。写方法会被 SQLite 拒绝。
+ * `db` 给迁移工具按表计数用。
+ */
+export function openTaskfoldSqliteStoresReadOnly(dbPath: string) {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  return {
+    db,
+    cards: new TaskfoldSqliteCardStore(db),
+    boards: new TaskfoldSqliteBoardStore(db),
+    milestones: new TaskfoldSqliteMilestoneStore(db),
+    documents: new TaskfoldSqliteProjectDocumentStore(db),
+    subscriptions: new TaskfoldSqliteSubscriptionStore(db),
+    attachments: new TaskfoldSqliteAttachmentStore(db),
+    close: () => db.close(),
+  };
+}
+
+export function createTaskfoldSqliteStores(
+  options: {
+    dbPath?: string;
+    legacyDbPath?: string;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+): TaskfoldSqliteStores {
   const dbPath = options.dbPath ?? resolveTaskfoldSqlitePath(options.env);
   const { db, maintenance } = createDatabase(
     dbPath,
-    options.legacyDbPath ?? (options.dbPath ? void 0 : resolveLegacyFlowboardSqlitePath(options.env))
+    options.legacyDbPath ?? (options.dbPath ? undefined : resolveLegacyFlowboardSqlitePath(options.env)),
   );
   return {
     cards: new TaskfoldSqliteCardStore(db),
@@ -1838,238 +2162,14 @@ function createTaskfoldSqliteStores(options = {}) {
     subscriptions: new TaskfoldSqliteSubscriptionStore(db),
     attachments: new TaskfoldSqliteAttachmentStore(db),
     // This connection-local primitive changes only after another connection commits.
-    dataVersion: () => requiredNumber(db.prepare("PRAGMA data_version").get(), "data_version"),
+    dataVersion: () =>
+      requiredNumber(db.prepare("PRAGMA data_version").get() as Row, "data_version"),
     changeEpoch: ensureChangeEpoch(db),
-    reserveChangeRevisions: (count) => reserveChangeRevisions(db, count),
+    reserveChangeRevisions: (count: number) => reserveChangeRevisions(db, count),
     close: () => {
       maintenance.close();
       db.close();
-    }
+    },
   };
 }
-
-// src/backend/doctor-contract-api.ts
-var MAX_CARDS = 2e3;
-function migrationEnv(params) {
-  return { ...params.env, OPENCLAW_STATE_DIR: params.stateDir };
-}
-function openLegacyStore(params) {
-  return params.context.openPluginStateKeyedStore({
-    namespace: params.namespace,
-    maxEntries: params.maxEntries,
-    env: params.env
-  });
-}
-function isPersistedCard(value) {
-  return Boolean(
-    value && typeof value === "object" && value.version === 1
-  );
-}
-function isPersistedBoard(value) {
-  return Boolean(
-    value && typeof value === "object" && value.version === 1
-  );
-}
-function isPersistedSubscription(value) {
-  return Boolean(
-    value && typeof value === "object" && value.version === 1
-  );
-}
-function isPersistedAttachment(value) {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value;
-  const attachment = candidate.attachment;
-  return candidate.version === 1 && attachment !== void 0 && typeof attachment === "object" && typeof attachment.id === "string" && typeof attachment.cardId === "string" && typeof attachment.fileName === "string" && typeof attachment.byteSize === "number" && typeof attachment.createdAt === "number" && typeof candidate.contentBase64 === "string";
-}
-async function migrateNamespace(params) {
-  const warnings = [];
-  let imported = 0;
-  for (const entry of await params.legacy.entries()) {
-    if (!params.isValid(entry.value)) {
-      warnings.push(`Skipped malformed legacy Taskfold ${params.label} entry ${entry.key}`);
-      continue;
-    }
-    try {
-      const targetEntry = await params.target.lookup(entry.key);
-      if (targetEntry) {
-        if (JSON.stringify(targetEntry) === JSON.stringify(entry.value)) {
-          await params.legacy.delete(entry.key);
-          imported++;
-          continue;
-        }
-        warnings.push(
-          `Skipped legacy Taskfold ${params.label} entry ${entry.key} because the SQLite target already exists`
-        );
-        continue;
-      }
-      await params.target.register(entry.key, entry.value);
-      await params.legacy.delete(entry.key);
-      imported++;
-    } catch (err) {
-      warnings.push(
-        `Failed migrating legacy Taskfold ${params.label} entry ${entry.key}: ${String(err)}`
-      );
-    }
-  }
-  return { imported, warnings };
-}
-async function targetCardReferencesAttachment(cards, attachment) {
-  const card = await cards.lookup(attachment.attachment.cardId);
-  return Boolean(
-    card?.version === 1 && card.card.metadata?.attachments?.some(
-      (entry) => entry.id === attachment.attachment.id && entry.cardId === attachment.attachment.cardId
-    )
-  );
-}
-async function migrateAttachments(params) {
-  const warnings = [];
-  let imported = 0;
-  for (const entry of await params.legacy.entries()) {
-    if (!isPersistedAttachment(entry.value)) {
-      warnings.push(`Skipped malformed legacy Taskfold attachment entry ${entry.key}`);
-      continue;
-    }
-    if (!await targetCardReferencesAttachment(params.cards, entry.value)) {
-      warnings.push(
-        `Skipped legacy Taskfold attachment entry ${entry.key} because its owning card was not migrated or does not reference the attachment`
-      );
-      continue;
-    }
-    const targetEntry = await params.target.lookup(entry.key);
-    if (targetEntry) {
-      if (JSON.stringify(targetEntry) === JSON.stringify(entry.value)) {
-        await params.legacy.delete(entry.key);
-        imported++;
-        continue;
-      }
-      warnings.push(
-        `Skipped legacy Taskfold attachment entry ${entry.key} because the SQLite target already exists`
-      );
-      continue;
-    }
-    try {
-      await params.target.register(entry.key, entry.value);
-      await params.legacy.delete(entry.key);
-      imported++;
-    } catch (err) {
-      warnings.push(
-        `Failed migrating legacy Taskfold attachment entry ${entry.key}: ${String(err)}`
-      );
-    }
-  }
-  return { imported, warnings };
-}
-var stateMigrations = [
-  {
-    id: "taskfold-28-kv-to-sqlite",
-    label: "Taskfold .28 plugin-state KV",
-    async detectLegacyState(params) {
-      const env = migrationEnv(params);
-      const cards = await openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.cards",
-        maxEntries: MAX_CARDS
-      }).entries();
-      const boards = await openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.boards",
-        maxEntries: 200
-      }).entries();
-      const subscriptions = await openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.notify",
-        maxEntries: 2e3
-      }).entries();
-      const attachments = await openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.attachments",
-        maxEntries: MAX_CARDS * 21
-      }).entries();
-      const count = cards.length + boards.length + subscriptions.length + attachments.length;
-      if (count === 0) {
-        return null;
-      }
-      return {
-        preview: [
-          `- Taskfold: ${count} legacy .28 plugin-state KV ${count === 1 ? "entry" : "entries"} \u2192 ${resolveTaskfoldSqlitePath(env)}`
-        ]
-      };
-    },
-    async migrateLegacyState(params) {
-      const env = migrationEnv(params);
-      const cards = openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.cards",
-        maxEntries: MAX_CARDS
-      });
-      const boards = openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.boards",
-        maxEntries: 200
-      });
-      const subscriptions = openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.notify",
-        maxEntries: 2e3
-      });
-      const attachments = openLegacyStore({
-        context: params.context,
-        env,
-        namespace: "taskfold.attachments",
-        maxEntries: MAX_CARDS * 21
-      });
-      const sqlite = createTaskfoldSqliteStores({ env });
-      try {
-        const cardResult = await migrateNamespace({
-          label: "card",
-          legacy: cards,
-          target: sqlite.cards,
-          isValid: isPersistedCard
-        });
-        const boardResult = await migrateNamespace({
-          label: "board",
-          legacy: boards,
-          target: sqlite.boards,
-          isValid: isPersistedBoard
-        });
-        const subscriptionResult = await migrateNamespace({
-          label: "notification subscription",
-          legacy: subscriptions,
-          target: sqlite.subscriptions,
-          isValid: isPersistedSubscription
-        });
-        const attachmentResult = await migrateAttachments({
-          legacy: attachments,
-          cards: sqlite.cards,
-          target: sqlite.attachments
-        });
-        const imported = cardResult.imported + boardResult.imported + subscriptionResult.imported + attachmentResult.imported;
-        return {
-          changes: imported > 0 ? [
-            `Migrated ${imported} Taskfold .28 plugin-state KV ${imported === 1 ? "entry" : "entries"} \u2192 relational SQLite`
-          ] : [],
-          warnings: [
-            ...cardResult.warnings,
-            ...boardResult.warnings,
-            ...subscriptionResult.warnings,
-            ...attachmentResult.warnings
-          ]
-        };
-      } finally {
-        sqlite.close();
-      }
-    }
-  }
-];
-export {
-  stateMigrations
-};
+/* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

@@ -15,6 +15,7 @@
 import path from "node:path";
 import type { TaskfoldAttachment, TaskfoldCard } from "./contract/index.js";
 import type { PersistedTaskfoldAttachment, TaskfoldKeyedStore } from "./persistence-types.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
 import {
   asBlobContent,
   blobToBase64,
@@ -112,5 +113,8 @@ export function createTaskfoldFileAttachmentStore(options: {
       }
       return results;
     },
+
+    // 没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 }

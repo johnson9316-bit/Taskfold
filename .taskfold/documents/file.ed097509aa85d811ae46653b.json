@@ -1,0 +1,15 @@
+{
+  "id": "ae6c2381-b002-4514-937f-724288846032",
+  "boardId": "flowboard",
+  "key": "file.ed097509aa85d811ae46653b",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "UPSTREAM",
+  "position": 2000,
+  "createdAt": 1785467793983,
+  "updatedAt": 1785467793983,
+  "summary": "UPSTREAM.md",
+  "target": "./UPSTREAM.md",
+  "system": true
+}

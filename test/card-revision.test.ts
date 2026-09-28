@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "./helpers/legacy-sqlite-store.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { TASKFOLD_PROMPT_VERSION } from "@taskfold/core/worker-prompt.js";
@@ -46,7 +46,7 @@ function openSharedDatabase(): { dbPath: string; open: () => TaskfoldStore } {
     open: () => {
       const stores = createTaskfoldSqliteStores({ dbPath });
       closers.push(stores.close);
-      return TaskfoldStore.fromSqliteStores(stores);
+      return TaskfoldStore.fromStores(stores);
     },
   };
 }

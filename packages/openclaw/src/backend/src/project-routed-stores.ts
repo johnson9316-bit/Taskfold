@@ -22,6 +22,7 @@ import path from "node:path";
 import type { TaskfoldBoardMetadata, TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { readBufferIfExists, writeFileAtomic } from "@taskfold/core/file-store-atomic.js";
 import { createTaskfoldFileBoardStore } from "@taskfold/core/file-store-boards.js";
+import { unsupportedTaskfoldCompareAndSwap } from "@taskfold/core/file-store-cas.js";
 import {
   createTaskfoldFileStores,
   resolveTaskfoldDataDir,
@@ -332,7 +333,10 @@ export function createTaskfoldProjectRoutedStores(options: {
         }
         return result;
       },
-    } as TaskfoldKeyedStore<T>;
+
+      // 里程碑/文档没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透。
+      compareAndSwap: unsupportedTaskfoldCompareAndSwap,
+    };
   }
 
   const cardSpec: EntitySpec<PersistedTaskfoldCard> = {
@@ -451,7 +455,10 @@ export function createTaskfoldProjectRoutedStores(options: {
       }
       return result;
     },
-  } as TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+
+    // 附件没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
+  };
 
   // 注册表与订阅：写之前确保插件目录在（0700，与原 SQLite 目录同权限）。
   const boards: TaskfoldKeyedStore<PersistedTaskfoldBoard> = {

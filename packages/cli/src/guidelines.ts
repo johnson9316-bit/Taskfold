@@ -138,7 +138,7 @@ cross-process locks and checks revisions, and hand edits bypass both.
 - Every failure exits non-zero and prints one JSON object on stderr:
   \`{"schemaVersion": ${TASKFOLD_CLI_SCHEMA_VERSION}, "kind": "error", "error": {"code": "<CODE>", "message": "...", "details": {...}}}\`.
   Branch on \`error.code\`, not on the message.
-- Card ids are UUIDs. Any unique prefix works, e.g. the 8-character \`shortId\` from \`list\`.
+- Card ids are UUIDs. A unique prefix or the \`card-N\` \`displayId\` from \`list\` also works.
 - Each card has a \`revision\` number that increases on every write.
 
 ## Commands
@@ -180,7 +180,7 @@ Run \`taskfold <command> --help\` for every flag and more examples.
 
 | kind | printed by | payload |
 | --- | --- | --- |
-| \`card\` | show, create, update | \`card\`: id, shortId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
+| \`card\` | show, create, update | \`card\`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | \`card-list\` | list | \`boardId\` (null = all boards), \`cards\`: the same fields as \`card\` without notes |
 | \`card-deleted\` | delete | \`id\` |
 | \`board-list\` | boards | \`defaultBoardId\` (null if ambiguous), \`boards\`: id, total, active, archived, byStatus |

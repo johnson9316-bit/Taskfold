@@ -4,6 +4,7 @@
 import path from "node:path";
 import type { TaskfoldMilestone } from "./contract/index.js";
 import type { PersistedTaskfoldMilestone, TaskfoldKeyedStore } from "./persistence-types.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
 import {
   listFileNamesSafe,
   readFileIfExists,
@@ -164,5 +165,8 @@ export function createTaskfoldFileMilestoneStore(options: {
       }
       return results;
     },
+
+    // 没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 }

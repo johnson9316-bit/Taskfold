@@ -12,6 +12,7 @@
 // resolution (file-store-paths.ts) into wherever a project's `defaultWorkspace` is read
 // today, belongs to the later "切生产路径" milestone (需求/16 第八节 第 3 期), not to this
 // storage skeleton.
+import path from "node:path";
 import type {
   PersistedTaskfoldBoard,
   PersistedTaskfoldNotificationSubscription,
@@ -44,6 +45,8 @@ import {
   type TaskfoldMilestoneCodec,
 } from "./file-store-codec.js";
 import { createTaskfoldFileCardStore } from "./file-store-cards.js";
+import { withProjectPaths } from "./file-store-project-paths.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
 import { createTaskfoldFileMilestoneStore } from "./file-store-milestones.js";
 import { createTaskfoldFileDocumentStore } from "./file-store-documents.js";
 import { createTaskfoldFileSubscriptionStore } from "./file-store-subscriptions.js";
@@ -91,6 +94,9 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
     ...(options.pluginDir === undefined ? {} : { pluginDir: options.pluginDir }),
   });
+  const projectRoot = path.basename(layout.dataDir) === ".taskfold"
+    ? path.dirname(layout.dataDir)
+    : layout.dataDir;
   // 需求/18 §3.9：格式版本高于本版 core 时只读不写——不初始化 `.taskfold/`，写入一律拒绝。
   // 每次写入前都重读 config.yml，运行期间被别的进程升级了格式也能拦住。
   const canWrite = () => isTaskfoldFormatWritable(layout.configPath);
@@ -102,7 +108,7 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
   }
   ensureTaskfoldPluginDirectories(layout);
 
-  const cardCodec = options.cardCodec ?? createMarkdownCardCodec();
+  const cardCodec = withProjectPaths(options.cardCodec ?? createMarkdownCardCodec(), projectRoot);
   const milestoneCodec = options.milestoneCodec ?? createMarkdownMilestoneCodec();
 
   // 需求/16 R4：既是"要不要广播一下"的目录级 mtime 信号，也是"外部改动过后重盖
@@ -137,7 +143,7 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
   }));
   const documents = rejectWritesUnlessFormatWritable(
     assertWritable,
-    createTaskfoldFileDocumentStore({ documentsDir: layout.documentsDir }),
+    createTaskfoldFileDocumentStore({ documentsDir: layout.documentsDir, projectRoot }),
   );
   const subscriptions =
     layout.subscriptionsDir === undefined
@@ -202,12 +208,14 @@ function createProcessLocalStore<T>(): TaskfoldKeyedStore<T> {
     },
     delete: async (key) => values.delete(key),
     entries: async () => [...values].map(([key, value]) => ({ key, value: structuredClone(value) })),
-  } as TaskfoldKeyedStore<T>;
+    // 没有条件写的调用方；显式拒绝（file-store-cas.ts），绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
+  };
 }
 
 /** 包一层：每个会改动 `.taskfold/` 的方法先确认格式版本可写（需求/18 §3.9），读方法原样透传。
- * 与 store-change-tracker.ts 的 `track` 一样，`compareAndSwap`/`registerIfAbsent` 原来有才有，
- * 保持同样的（随 T 变化的）必选/可选 CAS 形状，TS 在条件类型里看不出来，所以要 cast。 */
+ * CAS 是所有 store 的必选方法（persistence-types.ts），无条件透传；`registerIfAbsent` 仍是
+ * 可选方法，原来有才有，条件展开保留。 */
 function rejectWritesUnlessFormatWritable<T>(
   assertWritable: () => void,
   store: TaskfoldKeyedStore<T>,
@@ -223,19 +231,15 @@ function rejectWritesUnlessFormatWritable<T>(
       return await store.delete(key);
     },
     entries: async () => await store.entries(),
-    ...(store.compareAndSwap
-      ? {
-          compareAndSwap: async (
-            key: string,
-            expectedRevision: number,
-            value: T,
-            onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
-          ) => {
-            assertWritable();
-            return await store.compareAndSwap!(key, expectedRevision, value, onReject);
-          },
-        }
-      : {}),
+    compareAndSwap: async (
+      key: string,
+      expectedRevision: number,
+      value: T,
+      onReject?: (reason: TaskfoldCompareAndSwapFailure) => void,
+    ) => {
+      assertWritable();
+      return await store.compareAndSwap(key, expectedRevision, value, onReject);
+    },
     ...(store.registerIfAbsent
       ? {
           registerIfAbsent: async (key: string, value: T) => {
@@ -244,5 +248,5 @@ function rejectWritesUnlessFormatWritable<T>(
           },
         }
       : {}),
-  } as TaskfoldKeyedStore<T>;
+  };
 }

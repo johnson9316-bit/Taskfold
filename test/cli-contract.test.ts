@@ -25,6 +25,7 @@ const CARD_SUMMARY_KEYS = [
   "archived",
   "boardId",
   "createdAt",
+  "displayId",
   "id",
   "labels",
   "milestoneId",
@@ -57,6 +58,7 @@ function expectCardDetail(card: Record<string, unknown>): void {
   expect(keys(card)).toEqual(CARD_DETAIL_KEYS);
   expect(card.id).toMatch(/^[0-9a-f-]{36}$/);
   expect(card.shortId).toBe((card.id as string).slice(0, 8));
+  expect(card.displayId).toMatch(/^card-\d+$/);
   expect(typeof card.revision).toBe("number");
   expect(Number.isNaN(Date.parse(card.createdAt as string))).toBe(false);
   expect(typeof card.notes).toBe("string");
@@ -130,10 +132,12 @@ describe("taskfold --json：每个 kind 的形状", () => {
     const shown = await runJson(bundle, ["show", created.card.shortId], { cwd: repo });
     expect(keys(shown)).toEqual(["card", "kind", "schemaVersion"]);
     expect(shown.card).toEqual(created.card);
+    expect((await runJson(bundle, ["show", created.card.id], { cwd: repo })).card.id).toBe(created.card.id);
+    expect((await runJson(bundle, ["show", created.card.displayId], { cwd: repo })).card.id).toBe(created.card.id);
 
     const updated = await runJson(
       bundle,
-      ["update", created.card.id, "--status", "running", "--append-notes", "first", "--add-label", "x"],
+      ["update", created.card.displayId, "--status", "running", "--append-notes", "first", "--add-label", "x"],
       { cwd: repo },
     );
     expect(updated.kind).toBe("card");
@@ -147,7 +151,7 @@ describe("taskfold --json：每个 kind 的形状", () => {
     expect(listed.cards).toHaveLength(1);
     expect(keys(listed.cards[0])).toEqual(CARD_SUMMARY_KEYS.toSorted());
 
-    const deleted = await runJson(bundle, ["delete", created.card.shortId], { cwd: repo });
+    const deleted = await runJson(bundle, ["delete", created.card.displayId], { cwd: repo });
     expect(deleted).toEqual({ schemaVersion: 1, kind: "card-deleted", id: created.card.id });
     expect((await runJson(bundle, ["list"], { cwd: repo })).cards).toEqual([]);
   });
@@ -296,7 +300,7 @@ describe("taskfold 文本输出与帮助", () => {
     expect(created.code).toBe(0);
     const listed = await runCliProcess(bundle, ["list"], { cwd: repo });
     expect(listed.code).toBe(0);
-    expect(listed.stdout).toMatch(/^[0-9a-f]{8} {2}todo {6}normal {2}default {2}Plain text$/m);
+    expect(listed.stdout).toMatch(/^card-\d+ {2}todo {6}normal {2}default {2}Plain text$/m);
     for (const output of [created.stdout, listed.stdout]) {
       expect(output).not.toMatch(/\u001b\[/);
     }

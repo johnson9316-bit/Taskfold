@@ -25,7 +25,7 @@ export const TASKFOLD_VSCODE_CAPABILITIES: TaskfoldHostCapabilities = {
   cardRevisionCheck: true,
   cardEditing: true,
   projectManagement: false,
-  documents: false,
+  documents: true,
   openCardFile: true,
 };
 

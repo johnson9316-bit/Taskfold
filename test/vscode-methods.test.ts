@@ -90,6 +90,52 @@ async function createCard(methods: ReturnType<typeof setup>["methods"], projectI
 }
 
 describe("projects", () => {
+  it("资料库支持元数据与 Markdown/路径文档读写，拒绝过期 revision 和仓库外路径", async () => {
+    const repo = initRepo();
+    const { methods } = setup([{ name: "alpha", path: repo }]);
+    const project = await firstProject(methods);
+    const created = (await methods.call("taskfold.projects.documents.create", {
+      boardId: project.id, key: "note", section: "project", type: "markdown", title: "Note", content: "one",
+    })) as { document: { id: string; boardId: string } };
+    expect(created.document.boardId).toBe(project.id);
+    const read = (await methods.call("taskfold.projects.documents.read", { id: created.document.id })) as { preview: { content: string; revision: string } };
+    expect(read.preview.content).toBe("one");
+    const written = (await methods.call("taskfold.projects.documents.write", {
+      id: created.document.id, content: "two", expectedRevision: read.preview.revision,
+    })) as { preview: { content: string } };
+    expect(written.preview.content).toBe("two");
+    await expect(methods.call("taskfold.projects.documents.write", {
+      id: created.document.id, content: "stale", expectedRevision: read.preview.revision,
+    })).rejects.toThrow("changed");
+
+    fs.mkdirSync(path.join(repo, "docs"));
+    const target = path.join(repo, "docs", "spec.md");
+    fs.writeFileSync(target, "before");
+    const pathDoc = (await methods.call("taskfold.projects.documents.create", {
+      boardId: project.id, key: "spec", section: "project", type: "path", title: "Spec", target,
+    })) as { document: { id: string } };
+    const pathRead = (await methods.call("taskfold.projects.documents.read", { id: pathDoc.document.id })) as { preview: { revision: string } };
+    await methods.call("taskfold.projects.documents.write", {
+      id: pathDoc.document.id, content: "after", expectedRevision: pathRead.preview.revision,
+    });
+    expect(fs.readFileSync(target, "utf8")).toBe("after");
+    await methods.call("taskfold.projects.documents.update", { id: created.document.id, title: "Renamed" });
+    await methods.call("taskfold.projects.documents.reorder", {
+      boardId: project.id, documentIds: [pathDoc.document.id, created.document.id],
+    });
+    await methods.call("taskfold.projects.documents.hide", { id: created.document.id });
+    await methods.call("taskfold.projects.documents.restore", { id: created.document.id });
+    const listed = (await methods.call("taskfold.projects.documents.list", { boardId: project.id })) as { documents: Array<{ id: string }> };
+    expect(listed.documents.map((document) => document.id)).toEqual([pathDoc.document.id, created.document.id]);
+
+    const outside = path.join(makeTempDir("taskfold-outside-"), "outside.md");
+    fs.writeFileSync(outside, "private");
+    const outsideDoc = (await methods.call("taskfold.projects.documents.create", {
+      boardId: project.id, key: "outside", section: "project", type: "path", title: "Outside", target: outside,
+    })) as { document: { id: string } };
+    await expect(methods.call("taskfold.projects.documents.read", { id: outsideDoc.document.id })).rejects.toThrow("outside");
+    expect(await methods.call("taskfold.projects.documents.delete", { id: outsideDoc.document.id })).toEqual({ deleted: true });
+  });
   it("one project per workspace folder with .taskfold/, named after the folder; none without it", async () => {
     const repo = initRepo();
     const bare = makeTempGitRepo();
@@ -159,7 +205,7 @@ describe("projects", () => {
     expect(boardViewStateKey((await registry.list())[0]!)).toContain(fs.realpathSync(repo));
   });
 
-  it("unsupported methods (project management, documents, execution) fail with UNSUPPORTED", async () => {
+  it("unsupported methods (project management and execution) fail with UNSUPPORTED", async () => {
     const repo = initRepo();
     const { methods } = setup([{ name: "alpha", path: repo }]);
     for (const method of [
@@ -167,7 +213,6 @@ describe("projects", () => {
       "taskfold.projects.archive",
       "taskfold.projects.reorder",
       "taskfold.cards.moveProject",
-      "taskfold.projects.documents.list",
       "taskfold.cards.execution.start",
     ]) {
       const error = await methods.call(method, {}).catch((caught: unknown) => caught);

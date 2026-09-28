@@ -265,7 +265,7 @@ describe("createTaskfoldFileStores: 与 TaskfoldStore.fromSqliteStores 的接缝
   it("revision 每次写 +1（经业务层 update）", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
 
     const created = await store.create({ title: "接缝测试卡片" });
     expect(created.revision).toBe(1);
@@ -280,7 +280,7 @@ describe("createTaskfoldFileStores: 与 TaskfoldStore.fromSqliteStores 的接缝
   it("compareAndSwap 冲突通过业务层的 update({expectedRevision}) 会抛出 revision 冲突错误", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const stores = createTaskfoldFileStores({ dataDir, pluginDir });
-    const store = TaskfoldStore.fromSqliteStores(stores);
+    const store = TaskfoldStore.fromStores(stores);
 
     const created = await store.create({ title: "冲突测试卡片" });
     await store.update(created.id, { notes: "别人先改了" });

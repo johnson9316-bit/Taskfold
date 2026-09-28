@@ -8,6 +8,7 @@
 // before any project's own data directory is known, which rules out one-file-per-board
 // under a project root. No CAS, matching sqlite-store.ts's TaskfoldSqliteBoardStore.
 import type { PersistedTaskfoldBoard, TaskfoldKeyedStore } from "./persistence-types.js";
+import { unsupportedTaskfoldCompareAndSwap } from "./file-store-cas.js";
 import { readFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
 
 type ProjectsRegistry = Record<string, PersistedTaskfoldBoard>;
@@ -74,5 +75,8 @@ export function createTaskfoldFileBoardStore(options: {
         value,
       }));
     },
+
+    // 没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透成无条件写。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 }

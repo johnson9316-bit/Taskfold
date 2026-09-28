@@ -9,7 +9,6 @@ import type {
   PersistedTaskfoldProjectDocument,
   TaskfoldKeyedStore,
 } from "@taskfold/core/persistence-types.js";
-import { createTaskfoldSqliteStores } from "./sqlite-store.js";
 import { TaskfoldDispatchStore } from "@taskfold/core/store-dispatch.js";
 import type { TaskfoldChangeSource } from "@taskfold/core/store-change-tracker.js";
 
@@ -17,12 +16,13 @@ export type { TaskfoldDispatchResult } from "@taskfold/core/store-inputs.js";
 
 /**
  * Shape every storage backend factory must return to plug into {@link TaskfoldStore}.
- * `createTaskfoldSqliteStores` (sqlite-store.ts) and `createTaskfoldFileStores`
- * (file-store.ts) both satisfy this structurally -- neither needs to import it, since
- * this is the "single wiring point" 需求/16 集成任务书 refers to, not a base class either
- * backend extends. Extracted from what `fromSqliteStores` below always destructured out
- * of `createTaskfoldSqliteStores`'s return value, so `fromStores` can accept either
- * backend without depending on SQLite.
+ * 生产唯一后端是 core 的 `createTaskfoldFileStores`（需求/16 第 3 期；SQLite 运行时后端已于
+ * TASK-10 第二段下线，只读 SQLite 只剩迁移工具 sqlite-migration.ts 在用）；测试还用内存
+ * store 走同一条接线。类型按结构匹配，工厂不需要 import 它。
+ *
+ * `dataVersion`/`changeEpoch`/`reserveChangeRevisions` 是 SQLite 时代的按块预留游标形状，
+ * 文件后端用 `changeSource` 驱动（需求/18 §3.5）；保留是为了内存 store 等仍按块预留的实现
+ * 不必为形状差异分叉。
  */
 export type TaskfoldBackendStores = {
   cards: TaskfoldKeyedStore;
@@ -34,12 +34,11 @@ export type TaskfoldBackendStores = {
   dataVersion?: () => number;
   changeEpoch?: string;
   reserveChangeRevisions?: (count: number) => number;
-  /** 文件后端给出（跨进程靠 `.taskfold/.runtime/changes.log`），有它时上面三项不再驱动变更游标；
-   * SQLite 后端不给，行为不变。 */
+  /** 文件后端给出（跨进程靠 `.taskfold/.runtime/changes.log`），有它时上面三项不再驱动变更游标。 */
   changeSource?: TaskfoldChangeSource;
   /**
-   * ⚠️ Present for shape parity with both factories' return values, but neither
-   * `fromStores` below nor `fromSqliteStores` ever calls it -- a known, already-recorded
+   * ⚠️ Present for shape parity with the factories' return values, but neither
+   * `fromStores` nor anything else ever calls it -- a known, already-recorded
    * gap (需求/15-上游2026.9.4差异评估), not something this change fixes: the production
    * path has no way to flush/close a backend on process exit. Out of scope here.
    */
@@ -48,17 +47,10 @@ export type TaskfoldBackendStores = {
 
 // Capability layers split review boundaries only; the core still owns persistence and mutation order.
 export class TaskfoldStore extends TaskfoldDispatchStore {
-  static openSqlite() {
-    return TaskfoldStore.fromSqliteStores(createTaskfoldSqliteStores());
-  }
-
   /**
    * Single wiring point from any backend factory's KV stores to a card store --
-   * `createTaskfoldSqliteStores` and `createTaskfoldFileStores` both satisfy
-   * {@link TaskfoldBackendStores} structurally, despite neither depending on the other.
-   * `fromSqliteStores` below is kept only for backward compatibility with its existing
-   * call sites (production's `openSqlite`, and every test that already names it) and
-   * now just delegates here.
+   * `createTaskfoldFileStores`（生产唯一后端）与测试用的内存 store 都按
+   * {@link TaskfoldBackendStores} 结构匹配，彼此不依赖。
    */
   static fromStores(stores: TaskfoldBackendStores) {
     return new TaskfoldStore(stores.cards, {
@@ -72,13 +64,5 @@ export class TaskfoldStore extends TaskfoldDispatchStore {
       reserveChangeRevisions: stores.reserveChangeRevisions,
       changeSource: stores.changeSource,
     });
-  }
-
-  /**
-   * Tests use this too (as well as `fromStores` directly for the file backend), so a
-   * newly added capability cannot be silently missing under test only.
-   */
-  static fromSqliteStores(stores: ReturnType<typeof createTaskfoldSqliteStores>) {
-    return TaskfoldStore.fromStores(stores);
   }
 }

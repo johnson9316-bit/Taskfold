@@ -12,7 +12,7 @@
 import path from "node:path";
 import { boardsInUse, defaultBoardFor } from "@taskfold/cli/cards.js";
 import { findTaskfoldDataDir } from "@taskfold/cli/project.js";
-import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import type { TaskfoldCard, TaskfoldProjectDocument } from "@taskfold/core/contract/index.js";
 import { createTaskfoldFileStores, resolveTaskfoldFileStoreLayout } from "@taskfold/core/file-store.js";
 import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 import { TaskfoldDispatchStore } from "@taskfold/core/store-dispatch.js";
@@ -42,7 +42,7 @@ function projectKeyBase(name: string): string {
 }
 
 export class TaskfoldProjectNotFoundError extends Error {
-  constructor(readonly kind: "project" | "card" | "milestone", readonly id: string) {
+  constructor(readonly kind: "project" | "card" | "milestone" | "document", readonly id: string) {
     super(`${kind} not found: ${id}`);
     this.name = "TaskfoldProjectNotFoundError";
   }
@@ -140,6 +140,21 @@ export class TaskfoldProjectRegistry {
       }
     }
     throw new TaskfoldProjectNotFoundError("milestone", id);
+  }
+
+  async byDocumentId(id: unknown): Promise<{ project: TaskfoldVscodeProject; document: TaskfoldProjectDocument }> {
+    if (typeof id !== "string" || !id.trim()) throw new Error("id is required.");
+    for (const project of await this.list()) {
+      try {
+        const document = await project.store.getProjectDocument(id);
+        if (document.boardId === project.boardId) return { project, document };
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== `project document not found: ${id}`) {
+          throw error;
+        }
+      }
+    }
+    throw new TaskfoldProjectNotFoundError("document", id);
   }
 
   private openRoot(dataDir: string): ProjectRoot {

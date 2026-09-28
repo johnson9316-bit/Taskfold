@@ -175,9 +175,10 @@ const CardIdSchema = Type.Object(
 export function createTaskfoldTools(params: {
   api: OpenClawPluginApi;
   context?: OpenClawPluginToolContext;
-  store?: TaskfoldStore;
+  /** 必传：SQLite 运行时后端已下线（TASK-10 第二段），唯一后端是文件 store（index.ts 组装）。 */
+  store: TaskfoldStore;
 }): AnyAgentTool[] {
-  const store = params.store ?? TaskfoldStore.openSqlite();
+  const { store } = params;
   const ownerId = contextOwner(params.context);
   const readScopedCardToolParams = async (rawParams: unknown): Promise<TaskfoldToolCardParams> => {
     const input = readCardToolParams(rawParams, ownerId);

@@ -1,8 +1,9 @@
 ---
 id: TASK-13
 title: e2e control-ui-baseline 不再写真实看板的视图设置
-status: To Do
+status: Done
 assignee: []
+updated_date: '2026-09-28 16:45'
 created_date: '2026-09-24 12:33'
 labels:
   - test
@@ -19,5 +20,11 @@ TASK-6 发现：test/e2e/control-ui-baseline.test.ts 会改 flowboard 项目的�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 e2e 跑完后真实项目数据（含 updated_at）零变化
+- [x] #1 e2e 跑完后真实项目数据（含 updated_at）零变化
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+e2e 改为只读断言，并对真实 .taskfold/ 文件内容与 mtime 做前后快照；隔离运行 11 项通过。
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -81,10 +81,10 @@ function redactDiagnosticsRows(result: Awaited<ReturnType<TaskfoldStore["diagnos
 
 export function registerTaskfoldGatewayMethods(params: {
   api: OpenClawPluginApi;
-  store?: TaskfoldStore;
+  /** 必传：SQLite 运行时后端已下线（TASK-10 第二段），唯一后端是文件 store（index.ts 组装）。 */
+  store: TaskfoldStore;
 }) {
-  const { api } = params;
-  const store = params.store ?? TaskfoldStore.openSqlite();
+  const { api, store } = params;
   const dispatchCards = createTaskfoldDispatchHandler({
     api,
     store,

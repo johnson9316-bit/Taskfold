@@ -21,7 +21,6 @@ const EXPECTED_FILES = [
   "UPSTREAM.md",
   "docs/CLAW_HUB_PUBLISHING.md",
   "dist/index.js",
-  "dist/doctor-contract-api.js",
   "dist/control-ui/index.js",
   "dist/control-ui/index.css",
 ].sort();

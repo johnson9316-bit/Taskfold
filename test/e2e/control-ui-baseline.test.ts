@@ -1,14 +1,8 @@
 /**
- * Taskfold Control UI 基线 e2e（第 1 期：UI 仍连 SQLite 后端）。
+ * Taskfold Control UI 基线 e2e（文件后端；真实项目数据只读）。
  *
- * 背景（需求/16-文件存储改造.md 10.2）
- * ------------------------------------------------------------
- * 第 1 期只把存储层实现换成文件，**不切生产路径**（第 3 期才切）。这里跑的
- * 仍是 SQLite 后端驱动的 Control UI，价值是把"迁移前用户在界面上能看到
- * 什么"固化成可执行断言——等第 3 期真的切到文件后端后，同一套用例原样
- * 重跑，一旦某个数字、某一列、某个字段变了，就说明"只换存储层、界面行为
- * 不变"这件事没做到。因此下面的断言全部是"用户可观察到的界面事实"，不
- * 断言任何只在 SQLite 下才成立的实现细节。
+ * 读取真实 Gateway 的项目和卡片，验证文件后端在 Control UI 中的表现。
+ * 分列、排序与项目数据均不写；浏览器语言和归档过滤仅在本次上下文切换。
  *
  * 依赖与启用方式（本机可用，CI 上没有，必须能被优雅跳过）
  * ------------------------------------------------------------
@@ -25,16 +19,11 @@
  * `ctx.skip()` 整体优雅跳过（显示为 skipped，不是 failed），不会把
  * `npx vitest run` 变红。真正跑起来时（本机已确认可用），断言必须通过。
  *
- * 只读边界
- * ------------------------------------------------------------
- * 不新建、编辑、删除任何卡片 / 项目 / 里程碑，不写数据库、不改 Gateway
- * 配置。巡检脚本（control-ui-recon.py）里唯一会临时改动的是"分列方式 /
- * 排序方式 / 排序方向 / 包含已归档 / 语言"这 5 个视图控件，且在脚本内
- * 闭环复原；下面 "环境未残留副作用" 这条用例专门断言复原是否成功——
- * 如果哪天复原失败，这里会显式失败提醒人去看，而不是悄悄留下脏状态。
+ * 只读边界：巡检前后比较本仓库 `.taskfold/` 每个文件的内容与 mtime。
  */
 
 import { execFileSync, execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -64,7 +53,7 @@ interface ReconResult {
   };
   archiveToggleRestored?: boolean;
   milestoneColumns?: string[];
-  statusColumns?: Array<{ name: string; cardCount: number | null }>;
+  statusCounts?: Record<string, number>;
   viewPrefsRestored?: {
     original: Record<string, unknown>;
     matches: boolean;
@@ -97,9 +86,23 @@ interface SuiteState {
   facts: ReconResult | null;
   /** 实时读取的项目数基线（TASK-12：不写死本机某一时刻的项目数量）。 */
   projectCounts: ProjectCounts | null;
+  filesUnchanged: boolean | null;
 }
 
-const state: SuiteState = { available: false, skipReason: "", facts: null, projectCounts: null };
+const state: SuiteState = { available: false, skipReason: "", facts: null, projectCounts: null, filesUnchanged: null };
+
+function projectDataSnapshot(): Record<string, string> {
+  const root = path.resolve(__dirname, "../../.taskfold");
+  const snapshot: Record<string, string> = {};
+  if (!fs.existsSync(root)) return snapshot;
+  for (const relative of fs.readdirSync(root, { recursive: true, encoding: "utf8" }) as string[]) {
+    const file = path.join(root, relative);
+    if (!fs.statSync(file).isFile()) continue;
+    const stat = fs.statSync(file);
+    snapshot[relative] = `${stat.mtimeMs}:${createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`;
+  }
+  return snapshot;
+}
 
 /** 探活 Gateway；超时或非 2xx 都算不可用，不抛错——交给调用方决定是跳过。 */
 async function probeGateway(): Promise<boolean> {
@@ -231,11 +234,13 @@ beforeAll(async () => {
     return;
   }
 
+  const beforeFiles = projectDataSnapshot();
   state.available = true;
   state.facts = runRecon(token);
+  state.filesUnchanged = JSON.stringify(projectDataSnapshot()) === JSON.stringify(beforeFiles);
 }, 120_000);
 
-describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对得住第 3 期切文件后端）", () => {
+describe("Taskfold Control UI 文件后端只读基线", () => {
   it("登录与巡检脚本本身跑通，没有 fatalError", (ctx) => {
     if (!state.available) return ctx.skip();
     expect(state.facts?.fatalError).toBeUndefined();
@@ -274,18 +279,12 @@ describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对�
     expect(sidebar?.default).toBe(0);
   });
 
-  it("看板状态列：固定 9 列，且列名与卡片数与基线一致", (ctx) => {
+  it("看板卡片状态：数量与基线一致（只读检查，不切换分列）", (ctx) => {
     if (!state.available) return ctx.skip();
-    const columns = state.facts?.statusColumns ?? [];
-    expect(columns.map((c) => c.name)).toEqual([
-      "Triage", "待办池", "待办", "已计划", "就绪", "运行中", "查看", "已阻挡", "已完成",
-    ]);
-    const byName = Object.fromEntries(columns.map((c) => [c.name, c.cardCount]));
-    expect(byName["待办"]).toBe(15);
-    expect(byName["已完成"]).toBe(5);
-    for (const name of ["Triage", "待办池", "已计划", "就绪", "运行中", "查看", "已阻挡"]) {
-      expect(byName[name]).toBe(0);
-    }
+    expect(state.facts?.statusCounts).toEqual({
+      triage: 0, backlog: 0, todo: 15, scheduled: 0, ready: 0,
+      running: 0, review: 0, blocked: 0, done: 5,
+    });
   });
 
   it("里程碑：8 个（M1-M4、M6-M9，无 M5）+ 未归属桶，不假设编号连续", (ctx) => {
@@ -370,26 +369,7 @@ describe("Taskfold Control UI 基线（第 1 期，UI 连 SQLite；断言要对�
         `复原后：${JSON.stringify(restored?.final)}；这会让接下来打开 Taskfold 看板` +
         `的任何人（包括真实用户）看到跟基线不一致的默认视图，需要人工介入复原。`,
     ).toBe(true);
+    expect(state.filesUnchanged, "巡检前后真实 .taskfold 文件内容或 mtime 发生变化").toBe(true);
   });
 
-  // ------------------------------------------------------------------
-  // 占位用例：外部写入感知（第 3 期切文件后端后再启用）
-  // ------------------------------------------------------------------
-  //
-  // 规划原文（需求/16-文件存储改造.md 10.2）写的是"用 backlog task edit
-  // 改一张卡后 UI 自动刷新"，但用户已经决策放弃 CLI 互操作（见
-  // requirement-doc-forks-parallel 等记忆），场景改成"直接改 .md 文件后
-  // UI 自动刷新"。
-  //
-  // 第 1 期 Control UI 读写的仍是 SQLite（本文件其它用例验证的也是这一
-  // 份数据），直接改一份 .md 文件根本不在这套后端的读取路径上，UI 不会
-  // 也不应该刷新——这条用例现在测的话，"预期值"本身就是错的，所以显式
-  // skip，不是"暂时跳过忘了写"，也不是悄悄删掉不提。
-  //
-  // 启用条件：第 3 期把 Control UI 的读写路径切到文件存储之后，把下面的
-  // `it.skip` 换成 `it`，加上"用文件系统 API 改一张卡片对应的 .md 文件
-  // -> 等常开 WebSocket 推送 -> 断言看板上的卡片文本/字段跟着变"的实现。
-  it.skip("[第 3 期启用] 直接改卡片对应的 .md 文件后，看板通过常开 WebSocket 自动刷新", () => {
-    throw new Error("占位用例：第 1 期 UI 仍连 SQLite，文件写入不在读取路径上，无法验证");
-  });
 });
