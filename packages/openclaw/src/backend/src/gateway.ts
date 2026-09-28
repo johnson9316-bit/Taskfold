@@ -343,6 +343,30 @@ export function registerTaskfoldGatewayMethods(params: {
     { scope: WRITE_SCOPE },
   );
 
+  for (const action of ["create", "delete"] as const) {
+    api.registerGatewayMethod(
+      `taskfold.cards.relation.${action}`,
+      async ({ params: requestParams, respond }) => {
+        try {
+          const source = readId(requestParams);
+          const target = requestParams.target;
+          const type = requestParams.type;
+          if (typeof target !== "string" || !target.trim() ||
+            (type !== "parent" && type !== "blocks" && type !== "relates_to")) {
+            throw new Error("target and supported relation type are required.");
+          }
+          const card = action === "create"
+            ? await store.createGraphRelation(source, target, type)
+            : await store.deleteGraphRelation(source, target, type);
+          respond(true, { card: redactClaimToken(card) });
+        } catch (error) {
+          respondError(respond, error);
+        }
+      },
+      { scope: WRITE_SCOPE },
+    );
+  }
+
   api.registerGatewayMethod(
     "taskfold.cards.requirement.set",
     async ({ params: requestParams, respond }) => {

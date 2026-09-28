@@ -453,6 +453,23 @@ export function createTaskfoldVscodeMethods(deps: {
       return cardResult(project, await project.store.setCardRequirement(card.id, requirementId));
     }),
 
+    "taskfold.cards.relation.create": cardMethod(async (project, card, params) => {
+      const target = params.target;
+      const type = params.type;
+      if (typeof target !== "string" || (type !== "parent" && type !== "blocks" && type !== "relates_to")) {
+        throw new Error("target and supported relation type are required.");
+      }
+      return cardResult(project, await project.store.createGraphRelation(card.id, target, type));
+    }),
+    "taskfold.cards.relation.delete": cardMethod(async (project, card, params) => {
+      const target = params.target;
+      const type = params.type;
+      if (typeof target !== "string" || (type !== "parent" && type !== "blocks" && type !== "relates_to")) {
+        throw new Error("target and supported relation type are required.");
+      }
+      return cardResult(project, await project.store.deleteGraphRelation(card.id, target, type));
+    }),
+
     "taskfold.cards.sources.create": cardMethod(async (project, card, params) =>
       cardResult(project, await project.store.addSourceReference(card.id, pick(params, ["label", "target", "note"]))),
     ),

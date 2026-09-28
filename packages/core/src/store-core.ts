@@ -1289,6 +1289,63 @@ export class TaskfoldCoreStore {
     }));
   }
 
+  async createGraphRelation(
+    sourceId: string,
+    targetId: string,
+    type: "parent" | "blocks" | "relates_to",
+    scope?: TaskfoldMutationScope,
+  ): Promise<TaskfoldCard> {
+    if (sourceId === targetId) throw new Error("a card cannot link to itself.");
+    const source = await this.get(sourceId);
+    const target = await this.get(targetId);
+    if (!source || !target) throw new Error("relation card not found.");
+    if (cardBoardId(source) !== cardBoardId(target)) throw new Error("relation cards must belong to the same project.");
+    if (source.metadata?.archivedAt || target.metadata?.archivedAt || await this.isProjectArchived(cardBoardId(source))) {
+      throw new Error("archived cards or projects cannot be linked.");
+    }
+    assertCanMutateClaimedCard(source, scope);
+    assertCanMutateClaimedCard(target, scope);
+    if (type === "parent") return await this.linkCards(source.id, target.id, scope);
+    if (type !== "blocks" && type !== "relates_to") throw new Error("unsupported graph relation type.");
+    if (source.metadata?.links?.some((link) => link.type === type && link.targetCardId === target.id)) return source;
+    return await this.addLink(source.id, { type, targetCardId: target.id });
+  }
+
+  async deleteGraphRelation(
+    sourceId: string,
+    targetId: string,
+    type: "parent" | "blocks" | "relates_to",
+    scope?: TaskfoldMutationScope,
+  ): Promise<TaskfoldCard> {
+    return await this.enqueueMutation(async () => {
+      const source = await this.get(sourceId);
+      const target = await this.get(targetId);
+      if (!source || !target) throw new Error("relation card not found.");
+      if (cardBoardId(source) !== cardBoardId(target)) throw new Error("relation cards must belong to the same project.");
+      if (await this.isProjectArchived(cardBoardId(source))) throw new Error("project is archived.");
+      assertCanMutateClaimedCard(source, scope);
+      assertCanMutateClaimedCard(target, scope);
+      const sourceType = type === "parent" ? "child" : type;
+      const sourceLinks = source.metadata?.links ?? [];
+      if (!sourceLinks.some((link) => link.type === sourceType && link.targetCardId === target.id)) {
+        throw new Error("graph relation not found.");
+      }
+      const updatedSource = await this.updateCard(source.id, {
+        metadata: { ...source.metadata, links: sourceLinks.filter((link) => !(link.type === sourceType && link.targetCardId === target.id)) },
+      }, { expectedRevision: source.revision });
+      if (type !== "parent") return updatedSource;
+      try {
+        await this.updateCard(target.id, {
+          metadata: { ...target.metadata, links: (target.metadata?.links ?? []).filter((link) => !(link.type === "parent" && link.targetCardId === source.id)) },
+        }, { expectedRevision: target.revision });
+      } catch (error) {
+        await this.compensateCardMutation(source.id, source, updatedSource, invertTaskfoldCardMutation).catch(() => undefined);
+        throw error;
+      }
+      return await this.promoteDependencyReady(target.id);
+    });
+  }
+
   async linkCards(
     parentId: string,
     childId: string,

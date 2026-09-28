@@ -4830,7 +4830,9 @@ function createTaskfoldProjectRoutedStores(options) {
           result.push({ key, value: (await choose(spec, key, found)).value });
         }
         return result;
-      }
+      },
+      // 里程碑/文档没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透。
+      compareAndSwap: unsupportedTaskfoldCompareAndSwap
     };
   }
   const cardSpec = {
@@ -4938,7 +4940,9 @@ function createTaskfoldProjectRoutedStores(options) {
         }
       }
       return result;
-    }
+    },
+    // 附件没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透。
+    compareAndSwap: unsupportedTaskfoldCompareAndSwap
   };
   const boards = {
     ...rawBoards,
@@ -4962,6 +4966,7 @@ var init_project_routed_stores = __esm({
     "use strict";
     init_file_store_atomic();
     init_file_store_boards();
+    init_file_store_cas();
     init_file_store();
     init_file_store_paths();
     init_file_store_subscriptions();
@@ -10974,6 +10979,51 @@ var TaskfoldCoreStore = class {
       links: appendLinkPreservingDependencies(existing.metadata?.links ?? [], link)
     }));
   }
+  async createGraphRelation(sourceId, targetId, type, scope) {
+    if (sourceId === targetId) throw new Error("a card cannot link to itself.");
+    const source = await this.get(sourceId);
+    const target = await this.get(targetId);
+    if (!source || !target) throw new Error("relation card not found.");
+    if (cardBoardId(source) !== cardBoardId(target)) throw new Error("relation cards must belong to the same project.");
+    if (source.metadata?.archivedAt || target.metadata?.archivedAt || await this.isProjectArchived(cardBoardId(source))) {
+      throw new Error("archived cards or projects cannot be linked.");
+    }
+    assertCanMutateClaimedCard(source, scope);
+    assertCanMutateClaimedCard(target, scope);
+    if (type === "parent") return await this.linkCards(source.id, target.id, scope);
+    if (type !== "blocks" && type !== "relates_to") throw new Error("unsupported graph relation type.");
+    if (source.metadata?.links?.some((link) => link.type === type && link.targetCardId === target.id)) return source;
+    return await this.addLink(source.id, { type, targetCardId: target.id });
+  }
+  async deleteGraphRelation(sourceId, targetId, type, scope) {
+    return await this.enqueueMutation(async () => {
+      const source = await this.get(sourceId);
+      const target = await this.get(targetId);
+      if (!source || !target) throw new Error("relation card not found.");
+      if (cardBoardId(source) !== cardBoardId(target)) throw new Error("relation cards must belong to the same project.");
+      if (await this.isProjectArchived(cardBoardId(source))) throw new Error("project is archived.");
+      assertCanMutateClaimedCard(source, scope);
+      assertCanMutateClaimedCard(target, scope);
+      const sourceType = type === "parent" ? "child" : type;
+      const sourceLinks = source.metadata?.links ?? [];
+      if (!sourceLinks.some((link) => link.type === sourceType && link.targetCardId === target.id)) {
+        throw new Error("graph relation not found.");
+      }
+      const updatedSource = await this.updateCard(source.id, {
+        metadata: { ...source.metadata, links: sourceLinks.filter((link) => !(link.type === sourceType && link.targetCardId === target.id)) }
+      }, { expectedRevision: source.revision });
+      if (type !== "parent") return updatedSource;
+      try {
+        await this.updateCard(target.id, {
+          metadata: { ...target.metadata, links: (target.metadata?.links ?? []).filter((link) => !(link.type === "parent" && link.targetCardId === source.id)) }
+        }, { expectedRevision: target.revision });
+      } catch (error) {
+        await this.compensateCardMutation(source.id, source, updatedSource, invertTaskfoldCardMutation).catch(() => void 0);
+        throw error;
+      }
+      return await this.promoteDependencyReady(target.id);
+    });
+  }
   async linkCards(parentId, childId, scope) {
     return await this.enqueueMutation(
       async () => await this.linkCardsDirect(parentId, childId, Date.now(), { scope })
@@ -12281,6 +12331,26 @@ function registerTaskfoldGatewayMethods(params) {
     },
     { scope: WRITE_SCOPE3 }
   );
+  for (const action of ["create", "delete"]) {
+    api.registerGatewayMethod(
+      `taskfold.cards.relation.${action}`,
+      async ({ params: requestParams, respond }) => {
+        try {
+          const source = readId(requestParams);
+          const target = requestParams.target;
+          const type = requestParams.type;
+          if (typeof target !== "string" || !target.trim() || type !== "parent" && type !== "blocks" && type !== "relates_to") {
+            throw new Error("target and supported relation type are required.");
+          }
+          const card = action === "create" ? await store.createGraphRelation(source, target, type) : await store.deleteGraphRelation(source, target, type);
+          respond(true, { card: redactClaimToken(card) });
+        } catch (error) {
+          respondError(respond, error);
+        }
+      },
+      { scope: WRITE_SCOPE3 }
+    );
+  }
   api.registerGatewayMethod(
     "taskfold.cards.requirement.set",
     async ({ params: requestParams, respond }) => {

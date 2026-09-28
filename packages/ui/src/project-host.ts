@@ -590,6 +590,18 @@ class TaskfoldProjectHost extends LitElement {
     this.requestUpdate();
   }
 
+  private createGraphRelation(source: string, target: string, type: "parent" | "blocks" | "relates_to") {
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.relation.create", { id: source, target, type });
+    }, { closeModal: false });
+  }
+
+  private deleteGraphRelation(source: string, target: string, type: "parent" | "blocks" | "relates_to") {
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.relation.delete", { id: source, target, type });
+    }, { closeModal: false });
+  }
+
   private moveCardProject(id: string, boardId: string, milestoneId: string) {
     const target = this.state.projects.find((project) => project.id === boardId);
     if (!target || !milestoneId) {
@@ -1257,6 +1269,8 @@ class TaskfoldProjectHost extends LitElement {
       updateBoardView: (boardView) => this.updateBoardView(boardView),
       setGraphMode: (mode) => this.setGraphMode(mode),
       setGraphZoom: (zoom) => this.setGraphZoom(zoom),
+      createGraphRelation: (source, target, type) => this.createGraphRelation(source, target, type),
+      deleteGraphRelation: (source, target, type) => this.deleteGraphRelation(source, target, type),
       selectMoveCardProjectTarget: (cardId, boardId) =>
         this.selectMoveCardProjectTarget(cardId, boardId),
       reorderProjects: (ids) => this.reorderProjects(ids),

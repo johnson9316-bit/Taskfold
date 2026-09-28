@@ -12,7 +12,6 @@ import type {
   TaskfoldDeliveryReleaseState,
   TaskfoldDeliveryVerificationState,
   TaskfoldExecution,
-  TaskfoldLinkType,
   TaskfoldMilestone,
   TaskfoldPriority,
   TaskfoldProjectDocument,
@@ -24,6 +23,8 @@ import type {
   TaskfoldStatus,
 } from "@taskfold/core/contract/index.js";
 import "../../components/modal-dialog.ts";
+import "./graph-canvas.ts";
+import { buildGraphModel, type GraphFilter, type GraphRelation } from "./graph-model.ts";
 import { t, type TaskfoldLocale } from "../../i18n/index.ts";
 import {
   taskfoldEditorHtmlToMarkdown,
@@ -163,6 +164,10 @@ export type TaskfoldProjectUiState = {
   draggedCardId: string | null;
   graphMode: "mindmap" | "flow";
   graphZoom: number;
+  graphFilter: GraphFilter;
+  graphSelectedId: string;
+  graphLinkTargetId: string;
+  graphLinkType: Exclude<GraphRelation, "contains">;
   showArchivedProjects: boolean;
   showHiddenDocuments: boolean;
   query: string;
@@ -224,6 +229,8 @@ export type TaskfoldProjectViewController = {
   updateBoardView: (boardView: TaskfoldBoardViewSettings) => void;
   setGraphMode: (mode: TaskfoldProjectUiState["graphMode"]) => void;
   setGraphZoom: (zoom: number) => void;
+  createGraphRelation: (source: string, target: string, type: Exclude<GraphRelation, "contains">) => void;
+  deleteGraphRelation: (source: string, target: string, type: Exclude<GraphRelation, "contains">) => void;
   selectMoveCardProjectTarget: (cardId: string, boardId: string) => void;
   reorderProjects: (ids: string[]) => void;
   reorderMilestones: (ids: string[]) => void;
@@ -299,6 +306,10 @@ export function createTaskfoldProjectUiState(): TaskfoldProjectUiState {
     draggedCardId: null,
     graphMode: "mindmap",
     graphZoom: 1,
+    graphFilter: { query: "", milestoneId: "", status: "", tag: "", relation: "all", focusCardId: "" },
+    graphSelectedId: "",
+    graphLinkTargetId: "",
+    graphLinkType: "parent",
     showArchivedProjects: false,
     showHiddenDocuments: false,
     query: "",
@@ -738,12 +749,6 @@ type TaskfoldBoardColumn = {
   manualOrder?: { milestoneId?: string; cards: TaskfoldCard[] };
   onDrop: (cardId: string) => void;
   onCreate: () => void;
-};
-
-type TaskfoldGraphEdge = {
-  from: string;
-  to: string;
-  type: TaskfoldLinkType;
 };
 
 function renderCard(
@@ -1192,94 +1197,37 @@ function renderBoard(controller: TaskfoldProjectViewController) {
   `;
 }
 
-function renderGraphNode(
-  controller: TaskfoldProjectViewController,
-  card: TaskfoldCard,
-  options: { requirementId?: string } = {},
-) {
-  const { state } = controller;
-  const projectArchived = Boolean(state.project?.board.archivedAt);
-  return html`
-    <article
-      class="taskfold-project__graph-node ${isRequirementCard(card) ? "tf-is-requirement" : ""}"
-      draggable=${!projectArchived && !isArchivedCard(card) && !isRequirementCard(card)}
-      @dragstart=${(event: DragEvent) => {
-        state.draggedCardId = card.id;
-        event.dataTransfer?.setData("text/plain", card.id);
-        event.dataTransfer && (event.dataTransfer.effectAllowed = "move");
-      }}
-      @dragend=${() => {
-        state.draggedCardId = null;
-        controller.requestUpdate();
-      }}
-    >
-      <button
-        type="button"
-        @click=${() => controller.openModal({ kind: "card-detail", cardId: card.id })}
-      >
-        <span class="taskfold-project__priority tf-priority-${card.priority}"></span>
-        <strong>${card.title}</strong>
-        <small>${t(`workboard.status.${card.status}`)}</small>
-      </button>
-      ${options.requirementId
-        ? html`
-            <button
-              class="taskfold-project__graph-add"
-              type="button"
-              title=${t("taskfoldProject.newCard")}
-              ?disabled=${projectArchived || !controller.connected}
-              @click=${() =>
-                controller.openModal({
-                  kind: "card",
-                  requirementId: options.requirementId,
-                  milestoneId: card.milestoneId,
-                })}
-            >+</button>
-          `
-        : nothing}
-    </article>
-  `;
-}
-
 function renderGraph(controller: TaskfoldProjectViewController) {
   const { state } = controller;
   const project = state.project;
-  if (!project) {
-    return nothing;
-  }
-  const cards = project.cards.filter((card) => !isArchivedCard(card)).slice(0, 200);
-  const requirements = cards.filter(
-    (card) => isRequirementCard(card) && !cardRequirementId(card),
-  );
-  const childrenByRequirement = new Map<string, TaskfoldCard[]>();
-  const unassigned: TaskfoldCard[] = [];
-  for (const card of cards) {
-    if (isRequirementCard(card)) {
-      continue;
+  if (!project) return nothing;
+  const filter = state.graphFilter;
+  const model = buildGraphModel(project, state.graphMode, filter, {
+    requirements: t("taskfoldProject.graphRequirements"),
+    noMilestone: t("taskfoldProject.unassigned"),
+    status: (value) => t(`workboard.status.${value}`),
+  });
+  const selected = model.nodes.find((node) => node.id === state.graphSelectedId);
+  const selectedCard = selected?.cardId
+    ? project.cards.find((card) => card.id === selected.cardId)
+    : undefined;
+  const tags = [...new Set(project.cards.flatMap((card) => card.labels))].toSorted();
+  const relationTypes = ["parent", "blocks", "relates_to"] as const;
+  const currentEdges = model.edges.filter((edge) => edge.relation !== "contains");
+  const canvas = (event: Event) =>
+    (event.currentTarget as HTMLElement).closest(".taskfold-project__graph")
+      ?.querySelector<import("./graph-canvas.ts").TaskfoldGraphCanvas>("taskfold-graph-canvas");
+  const createAtSelection = () => {
+    if (selected?.kind === "requirement") {
+      controller.openModal({ kind: "card", requirementId: selected.id, milestoneId: selectedCard?.milestoneId });
+    } else if (selected?.id.startsWith("milestone:") && selected.id !== "milestone:none") {
+      controller.openModal({ kind: "card", milestoneId: selected.id.slice("milestone:".length) });
+    } else if (selected?.id.startsWith("status:")) {
+      controller.openModal({ kind: "card", status: selected.id.slice("status:".length) as TaskfoldStatus });
+    } else {
+      controller.openModal({ kind: "card" });
     }
-    const requirementId = cardRequirementId(card);
-    if (!requirementId) {
-      unassigned.push(card);
-      continue;
-    }
-    const children = childrenByRequirement.get(requirementId) ?? [];
-    children.push(card);
-    childrenByRequirement.set(requirementId, children);
-  }
-  const graphCards = [...requirements, ...unassigned, ...[...childrenByRequirement.values()].flat()];
-  const graphEdges = graphCards.flatMap<TaskfoldGraphEdge>((card) =>
-    (card.metadata?.links ?? []).flatMap<TaskfoldGraphEdge>((link) => {
-      if (!link.targetCardId || link.type === "contained_by" || link.type === "child") {
-        return [];
-      }
-      if (link.type === "parent") {
-        return [{ from: link.targetCardId, to: card.id, type: link.type }];
-      }
-      return [{ from: card.id, to: link.targetCardId, type: link.type }];
-    }),
-  );
-  const projectArchived = Boolean(project.board.archivedAt);
-  const zoom = Math.min(1.5, Math.max(0.7, state.graphZoom));
+  };
   return html`
     <section class="taskfold-project__graph">
       <div class="taskfold-project__section-heading">
@@ -1289,126 +1237,110 @@ function renderGraph(controller: TaskfoldProjectViewController) {
         </div>
         <div class="taskfold-project__heading-actions">
           <div class="taskfold-project__graph-mode" role="group" aria-label=${t("taskfoldProject.graphMode")}>
-            <button
-              class=${state.graphMode === "mindmap" ? "tf-is-active" : ""}
-              type="button"
-              @click=${() => controller.setGraphMode("mindmap")}
-            >${t("taskfoldProject.mindMap")}</button>
-            <button
-              class=${state.graphMode === "flow" ? "tf-is-active" : ""}
-              type="button"
-              @click=${() => controller.setGraphMode("flow")}
-            >${t("taskfoldProject.flowChart")}</button>
+            <button class=${state.graphMode === "mindmap" ? "tf-is-active" : ""} type="button"
+              @click=${() => controller.setGraphMode("mindmap")}>${t("taskfoldProject.mindMap")}</button>
+            <button class=${state.graphMode === "flow" ? "tf-is-active" : ""} type="button"
+              @click=${() => controller.setGraphMode("flow")}>${t("taskfoldProject.flowChart")}</button>
           </div>
-          <button
-            class="taskfold-project__icon-button"
-            type="button"
-            title=${t("taskfoldProject.zoomOut")}
-            @click=${() => controller.setGraphZoom(zoom - 0.1)}
-          >-</button>
-          <button
-            class="taskfold-project__icon-button"
-            type="button"
-            title=${t("taskfoldProject.fitGraph")}
-            @click=${() => controller.setGraphZoom(1)}
-          >o</button>
-          <button
-            class="taskfold-project__icon-button"
-            type="button"
-            title=${t("taskfoldProject.zoomIn")}
-            @click=${() => controller.setGraphZoom(zoom + 0.1)}
-          >+</button>
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomOut")}
+            @click=${(event: Event) => canvas(event)?.zoomBy(0.8)}>−</button>
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.fitGraph")}
+            @click=${(event: Event) => canvas(event)?.fit()}>□</button>
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomIn")}
+            @click=${(event: Event) => canvas(event)?.zoomBy(1.25)}>+</button>
         </div>
       </div>
-      ${project.cards.filter((card) => !isArchivedCard(card)).length > 200
-        ? html`<div class="tf-callout">${t("taskfoldProject.graphLimitReached")}</div>`
-        : nothing}
-      <div class="taskfold-project__graph-viewport">
-        ${state.graphMode === "mindmap"
-          ? html`
-              <div class="taskfold-project__mindmap" ${styleProperties({ "--taskfold-graph-zoom": zoom })}>
-                <section
-                  class="taskfold-project__graph-root"
-                  @dragover=${(event: DragEvent) => event.preventDefault()}
-                  @drop=${(event: DragEvent) => {
-                    event.preventDefault();
-                    const id = event.dataTransfer?.getData("text/plain") || state.draggedCardId;
-                    if (id) {
-                      controller.moveCardRequirement(id);
-                    }
-                  }}
-                >
-                  <header>
-                    <strong>${boardName(project.board)}</strong>
-                    <button
-                      class="taskfold-project__graph-add"
-                      type="button"
-                      title=${t("taskfoldProject.newRequirement")}
-                      ?disabled=${projectArchived || !controller.connected}
-                      @click=${() =>
-                        controller.openModal({ kind: "card", cardKind: "requirement" })}
-                    >+</button>
-                  </header>
-                  <div class="taskfold-project__graph-branches">
-                    ${requirements.map((requirement) => {
-                      const children = childrenByRequirement.get(requirement.id) ?? [];
-                      return html`
-                        <section
-                          class="taskfold-project__graph-branch"
-                          @dragover=${(event: DragEvent) => event.preventDefault()}
-                          @drop=${(event: DragEvent) => {
-                            event.preventDefault();
-                            const id = event.dataTransfer?.getData("text/plain") || state.draggedCardId;
-                            if (id) {
-                              controller.moveCardRequirement(id, requirement.id);
-                            }
-                          }}
-                        >
-                          ${renderGraphNode(controller, requirement, { requirementId: requirement.id })}
-                          <div class="taskfold-project__graph-children">
-                            ${children.map((child) => renderGraphNode(controller, child))}
-                          </div>
-                        </section>
-                      `;
-                    })}
-                    <section class="taskfold-project__graph-branch tf-is-unassigned">
-                      <header>${t("taskfoldProject.unassigned")}</header>
-                      <div class="taskfold-project__graph-children">
-                        ${unassigned.map((card) => renderGraphNode(controller, card))}
-                      </div>
-                    </section>
-                  </div>
-                </section>
-              </div>
-            `
-          : html`
-              <div class="taskfold-project__flowgraph" ${styleProperties({ "--taskfold-graph-zoom": zoom })}>
-                <div class="taskfold-project__flow-nodes">
-                  ${graphCards.map((card) => renderGraphNode(controller, card))}
-                </div>
-                <div class="taskfold-project__flow-edges">
-                  ${graphEdges.length
-                    ? graphEdges.map((edge) => {
-                        const from = graphCards.find((card) => card.id === edge.from);
-                        const to = graphCards.find((card) => card.id === edge.to);
-                        return from && to
-                          ? html`
-                              <button
-                                class="taskfold-project__flow-edge tf-is-${edge.type}"
-                                type="button"
-                                @click=${() =>
-                                  controller.openModal({ kind: "card-detail", cardId: to.id })}
-                              >
-                                <span>${from.title}</span><b>-></b><span>${to.title}</span>
-                              </button>
-                            `
-                          : nothing;
-                      })
-                    : html`<p class="taskfold-project__empty-column">${t("taskfoldProject.noGraphRelations")}</p>`}
-                </div>
-              </div>
-            `}
+      <div class="taskfold-project__graph-filters">
+        <input type="search" aria-label=${t("taskfoldProject.graphSearch")} placeholder=${t("taskfoldProject.graphSearch")}
+          .value=${filter.query} @input=${(event: Event) => { filter.query = (event.currentTarget as HTMLInputElement).value; controller.requestUpdate(); }} />
+        <select aria-label=${t("taskfoldProject.graphMilestone")}
+          @change=${(event: Event) => { filter.milestoneId = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
+          <option value="" ?selected=${!filter.milestoneId}>${t("taskfoldProject.graphAllMilestones")}</option>
+          ${project.milestones.map((milestone) => html`<option value=${milestone.id} ?selected=${filter.milestoneId === milestone.id}>${milestone.title}</option>`)}
+        </select>
+        <select aria-label=${t("taskfoldProject.graphStatus")}
+          @change=${(event: Event) => { filter.status = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
+          <option value="" ?selected=${!filter.status}>${t("taskfoldProject.graphAllStatuses")}</option>
+          ${STATUSES.map((status) => html`<option value=${status} ?selected=${filter.status === status}>${t(`workboard.status.${status}`)}</option>`)}
+        </select>
+        <select aria-label=${t("taskfoldProject.graphTag")}
+          @change=${(event: Event) => { filter.tag = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
+          <option value="" ?selected=${!filter.tag}>${t("taskfoldProject.graphAllTags")}</option>
+          ${tags.map((tag) => html`<option value=${tag} ?selected=${filter.tag === tag}>${tag}</option>`)}
+        </select>
+        ${state.graphMode === "flow" ? html`
+          <select aria-label=${t("taskfoldProject.graphRelation")}
+            @change=${(event: Event) => { filter.relation = (event.currentTarget as HTMLSelectElement).value as GraphFilter["relation"]; controller.requestUpdate(); }}>
+            <option value="all" ?selected=${filter.relation === "all"}>${t("taskfoldProject.graphAllRelations")}</option>
+            ${(["contains", ...relationTypes] as GraphRelation[]).map((relation) => html`
+              <option value=${relation} ?selected=${filter.relation === relation}>${t(`taskfoldProject.graphRelation.${relation}`)}</option>`)}
+          </select>` : nothing}
+        <select aria-label=${t("taskfoldProject.graphFocus")}
+          @change=${(event: Event) => { filter.focusCardId = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
+          <option value="" ?selected=${!filter.focusCardId}>${t("taskfoldProject.graphAllCards")}</option>
+          ${project.cards.filter((card) => !isArchivedCard(card)).map((card) => html`
+            <option value=${card.id} ?selected=${filter.focusCardId === card.id}>${card.title}</option>`)}
+        </select>
       </div>
+      ${model.truncated ? html`<div class="tf-callout">${t("taskfoldProject.graphLimitReached")}</div>` : nothing}
+      ${state.graphMode === "flow" && model.nodes.length > 0 && currentEdges.length === 0
+        ? html`<div class="tf-callout">${t("taskfoldProject.graphNoRelations")}</div>` : nothing}
+      <div class="taskfold-project__graph-workspace">
+        <div class="taskfold-project__graph-viewport">
+          <taskfold-graph-canvas
+            .model=${model} .mode=${state.graphMode} .editable=${state.graphMode === "mindmap" && !project.board.archivedAt && controller.connected}
+            @graph-select=${(event: CustomEvent<{ id: string }>) => { state.graphSelectedId = event.detail.id; controller.requestUpdate(); }}
+            @graph-error=${(event: CustomEvent<{ error: unknown }>) => { state.error = String(event.detail.error); controller.requestUpdate(); }}
+            @graph-open=${(event: CustomEvent<{ id: string }>) => {
+              if (project.cards.some((card) => card.id === event.detail.id)) controller.openModal({ kind: "card-detail", cardId: event.detail.id });
+            }}
+            @graph-drop=${(event: CustomEvent<{ source: string; target: string }>) => {
+              const { source, target } = event.detail;
+              const sourceCard = project.cards.find((card) => card.id === source);
+              if (!sourceCard || isRequirementCard(sourceCard)) return;
+              const targetCard = project.cards.find((card) => card.id === target);
+              if (targetCard && isRequirementCard(targetCard)) controller.moveCardRequirement(source, target);
+              else if (target === "project" || target === "group:requirements") controller.moveCardRequirement(source);
+              else if (target.startsWith("milestone:")) controller.moveCardMilestone(source, target === "milestone:none" ? undefined : target.slice("milestone:".length));
+              else if (target.startsWith("status:")) controller.updateCardStatus(source, target.slice("status:".length) as TaskfoldStatus);
+            }}
+          ></taskfold-graph-canvas>
+        </div>
+        <aside class="taskfold-project__graph-inspector">
+          <strong>${selected?.title ?? t("taskfoldProject.graphSelectNode")}</strong>
+          ${selectedCard ? html`<small>${t(`workboard.status.${selectedCard.status}`)} · ${selectedCard.priority} · ${selected?.childCount ?? 0}</small>` : nothing}
+          <div class="taskfold-project__graph-inspector-actions">
+            ${selectedCard ? html`<button type="button" @click=${() => controller.openModal({ kind: "card-detail", cardId: selectedCard.id })}>${t("taskfoldProject.graphOpenCard")}</button>` : nothing}
+            <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)} @click=${createAtSelection}>${t("taskfoldProject.newCard")}</button>
+            <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)}
+              @click=${() => controller.openModal({ kind: "card", cardKind: "requirement" })}>${t("taskfoldProject.newRequirement")}</button>
+            ${selected ? html`<button type="button" @click=${(event: Event) => canvas(event)?.focusNode(selected.id)}>${t("taskfoldProject.graphFocusNode")}</button>` : nothing}
+          </div>
+          ${state.graphMode === "flow" && selectedCard ? html`
+            <div class="taskfold-project__graph-relation-editor">
+              <h2>${t("taskfoldProject.graphEditRelations")}</h2>
+              <select aria-label=${t("taskfoldProject.graphRelationTarget")}
+                @change=${(event: Event) => { state.graphLinkTargetId = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
+                <option value="" ?selected=${!state.graphLinkTargetId}>${t("taskfoldProject.graphRelationTarget")}</option>
+                ${project.cards.filter((card) => !isArchivedCard(card) && card.id !== selectedCard.id).map((card) => html`
+                  <option value=${card.id} ?selected=${state.graphLinkTargetId === card.id}>${card.title}</option>`)}
+              </select>
+              <select aria-label=${t("taskfoldProject.graphRelation")}
+                @change=${(event: Event) => { state.graphLinkType = (event.currentTarget as HTMLSelectElement).value as typeof state.graphLinkType; controller.requestUpdate(); }}>
+                ${relationTypes.map((relation) => html`<option value=${relation} ?selected=${state.graphLinkType === relation}>${t(`taskfoldProject.graphRelation.${relation}`)}</option>`)}
+              </select>
+              <button type="button" ?disabled=${!state.graphLinkTargetId || !controller.connected || Boolean(project.board.archivedAt)}
+                @click=${() => controller.createGraphRelation(selectedCard.id, state.graphLinkTargetId, state.graphLinkType)}>${t("taskfoldProject.graphAddRelation")}</button>
+              <div class="taskfold-project__graph-relation-list">
+                ${currentEdges.filter((edge) => edge.source === selectedCard.id || edge.target === selectedCard.id).map((edge) => html`
+                  <div><span>${t(`taskfoldProject.graphRelation.${edge.relation}`)}: ${model.nodes.find((node) => node.id === edge.source)?.title} → ${model.nodes.find((node) => node.id === edge.target)?.title}</span>
+                    <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)}
+                      @click=${() => controller.deleteGraphRelation(edge.source, edge.target, edge.relation as Exclude<GraphRelation, "contains">)}>${t("taskfoldProject.graphRemoveRelation")}</button></div>`)}
+              </div>
+            </div>` : nothing}
+        </aside>
+      </div>
+      <p class="taskfold-project__graph-legend">${t("taskfoldProject.graphLegend")}</p>
     </section>
   `;
 }
