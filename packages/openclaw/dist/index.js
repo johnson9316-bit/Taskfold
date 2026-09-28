@@ -38,7 +38,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// packages/core/src/file-store-paths.ts
+// ../core/src/file-store-paths.ts
 import fs from "node:fs";
 import path from "node:path";
 function resolveTaskfoldDataDir(workspace) {
@@ -131,7 +131,7 @@ function ensureTaskfoldPluginDirectories(layout) {
 }
 var TASKFOLD_FILE_STORE_DIR_MODE, TASKFOLD_FILE_STORE_FILE_MODE, PLUGIN_RELATIVE_PATH, RUNTIME_GITIGNORE_ENTRIES;
 var init_file_store_paths = __esm({
-  "packages/core/src/file-store-paths.ts"() {
+  "../core/src/file-store-paths.ts"() {
     "use strict";
     TASKFOLD_FILE_STORE_DIR_MODE = 448;
     TASKFOLD_FILE_STORE_FILE_MODE = 384;
@@ -140,7 +140,7 @@ var init_file_store_paths = __esm({
   }
 });
 
-// packages/core/src/file-store-path-resolver.ts
+// ../core/src/file-store-path-resolver.ts
 import { execFileSync } from "node:child_process";
 import fs2 from "node:fs";
 import path2 from "node:path";
@@ -200,12 +200,12 @@ function resolveTaskfoldMainCheckoutPath(target) {
   return path2.join(mainRoot, relative);
 }
 var init_file_store_path_resolver = __esm({
-  "packages/core/src/file-store-path-resolver.ts"() {
+  "../core/src/file-store-path-resolver.ts"() {
     "use strict";
   }
 });
 
-// packages/core/src/file-store-atomic.ts
+// ../core/src/file-store-atomic.ts
 import { randomUUID } from "node:crypto";
 import fs3 from "node:fs";
 import path3 from "node:path";
@@ -313,13 +313,13 @@ function sameEntityId(a, b) {
   return a === b;
 }
 var init_file_store_atomic = __esm({
-  "packages/core/src/file-store-atomic.ts"() {
+  "../core/src/file-store-atomic.ts"() {
     "use strict";
     init_file_store_paths();
   }
 });
 
-// packages/core/src/file-store-format.ts
+// ../core/src/file-store-format.ts
 import fs4 from "node:fs";
 function readFormatVersion(configPath) {
   const content = readFileIfExists(configPath);
@@ -362,7 +362,7 @@ function ensureTaskfoldFormatVersion(configPath) {
 }
 var TASKFOLD_FORMAT_VERSION, FORMAT_VERSION_KEY, FORMAT_VERSION_LINE, TaskfoldFormatTooNewError;
 var init_file_store_format = __esm({
-  "packages/core/src/file-store-format.ts"() {
+  "../core/src/file-store-format.ts"() {
     "use strict";
     init_file_store_atomic();
     TASKFOLD_FORMAT_VERSION = 1;
@@ -380,9 +380,9 @@ var init_file_store_format = __esm({
   }
 });
 
-// node_modules/graceful-fs/polyfills.js
+// ../../node_modules/graceful-fs/polyfills.js
 var require_polyfills = __commonJS({
-  "node_modules/graceful-fs/polyfills.js"(exports, module) {
+  "../../node_modules/graceful-fs/polyfills.js"(exports, module) {
     var constants = __require("constants");
     var origCwd = process.cwd;
     var cwd = null;
@@ -668,9 +668,9 @@ var require_polyfills = __commonJS({
   }
 });
 
-// node_modules/graceful-fs/legacy-streams.js
+// ../../node_modules/graceful-fs/legacy-streams.js
 var require_legacy_streams = __commonJS({
-  "node_modules/graceful-fs/legacy-streams.js"(exports, module) {
+  "../../node_modules/graceful-fs/legacy-streams.js"(exports, module) {
     var Stream = __require("stream").Stream;
     module.exports = legacy;
     function legacy(fs14) {
@@ -764,9 +764,9 @@ var require_legacy_streams = __commonJS({
   }
 });
 
-// node_modules/graceful-fs/clone.js
+// ../../node_modules/graceful-fs/clone.js
 var require_clone = __commonJS({
-  "node_modules/graceful-fs/clone.js"(exports, module) {
+  "../../node_modules/graceful-fs/clone.js"(exports, module) {
     "use strict";
     module.exports = clone;
     var getPrototypeOf = Object.getPrototypeOf || function(obj) {
@@ -787,9 +787,9 @@ var require_clone = __commonJS({
   }
 });
 
-// node_modules/graceful-fs/graceful-fs.js
+// ../../node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
-  "node_modules/graceful-fs/graceful-fs.js"(exports, module) {
+  "../../node_modules/graceful-fs/graceful-fs.js"(exports, module) {
     var fs14 = __require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
@@ -1157,9 +1157,9 @@ var require_graceful_fs = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js
+// ../../node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js"(exports, module) {
+  "../../node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js"(exports, module) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -1288,9 +1288,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/node_modules/retry/lib/retry.js
+// ../../node_modules/proper-lockfile/node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "node_modules/proper-lockfile/node_modules/retry/lib/retry.js"(exports) {
+  "../../node_modules/proper-lockfile/node_modules/retry/lib/retry.js"(exports) {
     var RetryOperation = require_retry_operation();
     exports.operation = function(options) {
       var timeouts = exports.timeouts(options);
@@ -1374,16 +1374,16 @@ var require_retry = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/node_modules/retry/index.js
+// ../../node_modules/proper-lockfile/node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "node_modules/proper-lockfile/node_modules/retry/index.js"(exports, module) {
+  "../../node_modules/proper-lockfile/node_modules/retry/index.js"(exports, module) {
     module.exports = require_retry();
   }
 });
 
-// node_modules/proper-lockfile/node_modules/signal-exit/signals.js
+// ../../node_modules/proper-lockfile/node_modules/signal-exit/signals.js
 var require_signals = __commonJS({
-  "node_modules/proper-lockfile/node_modules/signal-exit/signals.js"(exports, module) {
+  "../../node_modules/proper-lockfile/node_modules/signal-exit/signals.js"(exports, module) {
     module.exports = [
       "SIGABRT",
       "SIGALRM",
@@ -1418,9 +1418,9 @@ var require_signals = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/node_modules/signal-exit/index.js
+// ../../node_modules/proper-lockfile/node_modules/signal-exit/index.js
 var require_signal_exit = __commonJS({
-  "node_modules/proper-lockfile/node_modules/signal-exit/index.js"(exports, module) {
+  "../../node_modules/proper-lockfile/node_modules/signal-exit/index.js"(exports, module) {
     var process2 = global.process;
     var processOk = function(process3) {
       return process3 && typeof process3 === "object" && typeof process3.removeListener === "function" && typeof process3.emit === "function" && typeof process3.reallyExit === "function" && typeof process3.listeners === "function" && typeof process3.kill === "function" && typeof process3.pid === "number" && typeof process3.on === "function";
@@ -1577,9 +1577,9 @@ var require_signal_exit = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/lib/mtime-precision.js
+// ../../node_modules/proper-lockfile/lib/mtime-precision.js
 var require_mtime_precision = __commonJS({
-  "node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
+  "../../node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
     "use strict";
     var cacheSymbol = Symbol();
     function probe(file, fs14, callback) {
@@ -1619,9 +1619,9 @@ var require_mtime_precision = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/lib/lockfile.js
+// ../../node_modules/proper-lockfile/lib/lockfile.js
 var require_lockfile = __commonJS({
-  "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
+  "../../node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
     var path20 = __require("path");
     var fs14 = require_graceful_fs();
@@ -1856,9 +1856,9 @@ var require_lockfile = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/lib/adapter.js
+// ../../node_modules/proper-lockfile/lib/adapter.js
 var require_adapter = __commonJS({
-  "node_modules/proper-lockfile/lib/adapter.js"(exports, module) {
+  "../../node_modules/proper-lockfile/lib/adapter.js"(exports, module) {
     "use strict";
     var fs14 = require_graceful_fs();
     function createSyncFs(fs15) {
@@ -1921,9 +1921,9 @@ var require_adapter = __commonJS({
   }
 });
 
-// node_modules/proper-lockfile/index.js
+// ../../node_modules/proper-lockfile/index.js
 var require_proper_lockfile = __commonJS({
-  "node_modules/proper-lockfile/index.js"(exports, module) {
+  "../../node_modules/proper-lockfile/index.js"(exports, module) {
     "use strict";
     var lockfile2 = require_lockfile();
     var { toPromise, toSync, toSyncOptions } = require_adapter();
@@ -1957,7 +1957,7 @@ var require_proper_lockfile = __commonJS({
   }
 });
 
-// packages/core/src/file-store-locks.ts
+// ../core/src/file-store-locks.ts
 import fs5 from "node:fs";
 import path4 from "node:path";
 function isTaskfoldLockConflictError(error) {
@@ -2099,7 +2099,7 @@ function tryWithTaskfoldCardLockSync(locksDir, cardKey, cardFilePath, section) {
 }
 var import_proper_lockfile, TASKFOLD_LOCK_STALE_MS, TASKFOLD_LOCK_UPDATE_MS, TASKFOLD_LOCK_WAIT_MS, TASKFOLD_LOCK_RETRY_MIN_MS, TASKFOLD_LOCK_RETRY_MAX_MS, TaskfoldLockTimeoutError, TaskfoldLockCompromisedError, syncSleepCell;
 var init_file_store_locks = __esm({
-  "packages/core/src/file-store-locks.ts"() {
+  "../core/src/file-store-locks.ts"() {
     "use strict";
     import_proper_lockfile = __toESM(require_proper_lockfile(), 1);
     TASKFOLD_LOCK_STALE_MS = 1e4;
@@ -2125,7 +2125,7 @@ var init_file_store_locks = __esm({
   }
 });
 
-// packages/core/src/file-store-change-cursor.ts
+// ../core/src/file-store-change-cursor.ts
 import fs6 from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 function parseLines(content) {
@@ -2296,7 +2296,7 @@ function createTaskfoldFileChangeSource(options) {
 }
 var CHANGE_LOG_COMPACT_THRESHOLD;
 var init_file_store_change_cursor = __esm({
-  "packages/core/src/file-store-change-cursor.ts"() {
+  "../core/src/file-store-change-cursor.ts"() {
     "use strict";
     init_file_store_atomic();
     init_file_store_locks();
@@ -2305,7 +2305,7 @@ var init_file_store_change_cursor = __esm({
   }
 });
 
-// packages/core/src/sdk-utils.ts
+// ../core/src/sdk-utils.ts
 import { timingSafeEqual } from "node:crypto";
 function asFiniteNumber(value) {
   return Number.isFinite(value) ? value : void 0;
@@ -2421,13 +2421,13 @@ function resolveGlobalSingleton(key, create) {
 }
 var MAX_DATE_TIMESTAMP_MS;
 var init_sdk_utils = __esm({
-  "packages/core/src/sdk-utils.ts"() {
+  "../core/src/sdk-utils.ts"() {
     "use strict";
     MAX_DATE_TIMESTAMP_MS = 864e13;
   }
 });
 
-// packages/core/src/store-constants.ts
+// ../core/src/store-constants.ts
 function nextTaskfoldCardRevision(current) {
   return Number.isSafeInteger(current) && current > 0 ? current + 1 : TASKFOLD_INITIAL_CARD_REVISION;
 }
@@ -2443,7 +2443,7 @@ function addTaskfoldDurationMs(now, durationMs) {
 }
 var POSITION_STEP, MAX_CARDS, MAX_CARD_EVENTS, MAX_CARD_ATTEMPTS, MAX_CARD_COMMENTS, MAX_CARD_LINKS, MAX_CARD_PROOF, MAX_CARD_ARTIFACTS, MAX_CARD_ATTACHMENTS, MAX_ATTACHMENT_ENTRIES, MAX_CARD_WORKER_LOGS, MAX_ATTACHMENT_BYTES, MAX_CARD_DIAGNOSTICS, MAX_CARD_NOTIFICATIONS, MAX_CARD_METADATA_BYTES, DEFAULT_CLAIM_TTL_MS, READY_STRANDED_MS, RUNNING_HEARTBEAT_STALE_MS, BLOCKED_TOO_LONG_MS, CLAIM_RECLAIM_MS, TASKFOLD_INITIAL_CARD_REVISION, TASKFOLD_PROMPT_VERSION;
 var init_store_constants = __esm({
-  "packages/core/src/store-constants.ts"() {
+  "../core/src/store-constants.ts"() {
     "use strict";
     init_sdk_utils();
     POSITION_STEP = 1e3;
@@ -2471,7 +2471,7 @@ var init_store_constants = __esm({
   }
 });
 
-// packages/core/src/file-store-card-runtime.ts
+// ../core/src/file-store-card-runtime.ts
 import { createHash } from "node:crypto";
 import path5 from "node:path";
 function cardRuntimePath(runtimeCardsDir, cardKey) {
@@ -2561,7 +2561,7 @@ function resolveCardRuntime(mdContent, parsed, stored) {
 }
 var TOP_LEVEL_RUNTIME_FIELDS;
 var init_file_store_card_runtime = __esm({
-  "packages/core/src/file-store-card-runtime.ts"() {
+  "../core/src/file-store-card-runtime.ts"() {
     "use strict";
     init_file_store_atomic();
     init_store_constants();
@@ -2569,13 +2569,13 @@ var init_file_store_card_runtime = __esm({
   }
 });
 
-// packages/core/src/contract/index.ts
+// ../core/src/contract/index.ts
 function isValidTaskfoldBoardId(value) {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
 var TASKFOLD_STATUSES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
 var init_contract = __esm({
-  "packages/core/src/contract/index.ts"() {
+  "../core/src/contract/index.ts"() {
     "use strict";
     TASKFOLD_STATUSES = [
       "triage",
@@ -2698,7 +2698,7 @@ var init_contract = __esm({
   }
 });
 
-// packages/core/src/markdown-card-format.ts
+// ../core/src/markdown-card-format.ts
 function stringValue(row, key) {
   const value = row[key];
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -3240,7 +3240,7 @@ function extractTaskfoldSectionUuid(markdown) {
 }
 var YAML_NULL_PATTERN, YAML_BOOL_TRUE_PATTERN, YAML_BOOL_FALSE_PATTERN, YAML_INT_PATTERN, YAML_FLOAT_PATTERN, YAML_TIMESTAMP_DATE_PATTERN, YAML_TIMESTAMP_DATETIME_PATTERN, YAML_HEX_PATTERN, YAML_BINARY_PATTERN, YAML_LEADING_ZERO_OCTAL_PATTERN, YAML_INF_PATTERN, YAML_NAN_PATTERN, YAML_SEXAGESIMAL_PATTERN, YAML_DEPRECATED_BOOLEAN_WORDS, FRONTMATTER_KEY_LINE_PATTERN, FRONTMATTER_LIST_ITEM_PATTERN, BACKLOG_DATETIME_PATTERN, GENERIC_SENTINEL_LINE_PATTERN, KNOWN_HEADING_LINE_PATTERN, FRONTMATTER_ID_PATTERN, DEFAULT_PRIORITY;
 var init_markdown_card_format = __esm({
-  "packages/core/src/markdown-card-format.ts"() {
+  "../core/src/markdown-card-format.ts"() {
     "use strict";
     init_contract();
     YAML_NULL_PATTERN = /^(~|null|Null|NULL)$/;
@@ -3284,7 +3284,7 @@ var init_markdown_card_format = __esm({
   }
 });
 
-// packages/core/src/file-store-reconcile.ts
+// ../core/src/file-store-reconcile.ts
 import fs7 from "node:fs";
 import path6 from "node:path";
 function listFilesWithExtension(dir, extension) {
@@ -3455,7 +3455,7 @@ function createTaskfoldExternalChangeReconciler(options) {
 }
 var CARD_EXTENSION, RUNTIME_EXTENSION;
 var init_file_store_reconcile = __esm({
-  "packages/core/src/file-store-reconcile.ts"() {
+  "../core/src/file-store-reconcile.ts"() {
     "use strict";
     init_file_store_atomic();
     init_file_store_card_runtime();
@@ -3466,7 +3466,7 @@ var init_file_store_reconcile = __esm({
   }
 });
 
-// packages/core/src/markdown-milestone-format.ts
+// ../core/src/markdown-milestone-format.ts
 function buildTaskfoldMilestoneSectionJson(milestone) {
   const payload = {
     uuid: milestone.id,
@@ -3572,13 +3572,13 @@ function parseMarkdownMilestone(markdown) {
   return { milestone, displayId, trailing };
 }
 var init_markdown_milestone_format = __esm({
-  "packages/core/src/markdown-milestone-format.ts"() {
+  "../core/src/markdown-milestone-format.ts"() {
     "use strict";
     init_markdown_card_format();
   }
 });
 
-// packages/core/src/file-store-codec.ts
+// ../core/src/file-store-codec.ts
 function fallbackCardDisplayId(card) {
   return parseCardFrontmatterId(card.id) ?? { prefix: "CARD", numericId: 0 };
 }
@@ -3622,14 +3622,14 @@ function createMarkdownMilestoneCodec() {
   };
 }
 var init_file_store_codec = __esm({
-  "packages/core/src/file-store-codec.ts"() {
+  "../core/src/file-store-codec.ts"() {
     "use strict";
     init_markdown_card_format();
     init_markdown_milestone_format();
   }
 });
 
-// packages/core/src/file-store-card-id.ts
+// ../core/src/file-store-card-id.ts
 import path7 from "node:path";
 function allocateNextOrdinalId(options) {
   const canonicalPrefix = options.prefix.toUpperCase();
@@ -3652,13 +3652,13 @@ function allocateNextTaskfoldMilestoneId(milestonesDir) {
   return allocateNextOrdinalId({ prefix: "M", directories: [milestonesDir] });
 }
 var init_file_store_card_id = __esm({
-  "packages/core/src/file-store-card-id.ts"() {
+  "../core/src/file-store-card-id.ts"() {
     "use strict";
     init_file_store_atomic();
   }
 });
 
-// packages/core/src/file-store-cards.ts
+// ../core/src/file-store-cards.ts
 import path8 from "node:path";
 function assertValidCardPayload(key, value) {
   if (value.version !== 1 || value.card.id !== key) {
@@ -3891,7 +3891,7 @@ function createTaskfoldFileCardStore(options) {
 }
 var CARD_EXTENSION2;
 var init_file_store_cards = __esm({
-  "packages/core/src/file-store-cards.ts"() {
+  "../core/src/file-store-cards.ts"() {
     "use strict";
     init_file_store_atomic();
     init_file_store_card_id();
@@ -3902,7 +3902,7 @@ var init_file_store_cards = __esm({
   }
 });
 
-// packages/core/src/file-store-milestones.ts
+// ../core/src/file-store-milestones.ts
 import path9 from "node:path";
 function assertValidMilestonePayload(key, value) {
   if (value.version !== 1 || value.milestone.id !== key) {
@@ -4004,7 +4004,7 @@ function createTaskfoldFileMilestoneStore(options) {
 }
 var MILESTONE_EXTENSION;
 var init_file_store_milestones = __esm({
-  "packages/core/src/file-store-milestones.ts"() {
+  "../core/src/file-store-milestones.ts"() {
     "use strict";
     init_file_store_atomic();
     init_file_store_card_id();
@@ -4014,7 +4014,7 @@ var init_file_store_milestones = __esm({
   }
 });
 
-// packages/core/src/file-store-documents.ts
+// ../core/src/file-store-documents.ts
 import path10 from "node:path";
 function assertValidDocumentPayload(key, value) {
   if (value.version !== 1 || value.document.id !== key) {
@@ -4083,14 +4083,14 @@ function createTaskfoldFileDocumentStore(options) {
 }
 var DOCUMENT_EXTENSION;
 var init_file_store_documents = __esm({
-  "packages/core/src/file-store-documents.ts"() {
+  "../core/src/file-store-documents.ts"() {
     "use strict";
     init_file_store_atomic();
     DOCUMENT_EXTENSION = ".json";
   }
 });
 
-// packages/core/src/file-store-subscriptions.ts
+// ../core/src/file-store-subscriptions.ts
 import path11 from "node:path";
 function assertValidSubscriptionPayload(key, value) {
   if (value.version !== 1 || value.subscription.id !== key) {
@@ -4135,14 +4135,14 @@ function createTaskfoldFileSubscriptionStore(options) {
 }
 var SUBSCRIPTION_EXTENSION;
 var init_file_store_subscriptions = __esm({
-  "packages/core/src/file-store-subscriptions.ts"() {
+  "../core/src/file-store-subscriptions.ts"() {
     "use strict";
     init_file_store_atomic();
     SUBSCRIPTION_EXTENSION = ".json";
   }
 });
 
-// packages/core/src/file-store-attachments.ts
+// ../core/src/file-store-attachments.ts
 import path12 from "node:path";
 function assertValidAttachmentPayload(key, value) {
   if (value.version !== 1 || value.attachment.id !== key) {
@@ -4211,13 +4211,13 @@ function createTaskfoldFileAttachmentStore(options) {
   };
 }
 var init_file_store_attachments = __esm({
-  "packages/core/src/file-store-attachments.ts"() {
+  "../core/src/file-store-attachments.ts"() {
     "use strict";
     init_file_store_atomic();
   }
 });
 
-// packages/core/src/file-store-boards.ts
+// ../core/src/file-store-boards.ts
 function assertValidBoardPayload(key, value) {
   if (value.version !== 1 || value.board.id !== key) {
     throw new Error("invalid taskfold board payload");
@@ -4268,13 +4268,13 @@ function createTaskfoldFileBoardStore(options) {
   };
 }
 var init_file_store_boards = __esm({
-  "packages/core/src/file-store-boards.ts"() {
+  "../core/src/file-store-boards.ts"() {
     "use strict";
     init_file_store_atomic();
   }
 });
 
-// packages/core/src/file-store.ts
+// ../core/src/file-store.ts
 function createTaskfoldFileStores(options) {
   const layout = resolveTaskfoldFileStoreLayout({
     dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
@@ -4391,7 +4391,7 @@ function rejectWritesUnlessFormatWritable(assertWritable, store) {
   };
 }
 var init_file_store = __esm({
-  "packages/core/src/file-store.ts"() {
+  "../core/src/file-store.ts"() {
     "use strict";
     init_file_store_paths();
     init_file_store_path_resolver();
@@ -4412,7 +4412,7 @@ var init_file_store = __esm({
   }
 });
 
-// packages/core/src/card-redaction.ts
+// ../core/src/card-redaction.ts
 function redactClaimToken(card) {
   const claim = card.metadata?.claim;
   if (!claim) {
@@ -4430,7 +4430,7 @@ function redactClaimToken(card) {
   };
 }
 var init_card_redaction = __esm({
-  "packages/core/src/card-redaction.ts"() {
+  "../core/src/card-redaction.ts"() {
     "use strict";
   }
 });
@@ -6302,7 +6302,7 @@ var init_sqlite_store = __esm({
   }
 });
 
-// packages/core/src/card-lookup.ts
+// ../core/src/card-lookup.ts
 function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   const exact = cards.find((card2) => card2.id === id);
   if (exact) {
@@ -6319,7 +6319,7 @@ function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   return card ? { card } : { error: `Card not found: ${id}` };
 }
 var init_card_lookup = __esm({
-  "packages/core/src/card-lookup.ts"() {
+  "../core/src/card-lookup.ts"() {
     "use strict";
   }
 });
@@ -7629,23 +7629,23 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor4
 // src/backend/src/dispatcher-workspace.ts
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2 } from "openclaw/plugin-sdk/security-runtime";
 
-// packages/core/src/store-card-helpers.ts
+// ../core/src/store-card-helpers.ts
 init_contract();
 init_sdk_utils();
 init_store_constants();
 import { randomUUID as randomUUID4 } from "node:crypto";
 
-// packages/core/src/store-normalizers.ts
+// ../core/src/store-normalizers.ts
 init_contract();
 init_store_constants();
 import { randomUUID as randomUUID3 } from "node:crypto";
 
-// packages/core/src/workspace-path.ts
+// ../core/src/workspace-path.ts
 function isAbsoluteWorkspacePath(value) {
   return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
 }
 
-// packages/core/src/store-normalizers.ts
+// ../core/src/store-normalizers.ts
 function normalizeOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
@@ -8843,7 +8843,7 @@ function trimMetadataToBudget(metadata, options = {}) {
   return next;
 }
 
-// packages/core/src/store-card-helpers.ts
+// ../core/src/store-card-helpers.ts
 function compareCards(left, right) {
   if (left.status !== right.status) {
     return TASKFOLD_STATUSES.indexOf(left.status) - TASKFOLD_STATUSES.indexOf(right.status);
@@ -9290,7 +9290,7 @@ function compareNotifications(a, b) {
   return a.id.localeCompare(b.id);
 }
 
-// packages/core/src/session-link.ts
+// ../core/src/session-link.ts
 function sanitizeSessionSegment(value, fallback) {
   const sanitized = (value ?? fallback).trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return (sanitized || fallback).slice(0, 96);
@@ -9716,7 +9716,7 @@ import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
 
-// packages/core/src/worker-prompt.ts
+// ../core/src/worker-prompt.ts
 init_store_constants();
 var RECENT_ATTEMPTS = 8;
 var FAILED_ATTEMPT_DETAIL = 3;
@@ -10845,10 +10845,10 @@ function createTaskfoldDispatchHandler(params) {
   };
 }
 
-// packages/core/src/store-core.ts
+// ../core/src/store-core.ts
 import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
 
-// packages/core/src/store-automation.ts
+// ../core/src/store-automation.ts
 function normalizeTrustedWorkspaceAccess(value, fallback) {
   if (value === void 0) {
     return fallback;
@@ -10907,7 +10907,7 @@ function normalizeAutomationPatch(patch, current) {
   });
 }
 
-// packages/core/src/store-change-tracker.ts
+// ../core/src/store-change-tracker.ts
 import { randomUUID as randomUUID5 } from "node:crypto";
 var CHANGE_REVISION_BLOCK = 1e4;
 function createTaskfoldReservedChangeSource(options = {}) {
@@ -11051,7 +11051,7 @@ var TaskfoldChangeTracker = class {
   }
 };
 
-// packages/core/src/store-compensation.ts
+// ../core/src/store-compensation.ts
 init_sdk_utils();
 import { isDeepStrictEqual } from "node:util";
 var ABSENT = Symbol("taskfold-compensation-absent");
@@ -11196,7 +11196,7 @@ function invertTaskfoldWorkspaceMutation(before, after, current) {
   return withoutMetadata;
 }
 
-// packages/core/src/store-core.ts
+// ../core/src/store-core.ts
 init_store_constants();
 var TaskfoldRevisionConflictError = class extends Error {
   constructor(cardId, expectedRevision, reason = "revision") {
@@ -13123,27 +13123,27 @@ function registerTaskfoldProjectGatewayMethods(params) {
 // src/backend/src/store.ts
 init_sqlite_store();
 
-// packages/core/src/store-dispatch.ts
+// ../core/src/store-dispatch.ts
 import { randomUUID as randomUUID13 } from "node:crypto";
 init_store_constants();
 
-// packages/core/src/store-projects.ts
+// ../core/src/store-projects.ts
 init_contract();
 import { randomUUID as randomUUID12 } from "node:crypto";
 import { stat } from "node:fs/promises";
 init_store_constants();
 
-// packages/core/src/store-workflow.ts
+// ../core/src/store-workflow.ts
 init_sdk_utils();
 import { randomUUID as randomUUID11 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
 init_store_constants();
 
-// packages/core/src/store-promote.ts
+// ../core/src/store-promote.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
 init_store_constants();
 
-// packages/core/src/store-enrichment.ts
+// ../core/src/store-enrichment.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
 init_store_constants();
 var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
@@ -13372,7 +13372,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
   }
 };
 
-// packages/core/src/store-promote.ts
+// ../core/src/store-promote.ts
 var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
   async promoteReady(now = Date.now()) {
     return await this.enqueueMutation(async () => {
@@ -13438,7 +13438,7 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
   }
 };
 
-// packages/core/src/store-workflow.ts
+// ../core/src/store-workflow.ts
 function assertClaimIdentity(claim, input) {
   const token = normalizeOptionalString(input.token);
   const ownerId = normalizeOptionalString(input.ownerId);
@@ -14331,7 +14331,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
   }
 };
 
-// packages/core/src/store-notifications.ts
+// ../core/src/store-notifications.ts
 var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
   async subscribeNotifications(input) {
     return await this.enqueueMutation(async () => {
@@ -14459,7 +14459,7 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
   }
 };
 
-// packages/core/src/project-document-discovery.ts
+// ../core/src/project-document-discovery.ts
 import { createHash as createHash4 } from "node:crypto";
 import fs10 from "node:fs/promises";
 import path16 from "node:path";
@@ -14658,7 +14658,7 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   return results;
 }
 
-// packages/core/src/store-projects.ts
+// ../core/src/store-projects.ts
 var RESERVED_AUTOMATIC_DOCUMENT_KEY_PREFIXES = ["file.", "ai."];
 function normalizeProjectCreateMode(value) {
   if (value === void 0 || value === "new") {
@@ -15443,7 +15443,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
   }
 };
 
-// packages/core/src/store-dispatch.ts
+// ../core/src/store-dispatch.ts
 var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
   async shouldAutoOrchestrate(card) {
     if (card.status !== "triage" || card.metadata?.archivedAt || card.metadata?.workerProtocol?.state === "idle") {
@@ -16987,7 +16987,7 @@ function createTaskfoldSqliteMigrationCheckService(pluginDir) {
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/core";
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
-// node_modules/typebox/build/system/memory/memory.mjs
+// ../../node_modules/typebox/build/system/memory/memory.mjs
 var memory_exports = {};
 __export(memory_exports, {
   Assign: () => Assign,
@@ -16998,7 +16998,7 @@ __export(memory_exports, {
   Update: () => Update
 });
 
-// node_modules/typebox/build/system/memory/metrics.mjs
+// ../../node_modules/typebox/build/system/memory/metrics.mjs
 var Metrics = {
   assign: 0,
   create: 0,
@@ -17007,13 +17007,13 @@ var Metrics = {
   update: 0
 };
 
-// node_modules/typebox/build/system/memory/assign.mjs
+// ../../node_modules/typebox/build/system/memory/assign.mjs
 function Assign(left, right) {
   Metrics.assign += 1;
   return { ...left, ...right };
 }
 
-// node_modules/typebox/build/guard/guard.mjs
+// ../../node_modules/typebox/build/guard/guard.mjs
 var guard_exports = {};
 __export(guard_exports, {
   Entries: () => Entries,
@@ -17053,7 +17053,7 @@ __export(guard_exports, {
   Values: () => Values
 });
 
-// node_modules/typebox/build/guard/string.mjs
+// ../../node_modules/typebox/build/guard/string.mjs
 function IsBetween(value, min, max) {
   return value >= min && value <= max;
 }
@@ -17163,7 +17163,7 @@ function IsMaxLengthFast(value, maxLength) {
   return true;
 }
 
-// node_modules/typebox/build/guard/guard.mjs
+// ../../node_modules/typebox/build/guard/guard.mjs
 function IsArray(value) {
   return Array.isArray(value);
 }
@@ -17309,7 +17309,7 @@ function IsDeepEqual(left, right) {
   return IsArray(left) ? DeepEqualArray(left, right) : IsObject(left) ? DeepEqualObject(left, right) : IsEqual(left, right);
 }
 
-// node_modules/typebox/build/guard/globals.mjs
+// ../../node_modules/typebox/build/guard/globals.mjs
 var globals_exports = {};
 __export(globals_exports, {
   IsBigInt64Array: () => IsBigInt64Array,
@@ -17390,7 +17390,7 @@ function IsMap(value) {
   return value instanceof globalThis.Map;
 }
 
-// node_modules/typebox/build/system/memory/clone.mjs
+// ../../node_modules/typebox/build/system/memory/clone.mjs
 function FromClassInstance(value) {
   return value;
 }
@@ -17448,7 +17448,7 @@ function Clone(value) {
   return FromValue(value);
 }
 
-// node_modules/typebox/build/system/settings/settings.mjs
+// ../../node_modules/typebox/build/system/settings/settings.mjs
 var settings_exports = {};
 __export(settings_exports, {
   Get: () => Get,
@@ -17485,7 +17485,7 @@ function Get() {
   return settings;
 }
 
-// node_modules/typebox/build/system/memory/create.mjs
+// ../../node_modules/typebox/build/system/memory/create.mjs
 function MergeHidden(left, right) {
   for (const key of Object.keys(right)) {
     Object.defineProperty(left, key, {
@@ -17508,7 +17508,7 @@ function Create(hidden, enumerable, options = {}) {
   return settings2.immutableTypes ? Object.freeze(withHidden) : withHidden;
 }
 
-// node_modules/typebox/build/system/memory/discard.mjs
+// ../../node_modules/typebox/build/system/memory/discard.mjs
 function Discard(value, propertyKeys) {
   Metrics.discard += 1;
   const result = {};
@@ -17522,7 +17522,7 @@ function Discard(value, propertyKeys) {
   return result;
 }
 
-// node_modules/typebox/build/system/memory/update.mjs
+// ../../node_modules/typebox/build/system/memory/update.mjs
 function Update(current, hidden, enumerable) {
   Metrics.update += 1;
   const settings2 = settings_exports.Get();
@@ -17546,7 +17546,7 @@ function Update(current, hidden, enumerable) {
   return result;
 }
 
-// node_modules/typebox/build/type/types/schema.mjs
+// ../../node_modules/typebox/build/type/types/schema.mjs
 function IsKind(value, kind) {
   return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], kind);
 }
@@ -17554,7 +17554,7 @@ function IsSchema(value) {
   return guard_exports.IsObject(value);
 }
 
-// node_modules/typebox/build/type/types/deferred.mjs
+// ../../node_modules/typebox/build/type/types/deferred.mjs
 function Deferred(action, parameters, options) {
   return memory_exports.Create({ "~kind": "Deferred" }, { type: "deferred", action, parameters, options }, {});
 }
@@ -17562,7 +17562,7 @@ function IsDeferred(value) {
   return IsKind(value, "Deferred");
 }
 
-// node_modules/typebox/build/type/engine/readonly/instantiate_add.mjs
+// ../../node_modules/typebox/build/type/engine/readonly/instantiate_add.mjs
 function AddReadonlyOperation(type) {
   return memory_exports.Update(type, { "~readonly": true }, {});
 }
@@ -17575,7 +17575,7 @@ function AddReadonlyInstantiate(context, state, type, options) {
   return AddReadonlyAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
+// ../../node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
 function AddOptionalOperation(type) {
   return memory_exports.Update(type, { "~optional": true }, {});
 }
@@ -17588,7 +17588,7 @@ function AddOptionalInstantiate(context, state, type, options) {
   return AddOptionalAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/types/array.mjs
+// ../../node_modules/typebox/build/type/types/array.mjs
 function _Array_(items, options) {
   return memory_exports.Create({ "~kind": "Array" }, { type: "array", items }, options);
 }
@@ -17599,7 +17599,7 @@ function ArrayOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "items"]);
 }
 
-// node_modules/typebox/build/type/types/constructor.mjs
+// ../../node_modules/typebox/build/type/types/constructor.mjs
 function Constructor(parameters, instanceType, options = {}) {
   return memory_exports.Create({ "~kind": "Constructor" }, { type: "constructor", parameters, instanceType }, options);
 }
@@ -17610,7 +17610,7 @@ function ConstructorOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "parameters", "instanceType"]);
 }
 
-// node_modules/typebox/build/type/types/function.mjs
+// ../../node_modules/typebox/build/type/types/function.mjs
 function _Function_(parameters, returnType, options = {}) {
   return memory_exports.Create({ ["~kind"]: "Function" }, { type: "function", parameters, returnType }, options);
 }
@@ -17621,7 +17621,7 @@ function FunctionOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "parameters", "returnType"]);
 }
 
-// node_modules/typebox/build/type/types/ref.mjs
+// ../../node_modules/typebox/build/type/types/ref.mjs
 function Ref(ref, options) {
   return memory_exports.Create({ ["~kind"]: "Ref" }, { $ref: ref }, options);
 }
@@ -17629,7 +17629,7 @@ function IsRef(value) {
   return IsKind(value, "Ref");
 }
 
-// node_modules/typebox/build/type/types/generic.mjs
+// ../../node_modules/typebox/build/type/types/generic.mjs
 function Generic(parameters, expression) {
   return memory_exports.Create({ "~kind": "Generic" }, { type: "generic", parameters, expression });
 }
@@ -17637,7 +17637,7 @@ function IsGeneric(value) {
   return IsKind(value, "Generic");
 }
 
-// node_modules/typebox/build/type/types/any.mjs
+// ../../node_modules/typebox/build/type/types/any.mjs
 function Any(options) {
   return memory_exports.Create({ ["~kind"]: "Any" }, {}, options);
 }
@@ -17645,7 +17645,7 @@ function IsAny(value) {
   return IsKind(value, "Any");
 }
 
-// node_modules/typebox/build/type/types/never.mjs
+// ../../node_modules/typebox/build/type/types/never.mjs
 var NeverPattern = "(?!)";
 function Never(options) {
   return memory_exports.Create({ "~kind": "Never" }, { not: {} }, options);
@@ -17654,7 +17654,7 @@ function IsNever(value) {
   return IsKind(value, "Never");
 }
 
-// node_modules/typebox/build/type/action/_add_optional.mjs
+// ../../node_modules/typebox/build/type/action/_add_optional.mjs
 function AddOptionalDeferred(type, options = {}) {
   return Deferred("AddOptional", [type], options);
 }
@@ -17662,7 +17662,7 @@ function AddOptional(type, options = {}) {
   return AddOptionalAction(type, options);
 }
 
-// node_modules/typebox/build/type/types/_optional.mjs
+// ../../node_modules/typebox/build/type/types/_optional.mjs
 function Optional(type) {
   return AddOptional(type);
 }
@@ -17670,7 +17670,7 @@ function IsOptional(value) {
   return IsSchema(value) && guard_exports.HasPropertyKey(value, "~optional");
 }
 
-// node_modules/typebox/build/type/types/properties.mjs
+// ../../node_modules/typebox/build/type/types/properties.mjs
 function RequiredArray(properties) {
   return guard_exports.Keys(properties).filter((key) => !IsOptional(properties[key]));
 }
@@ -17681,7 +17681,7 @@ function PropertyValues(properties) {
   return guard_exports.Values(properties);
 }
 
-// node_modules/typebox/build/type/types/object.mjs
+// ../../node_modules/typebox/build/type/types/object.mjs
 function _Object_(properties, options = {}) {
   const requiredKeys = RequiredArray(properties);
   const required = requiredKeys.length > 0 ? { required: requiredKeys } : {};
@@ -17694,7 +17694,7 @@ function ObjectOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "properties", "required"]);
 }
 
-// node_modules/typebox/build/type/types/unknown.mjs
+// ../../node_modules/typebox/build/type/types/unknown.mjs
 function Unknown(options) {
   return memory_exports.Create({ ["~kind"]: "Unknown" }, {}, options);
 }
@@ -17702,7 +17702,7 @@ function IsUnknown(value) {
   return IsKind(value, "Unknown");
 }
 
-// node_modules/typebox/build/type/types/cyclic.mjs
+// ../../node_modules/typebox/build/type/types/cyclic.mjs
 function Cyclic($defs, $ref, options) {
   const defs = guard_exports.Keys($defs).reduce((result, key) => {
     return { ...result, [key]: memory_exports.Update($defs[key], {}, { $id: key }) };
@@ -17713,7 +17713,7 @@ function IsCyclic(value) {
   return IsKind(value, "Cyclic");
 }
 
-// node_modules/typebox/build/type/types/unsafe.mjs
+// ../../node_modules/typebox/build/type/types/unsafe.mjs
 function Unsafe(schema) {
   return memory_exports.Update(schema, { ["~unsafe"]: null }, {});
 }
@@ -17721,7 +17721,7 @@ function IsUnsafe(value) {
   return guard_exports.IsObjectNotArray(value) && guard_exports.HasPropertyKey(value, "~unsafe") && guard_exports.IsNull(value["~unsafe"]);
 }
 
-// node_modules/typebox/build/system/arguments/arguments.mjs
+// ../../node_modules/typebox/build/system/arguments/arguments.mjs
 var arguments_exports = {};
 __export(arguments_exports, {
   Match: () => Match
@@ -17732,7 +17732,7 @@ function Match(args, match) {
   })();
 }
 
-// node_modules/typebox/build/type/types/infer.mjs
+// ../../node_modules/typebox/build/type/types/infer.mjs
 function Infer(...args) {
   const [name, extends_] = arguments_exports.Match(args, {
     2: (name2, extends_2) => [name2, extends_2, extends_2],
@@ -17744,7 +17744,7 @@ function IsInfer(value) {
   return IsKind(value, "Infer");
 }
 
-// node_modules/typebox/build/type/types/dependent.mjs
+// ../../node_modules/typebox/build/type/types/dependent.mjs
 function Dependent(if_, then_, else_, options = {}) {
   return memory_exports.Create({ "~kind": "Dependent" }, { if: if_, then: then_, else: else_ }, options);
 }
@@ -17755,7 +17755,7 @@ function DependentOptions(type) {
   return memory_exports.Discard(type, ["~kind", "if", "then", "else"]);
 }
 
-// node_modules/typebox/build/type/engine/enum/typescript_enum_to_enum_values.mjs
+// ../../node_modules/typebox/build/type/engine/enum/typescript_enum_to_enum_values.mjs
 function IsTypeScriptEnumLike(value) {
   return guard_exports.IsObjectNotArray(value);
 }
@@ -17764,7 +17764,7 @@ function TypeScriptEnumToEnumValues(type) {
   return keys.reduce((result, key) => [...result, type[key]], []);
 }
 
-// node_modules/typebox/build/type/types/enum.mjs
+// ../../node_modules/typebox/build/type/types/enum.mjs
 function IsEnumValue(value) {
   return guard_exports.IsString(value) || guard_exports.IsNumber(value);
 }
@@ -17776,7 +17776,7 @@ function IsEnum(value) {
   return IsKind(value, "Enum");
 }
 
-// node_modules/typebox/build/type/types/intersect.mjs
+// ../../node_modules/typebox/build/type/types/intersect.mjs
 function Intersect(types, options = {}) {
   return memory_exports.Create({ "~kind": "Intersect" }, { allOf: types }, options);
 }
@@ -17787,12 +17787,12 @@ function IntersectOptions(type) {
   return memory_exports.Discard(type, ["~kind", "allOf"]);
 }
 
-// node_modules/typebox/build/system/unreachable/unreachable.mjs
+// ../../node_modules/typebox/build/system/unreachable/unreachable.mjs
 function Unreachable() {
   throw new Error("Unreachable");
 }
 
-// node_modules/typebox/build/system/hashing/hash.mjs
+// ../../node_modules/typebox/build/system/hashing/hash.mjs
 var ByteMarker;
 (function(ByteMarker2) {
   ByteMarker2[ByteMarker2["Array"] = 0] = "Array";
@@ -17821,7 +17821,7 @@ var F64In = new DataView(F64.buffer);
 var F64Out = new Uint8Array(F64.buffer);
 var encoder = new TextEncoder();
 
-// node_modules/typebox/build/type/types/_codec.mjs
+// ../../node_modules/typebox/build/type/types/_codec.mjs
 var EncodeBuilder = class {
   constructor(type, decode) {
     this.type = type;
@@ -17860,7 +17860,7 @@ function IsCodec(value) {
   return IsSchema(value) && guard_exports.HasPropertyKey(value, "~codec") && guard_exports.IsObject(value["~codec"]) && guard_exports.HasPropertyKey(value["~codec"], "encode") && guard_exports.HasPropertyKey(value["~codec"], "decode");
 }
 
-// node_modules/typebox/build/type/types/_immutable.mjs
+// ../../node_modules/typebox/build/type/types/_immutable.mjs
 function Immutable(type) {
   return AddImmutable(type);
 }
@@ -17868,7 +17868,7 @@ function IsImmutable(value) {
   return IsSchema(value) && guard_exports.HasPropertyKey(value, "~immutable");
 }
 
-// node_modules/typebox/build/type/action/_add_readonly.mjs
+// ../../node_modules/typebox/build/type/action/_add_readonly.mjs
 function AddReadonlyDeferred(type, options = {}) {
   return Deferred("AddReadonly", [type], options);
 }
@@ -17876,7 +17876,7 @@ function AddReadonly(type, options = {}) {
   return AddReadonlyAction(type, options);
 }
 
-// node_modules/typebox/build/type/types/_readonly.mjs
+// ../../node_modules/typebox/build/type/types/_readonly.mjs
 function Readonly(type) {
   return AddReadonly(type);
 }
@@ -17884,7 +17884,7 @@ function IsReadonly(value) {
   return IsSchema(value) && guard_exports.HasPropertyKey(value, "~readonly");
 }
 
-// node_modules/typebox/build/type/types/_refine.mjs
+// ../../node_modules/typebox/build/type/types/_refine.mjs
 function RefineAdd(type, refinement) {
   const refinements = IsRefine(type) ? [...type["~refine"], refinement] : [refinement];
   return memory_exports.Update(type, { "~refine": refinements }, {});
@@ -17903,7 +17903,7 @@ function IsRefine(value) {
   return IsSchema(value) && guard_exports.HasPropertyKey(value, "~refine") && guard_exports.IsArray(value["~refine"]) && guard_exports.Every(value["~refine"], 0, (value2) => IsRefinement(value2));
 }
 
-// node_modules/typebox/build/type/types/bigint.mjs
+// ../../node_modules/typebox/build/type/types/bigint.mjs
 var BigIntPattern = "-?(?:0|[1-9][0-9]*)n";
 function BigInt2(options) {
   return memory_exports.Create({ "~kind": "BigInt" }, { type: "bigint" }, options);
@@ -17912,7 +17912,7 @@ function IsBigInt2(value) {
   return IsKind(value, "BigInt");
 }
 
-// node_modules/typebox/build/type/types/boolean.mjs
+// ../../node_modules/typebox/build/type/types/boolean.mjs
 function Boolean2(options) {
   return memory_exports.Create({ "~kind": "Boolean" }, { type: "boolean" }, options);
 }
@@ -17920,7 +17920,7 @@ function IsBoolean3(value) {
   return IsKind(value, "Boolean");
 }
 
-// node_modules/typebox/build/type/types/identifier.mjs
+// ../../node_modules/typebox/build/type/types/identifier.mjs
 function Identifier(name) {
   return memory_exports.Create({ "~kind": "Identifier" }, { name });
 }
@@ -17928,7 +17928,7 @@ function IsIdentifier(value) {
   return IsKind(value, "Identifier");
 }
 
-// node_modules/typebox/build/type/types/integer.mjs
+// ../../node_modules/typebox/build/type/types/integer.mjs
 var IntegerPattern = "-?(?:0|[1-9][0-9]*)";
 function Integer(options) {
   return memory_exports.Create({ "~kind": "Integer" }, { type: "integer" }, options);
@@ -17937,7 +17937,7 @@ function IsInteger2(value) {
   return IsKind(value, "Integer");
 }
 
-// node_modules/typebox/build/type/types/literal.mjs
+// ../../node_modules/typebox/build/type/types/literal.mjs
 var InvalidLiteralValue = class extends Error {
   constructor(value) {
     super(`Invalid Literal value`);
@@ -17970,7 +17970,7 @@ function IsLiteral(value) {
   return IsKind(value, "Literal");
 }
 
-// node_modules/typebox/build/type/types/null.mjs
+// ../../node_modules/typebox/build/type/types/null.mjs
 function Null(options) {
   return memory_exports.Create({ "~kind": "Null" }, { type: "null" }, options);
 }
@@ -17978,7 +17978,7 @@ function IsNull2(value) {
   return IsKind(value, "Null");
 }
 
-// node_modules/typebox/build/type/types/number.mjs
+// ../../node_modules/typebox/build/type/types/number.mjs
 var NumberPattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?";
 function Number2(options) {
   return memory_exports.Create({ "~kind": "Number" }, { type: "number" }, options);
@@ -17987,7 +17987,7 @@ function IsNumber3(value) {
   return IsKind(value, "Number");
 }
 
-// node_modules/typebox/build/type/types/symbol.mjs
+// ../../node_modules/typebox/build/type/types/symbol.mjs
 function Symbol2(options) {
   return memory_exports.Create({ "~kind": "Symbol" }, { type: "symbol" }, options);
 }
@@ -17995,7 +17995,7 @@ function IsSymbol2(value) {
   return IsKind(value, "Symbol");
 }
 
-// node_modules/typebox/build/type/types/parameter.mjs
+// ../../node_modules/typebox/build/type/types/parameter.mjs
 function Parameter(...args) {
   const [name, extends_, equals] = arguments_exports.Match(args, {
     3: (name2, extends_2, equals2) => [name2, extends_2, equals2],
@@ -18008,7 +18008,7 @@ function IsParameter(value) {
   return IsKind(value, "Parameter");
 }
 
-// node_modules/typebox/build/type/types/string.mjs
+// ../../node_modules/typebox/build/type/types/string.mjs
 var StringPattern = ".*";
 function String2(options) {
   return memory_exports.Create({ "~kind": "String" }, { type: "string" }, options);
@@ -18017,7 +18017,7 @@ function IsString3(value) {
   return IsKind(value, "String");
 }
 
-// node_modules/typebox/build/type/types/union.mjs
+// ../../node_modules/typebox/build/type/types/union.mjs
 function Union(anyOf, options = {}) {
   return memory_exports.Create({ "~kind": "Union" }, { anyOf }, options);
 }
@@ -18028,14 +18028,14 @@ function UnionOptions(type) {
   return memory_exports.Discard(type, ["~kind", "anyOf"]);
 }
 
-// node_modules/typebox/build/type/engine/patterns/pattern.mjs
+// ../../node_modules/typebox/build/type/engine/patterns/pattern.mjs
 function ParsePatternIntoTypes(pattern) {
   const parsed = Pattern(pattern);
   const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : [];
   return result;
 }
 
-// node_modules/typebox/build/type/engine/template_literal/is_finite.mjs
+// ../../node_modules/typebox/build/type/engine/template_literal/is_finite.mjs
 function FromLiteral(_value) {
   return true;
 }
@@ -18054,12 +18054,12 @@ function IsTemplateLiteralFinite(types) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/template_literal/create.mjs
+// ../../node_modules/typebox/build/type/engine/template_literal/create.mjs
 function TemplateLiteralCreate(pattern) {
   return memory_exports.Create({ ["~kind"]: "TemplateLiteral" }, { type: "string", pattern }, {});
 }
 
-// node_modules/typebox/build/type/engine/template_literal/decode.mjs
+// ../../node_modules/typebox/build/type/engine/template_literal/decode.mjs
 function FromLiteralPush(variants, value, result = []) {
   return guard_exports.ShiftLeft(variants, (left, right) => FromLiteralPush(right, value, [...result, `${left}${value}`]), () => result);
 }
@@ -18102,24 +18102,24 @@ function TemplateLiteralDecode(pattern) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/record_create.mjs
+// ../../node_modules/typebox/build/type/engine/record/record_create.mjs
 function CreateRecord(key, value) {
   const type = "object";
   const patternProperties = { [key]: value };
   return memory_exports.Create({ ["~kind"]: "Record" }, { type, patternProperties });
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_any.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_any.mjs
 function FromAnyKey(value) {
   return CreateRecord(StringKey, value);
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_boolean.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_boolean.mjs
 function FromBooleanKey(value) {
   return _Object_({ true: value, false: value });
 }
 
-// node_modules/typebox/build/type/types/tuple.mjs
+// ../../node_modules/typebox/build/type/types/tuple.mjs
 function Tuple(types, options = {}) {
   const [items, minItems, additionalItems] = [types, types.length, false];
   return memory_exports.Create({ ["~kind"]: "Tuple" }, { type: "array", additionalItems, items, minItems }, options);
@@ -18131,7 +18131,7 @@ function TupleOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "items", "minItems", "additionalItems"]);
 }
 
-// node_modules/typebox/build/type/engine/readonly/instantiate_remove.mjs
+// ../../node_modules/typebox/build/type/engine/readonly/instantiate_remove.mjs
 function RemoveReadonlyOperation(type) {
   return memory_exports.Discard(type, ["~readonly"]);
 }
@@ -18144,7 +18144,7 @@ function RemoveReadonlyInstantiate(context, state, type, options) {
   return RemoveReadonlyAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/_remove_readonly.mjs
+// ../../node_modules/typebox/build/type/action/_remove_readonly.mjs
 function RemoveReadonlyDeferred(type, options = {}) {
   return Deferred("RemoveReadonly", [type], options);
 }
@@ -18152,7 +18152,7 @@ function RemoveReadonly(type, options = {}) {
   return RemoveReadonlyAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/optional/instantiate_remove.mjs
+// ../../node_modules/typebox/build/type/engine/optional/instantiate_remove.mjs
 function RemoveOptionalOperation(type) {
   return memory_exports.Discard(type, ["~optional"]);
 }
@@ -18165,7 +18165,7 @@ function RemoveOptionalInstantiate(context, state, type, options) {
   return RemoveOptionalAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/_remove_optional.mjs
+// ../../node_modules/typebox/build/type/action/_remove_optional.mjs
 function RemoveOptionalDeferred(type, options = {}) {
   return Deferred("RemoveOptional", [type], options);
 }
@@ -18173,7 +18173,7 @@ function RemoveOptional(type, options = {}) {
   return RemoveOptionalAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/tuple/to_object.mjs
+// ../../node_modules/typebox/build/type/engine/tuple/to_object.mjs
 function TupleElementsToProperties(types) {
   const result = types.reduceRight((result2, right, index) => {
     return { [index]: right, ...result2 };
@@ -18186,7 +18186,7 @@ function TupleToObject(type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/evaluate/composite.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/composite.mjs
 function IsReadonlyProperty(left, right) {
   return IsReadonly(left) ? IsReadonly(right) ? true : false : false;
 }
@@ -18220,13 +18220,13 @@ function Composite(left, right) {
   return _Object_(properties);
 }
 
-// node_modules/typebox/build/type/engine/evaluate/narrow.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/narrow.mjs
 function Narrow(left, right) {
   const result = Compare(left, right);
   return guard_exports.IsEqual(result, ResultLeftInside) ? left : guard_exports.IsEqual(result, ResultRightInside) ? right : guard_exports.IsEqual(result, ResultEqual) ? right : Never();
 }
 
-// node_modules/typebox/build/type/engine/evaluate/distribute.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/distribute.mjs
 function IsObjectLike(type) {
   return IsObject2(type) || IsTuple(type);
 }
@@ -18255,7 +18255,7 @@ function Distribute(types, result = []) {
   return guard_exports.ShiftLeft(types, (left, right) => IsUnion(left) ? Distribute(right, DistributeUnion(left.anyOf, result)) : Distribute(right, DistributeType(left, result)), () => result);
 }
 
-// node_modules/typebox/build/type/engine/exclude/operation.mjs
+// ../../node_modules/typebox/build/type/engine/exclude/operation.mjs
 function ExcludeType(left, right) {
   const check = Extends({}, left, right);
   const result = result_exports.IsExtendsTrueLike(check) ? [] : [left];
@@ -18274,7 +18274,7 @@ function ExcludeOperation(left, right) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/evaluate/evaluate.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/evaluate.mjs
 function EvaluateDependent(if_, then_, else_) {
   const intersect = Intersect([if_, then_]);
   const excluded = ExcludeOperation(else_, if_);
@@ -18309,43 +18309,43 @@ function EvaluateUnionFast(types) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_enum.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_enum.mjs
 function FromEnumKey(values, value) {
   const unionKey = EvaluateEnum(values);
   const result = FromKey(unionKey, value);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_integer.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_integer.mjs
 function FromIntegerKey(_key, value) {
   const result = CreateRecord(IntegerKey, value);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_intersect.mjs
 function FromIntersectKey(types, value) {
   const evaluatedKey = EvaluateIntersect(types);
   const result = FromKey(evaluatedKey, value);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_literal.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_literal.mjs
 function FromLiteralKey(key, value) {
   return guard_exports.IsString(key) || guard_exports.IsNumber(key) ? _Object_({ [key]: value }) : guard_exports.IsEqual(key, false) ? _Object_({ false: value }) : guard_exports.IsEqual(key, true) ? _Object_({ true: value }) : _Object_({});
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_number.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_number.mjs
 function FromNumberKey(_key, value) {
   const result = CreateRecord(NumberKey, value);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_string.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_string.mjs
 function FromStringKey(key, value) {
   return guard_exports.HasPropertyKey(key, "pattern") && (guard_exports.IsString(key.pattern) || key.pattern instanceof RegExp) ? CreateRecord(key.pattern.toString(), value) : CreateRecord(StringKey, value);
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_template_literal.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_template_literal.mjs
 function FromTemplateKey(pattern, value) {
   const types = ParsePatternIntoTypes(pattern);
   const finite = IsTemplateLiteralFinite(types);
@@ -18353,7 +18353,7 @@ function FromTemplateKey(pattern, value) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/evaluate/flatten.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/flatten.mjs
 function FlattenType(type) {
   const result = IsUnion(type) ? Flatten(type.anyOf) : [type];
   return result;
@@ -18364,7 +18364,7 @@ function Flatten(types) {
   }, []);
 }
 
-// node_modules/typebox/build/type/engine/record/from_key_union.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key_union.mjs
 function StringOrNumberCheck(types) {
   return types.some((type) => IsString3(type) || IsNumber3(type) || IsInteger2(type));
 }
@@ -18387,13 +18387,13 @@ function FromUnionKey(types, value) {
   return IsSchema(record) ? record : CreateObject(flattened, value);
 }
 
-// node_modules/typebox/build/type/engine/record/from_key.mjs
+// ../../node_modules/typebox/build/type/engine/record/from_key.mjs
 function FromKey(key, value) {
   const result = IsAny(key) ? FromAnyKey(value) : IsBoolean3(key) ? FromBooleanKey(value) : IsEnum(key) ? FromEnumKey(key.enum, value) : IsInteger2(key) ? FromIntegerKey(key, value) : IsIntersect(key) ? FromIntersectKey(key.allOf, value) : IsLiteral(key) ? FromLiteralKey(key.const, value) : IsNumber3(key) ? FromNumberKey(key, value) : IsUnion(key) ? FromUnionKey(key.anyOf, value) : IsString3(key) ? FromStringKey(key, value) : IsTemplateLiteral(key) ? FromTemplateKey(key.pattern, value) : _Object_({});
   return result;
 }
 
-// node_modules/typebox/build/type/engine/record/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/record/instantiate.mjs
 function RecordAction(key, value, options) {
   const result = CanInstantiate([key]) ? memory_exports.Update(FromKey(key, value), {}, options) : RecordDeferred(key, value, options);
   return result;
@@ -18404,7 +18404,7 @@ function RecordInstantiate(context, state, key, value, options) {
   return RecordAction(instantiatedKey, instantiatedValue, options);
 }
 
-// node_modules/typebox/build/type/types/record.mjs
+// ../../node_modules/typebox/build/type/types/record.mjs
 var IntegerKey = `^${IntegerPattern}$`;
 var NumberKey = `^${NumberPattern}$`;
 var StringKey = `^${StringPattern}$`;
@@ -18436,7 +18436,7 @@ function IsRecord(value) {
   return IsKind(value, "Record");
 }
 
-// node_modules/typebox/build/type/types/rest.mjs
+// ../../node_modules/typebox/build/type/types/rest.mjs
 function Rest(type) {
   return memory_exports.Create({ "~kind": "Rest" }, { type: "rest", items: type }, {});
 }
@@ -18444,7 +18444,7 @@ function IsRest(value) {
   return IsKind(value, "Rest");
 }
 
-// node_modules/typebox/build/type/types/this.mjs
+// ../../node_modules/typebox/build/type/types/this.mjs
 function This(options) {
   return memory_exports.Create({ ["~kind"]: "This" }, { $ref: "#" }, options);
 }
@@ -18452,7 +18452,7 @@ function IsThis(value) {
   return IsKind(value, "This");
 }
 
-// node_modules/typebox/build/type/types/undefined.mjs
+// ../../node_modules/typebox/build/type/types/undefined.mjs
 function Undefined(options) {
   return memory_exports.Create({ "~kind": "Undefined" }, { type: "undefined" }, options);
 }
@@ -18460,7 +18460,7 @@ function IsUndefined2(value) {
   return IsKind(value, "Undefined");
 }
 
-// node_modules/typebox/build/type/types/void.mjs
+// ../../node_modules/typebox/build/type/types/void.mjs
 function Void(options) {
   return memory_exports.Create({ "~kind": "Void" }, { type: "void" }, options);
 }
@@ -18468,7 +18468,7 @@ function IsVoid(value) {
   return IsKind(value, "Void");
 }
 
-// node_modules/typebox/build/type/script/mapping.mjs
+// ../../node_modules/typebox/build/type/script/mapping.mjs
 function IntrinsicOrCall(ref, parameters) {
   return guard_exports.IsEqual(ref, "Array") ? _Array_(parameters[0]) : guard_exports.IsEqual(ref, "Capitalize") ? CapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ConstructorParameters") ? ConstructorParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Evaluate") ? EvaluateDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Exclude") ? ExcludeDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Extract") ? ExtractDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Index") ? IndexDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "InstanceType") ? InstanceTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Lowercase") ? LowercaseDeferred(parameters[0]) : guard_exports.IsEqual(ref, "NonNullable") ? NonNullableDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Omit") ? OmitDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Parameters") ? ParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Partial") ? PartialDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Pick") ? PickDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Readonly") ? ReadonlyObjectDeferred(parameters[0]) : guard_exports.IsEqual(ref, "KeyOf") ? KeyOfDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Record") ? RecordDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Required") ? RequiredDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ReturnType") ? ReturnTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uncapitalize") ? UncapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uppercase") ? UppercaseDeferred(parameters[0]) : CallConstruct(Ref(ref), parameters);
 }
@@ -18906,7 +18906,7 @@ function ScriptMapping(input) {
   return input;
 }
 
-// node_modules/typebox/build/type/script/token/internal/match.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/match.mjs
 function IsMatch(value) {
   return IsEqual(value.length, 2);
 }
@@ -18914,7 +18914,7 @@ function Match2(input, ok, fail) {
   return IsMatch(input) ? ok(input[0], input[1]) : fail();
 }
 
-// node_modules/typebox/build/type/script/token/internal/take.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/take.mjs
 function TakeVariant(variant, input) {
   return IsEqual(input.indexOf(variant), 0) ? [variant, input.slice(variant.length)] : [];
 }
@@ -18927,7 +18927,7 @@ function Take(variants, input) {
   return [];
 }
 
-// node_modules/typebox/build/type/script/token/internal/char.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/char.mjs
 function Range(start, end) {
   return Array.from({ length: end - start + 1 }, (_, i) => String.fromCharCode(start + i));
 }
@@ -18947,7 +18947,7 @@ var Dot = ".";
 var DollarSign = "$";
 var Hyphen = "-";
 
-// node_modules/typebox/build/type/script/token/internal/trim.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/trim.mjs
 var LineComment = "//";
 var OpenComment = "/*";
 var CloseComment = "*/";
@@ -18973,12 +18973,12 @@ function Trim(input) {
   return trimmed.startsWith(OpenComment) ? Trim(DiscardMultilineComment(trimmed.slice(2))) : trimmed.startsWith(LineComment) ? Trim(DiscardLineComment(trimmed.slice(2))) : trimmed;
 }
 
-// node_modules/typebox/build/type/script/token/internal/optional.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/optional.mjs
 function Optional2(value, input) {
   return Match2(Take([value], input), (Optional4, Rest2) => [Optional4, Rest2], () => ["", input]);
 }
 
-// node_modules/typebox/build/type/script/token/internal/many.mjs
+// ../../node_modules/typebox/build/type/script/token/internal/many.mjs
 function IsDiscard(discard, input) {
   return discard.includes(input);
 }
@@ -18986,7 +18986,7 @@ function Many(allowed, discard, input, result = "") {
   return Match2(Take(allowed, input), (Char, Rest2) => IsDiscard(discard, Char) ? Many(allowed, discard, Rest2, result) : Many(allowed, discard, Rest2, `${result}${Char}`), () => [result, input]);
 }
 
-// node_modules/typebox/build/type/script/token/unsigned_integer.mjs
+// ../../node_modules/typebox/build/type/script/token/unsigned_integer.mjs
 function TakeNonZero(input) {
   return Take(NonZero, input);
 }
@@ -19006,7 +19006,7 @@ function UnsignedInteger(input) {
   return TakeUnsignedInteger(Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/integer.mjs
+// ../../node_modules/typebox/build/type/script/token/integer.mjs
 function TakeSign(input) {
   return Optional2(Hyphen, input);
 }
@@ -19022,7 +19022,7 @@ function Integer2(input) {
   return TakeSignedInteger(Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/bigint.mjs
+// ../../node_modules/typebox/build/type/script/token/bigint.mjs
 function TakeBigInt(input) {
   return Match2(
     Integer2(input),
@@ -19035,7 +19035,7 @@ function BigInt3(input) {
   return TakeBigInt(input);
 }
 
-// node_modules/typebox/build/type/script/token/const.mjs
+// ../../node_modules/typebox/build/type/script/token/const.mjs
 function TakeConst(const_, input) {
   return Take([const_], input);
 }
@@ -19043,7 +19043,7 @@ function Const(const_, input) {
   return IsEqual(const_, "") ? ["", input] : const_.startsWith(NewLine) ? TakeConst(const_, TrimWhitespace(input)) : const_.startsWith(WhiteSpace) ? TakeConst(const_, input) : TakeConst(const_, Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/ident.mjs
+// ../../node_modules/typebox/build/type/script/token/ident.mjs
 var Initial = [...Alpha, UnderScore, DollarSign];
 function TakeInitial(input) {
   return Take(Initial, input);
@@ -19064,7 +19064,7 @@ function Ident(input) {
   return TakeIdent(Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/unsigned_number.mjs
+// ../../node_modules/typebox/build/type/script/token/unsigned_number.mjs
 var AllowedDigits2 = [...Digit, UnderScore];
 function IsLeadingDot(input) {
   return IsMatch(Take([Dot], input));
@@ -19100,7 +19100,7 @@ function UnsignedNumber(input) {
   return TakeUnsignedNumber(Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/number.mjs
+// ../../node_modules/typebox/build/type/script/token/number.mjs
 function TakeSign2(input) {
   return Optional2(Hyphen, input);
 }
@@ -19116,7 +19116,7 @@ function Number3(input) {
   return TakeSignedNumber(Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/until.mjs
+// ../../node_modules/typebox/build/type/script/token/until.mjs
 function TakeOne(input) {
   const result = IsEqual(input, "") ? [] : [input.slice(0, 1), input.slice(1)];
   return result;
@@ -19132,7 +19132,7 @@ function Until(end, input, result = "") {
   );
 }
 
-// node_modules/typebox/build/type/script/token/span.mjs
+// ../../node_modules/typebox/build/type/script/token/span.mjs
 function MultiLine(start, end, input) {
   return Match2(
     Take([start], input),
@@ -19163,7 +19163,7 @@ function Span(start, end, multiLine, input) {
   return multiLine ? MultiLine(start, end, Trim(input)) : SingleLine(start, end, Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/string.mjs
+// ../../node_modules/typebox/build/type/script/token/string.mjs
 function TakeInitial2(quotes, input) {
   return Take(quotes, input);
 }
@@ -19177,12 +19177,12 @@ function String3(quotes, input) {
   return TakeString(quotes, Trim(input));
 }
 
-// node_modules/typebox/build/type/script/token/until_1.mjs
+// ../../node_modules/typebox/build/type/script/token/until_1.mjs
 function Until_1(end, input) {
   return Match2(Until(end, input), (Until2, UntilRest) => IsEqual(Until2, "") ? [] : [Until2, UntilRest], () => []);
 }
 
-// node_modules/typebox/build/type/script/parser.mjs
+// ../../node_modules/typebox/build/type/script/parser.mjs
 var If = (result, left, right = () => []) => result.length === 2 ? left(result) : right();
 var GenericParameterExtendsEquals = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => If(Const("=", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [GenericParameterExtendsEqualsMapping(_0), input2]);
 var GenericParameterExtends = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParameterExtendsMapping(_0), input2]);
@@ -19315,14 +19315,14 @@ var ModuleDeclaration = (input) => If(If(ExportKeyword(input), ([_0, input2]) =>
 var Module = (input) => If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationList(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ModuleMapping(_0), input2]);
 var Script = (input) => If(If(Module(input), ([_0, input2]) => [_0, input2], () => If(GenericType(input), ([_0, input2]) => [_0, input2], () => If(Type(input), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [ScriptMapping(_0), input2]);
 
-// node_modules/typebox/build/type/engine/patterns/template.mjs
+// ../../node_modules/typebox/build/type/engine/patterns/template.mjs
 function ParseTemplateIntoTypes(template) {
   const parsed = TemplateLiteralTypes(`\`${template}\``);
   const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : Unreachable();
   return result;
 }
 
-// node_modules/typebox/build/type/engine/template_literal/encode.mjs
+// ../../node_modules/typebox/build/type/engine/template_literal/encode.mjs
 function JoinString(input) {
   return input.join("|");
 }
@@ -19379,7 +19379,7 @@ function TemplateLiteralEncode(types) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/template_literal/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/template_literal/instantiate.mjs
 function TemplateLiteralAction(types, options) {
   const result = CanInstantiate(types) ? memory_exports.Update(TemplateLiteralEncode(types), {}, options) : TemplateLiteralDeferred(types, options);
   return result;
@@ -19389,7 +19389,7 @@ function TemplateLiteralInstantiate(context, state, types, options) {
   return TemplateLiteralAction(instantiatedTypes, options);
 }
 
-// node_modules/typebox/build/type/types/template_literal.mjs
+// ../../node_modules/typebox/build/type/types/template_literal.mjs
 function TemplateLiteralDeferred(types, options = {}) {
   return Deferred("TemplateLiteral", [types], options);
 }
@@ -19411,7 +19411,7 @@ function IsTemplateLiteral(value) {
   return IsKind(value, "TemplateLiteral");
 }
 
-// node_modules/typebox/build/type/extends/result.mjs
+// ../../node_modules/typebox/build/type/extends/result.mjs
 var result_exports = {};
 __export(result_exports, {
   ExtendsFalse: () => ExtendsFalse,
@@ -19448,7 +19448,7 @@ function Match3(result, true_, false_) {
   return IsExtendsTrueLike(result) ? true_(result.inferred) : false_();
 }
 
-// node_modules/typebox/build/type/extends/extends_right.mjs
+// ../../node_modules/typebox/build/type/extends/extends_right.mjs
 function ExtendsRightInfer(inferred, name, left, right) {
   return Match3(ExtendsLeft(inferred, left, right), (checkInferred) => ExtendsTrue(memory_exports.Assign(memory_exports.Assign(inferred, checkInferred), { [name]: left })), () => ExtendsFalse());
 }
@@ -19476,12 +19476,12 @@ function ExtendsRight(inferred, left, right) {
   return IsAny(right) ? ExtendsRightAny(inferred, left) : IsDependent(right) ? ExtendsRightDependent(inferred, left, right.if, right.then, right.else) : IsEnum(right) ? ExtendsRightEnum(inferred, left, right.enum) : IsInfer(right) ? ExtendsRightInfer(inferred, right.name, left, right.extends) : IsIntersect(right) ? ExtendsRightIntersect(inferred, left, right.allOf) : IsTemplateLiteral(right) ? ExtendsRightTemplateLiteral(inferred, left, right.pattern) : IsUnion(right) ? ExtendsRightUnion(inferred, left, right.anyOf) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/any.mjs
+// ../../node_modules/typebox/build/type/extends/any.mjs
 function ExtendsAny(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsUnion(inferred);
 }
 
-// node_modules/typebox/build/type/extends/array.mjs
+// ../../node_modules/typebox/build/type/extends/array.mjs
 function ExtendsImmutable(left, right) {
   const isImmutableLeft = IsImmutable(left);
   const isImmutableRight = IsImmutable(right);
@@ -19491,17 +19491,17 @@ function ExtendsArray(inferred, arrayLeft, left, right) {
   return IsArray2(right) ? ExtendsImmutable(arrayLeft, right) ? ExtendsLeft(inferred, left, right.items) : ExtendsFalse() : ExtendsRight(inferred, arrayLeft, right);
 }
 
-// node_modules/typebox/build/type/extends/bigint.mjs
+// ../../node_modules/typebox/build/type/extends/bigint.mjs
 function ExtendsBigInt(inferred, left, right) {
   return IsBigInt2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/boolean.mjs
+// ../../node_modules/typebox/build/type/extends/boolean.mjs
 function ExtendsBoolean(inferred, left, right) {
   return IsBoolean3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/parameters.mjs
+// ../../node_modules/typebox/build/type/extends/parameters.mjs
 function ParameterCompare(inferred, left, leftRest, right, rightRest) {
   const checkLeft = IsInfer(right) ? left : right;
   const checkRight = IsInfer(right) ? right : left;
@@ -19519,44 +19519,44 @@ function ExtendsParameters(inferred, left, right) {
   return ParametersLeft(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/return_type.mjs
+// ../../node_modules/typebox/build/type/extends/return_type.mjs
 function ExtendsReturnType(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsLeft(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/constructor.mjs
+// ../../node_modules/typebox/build/type/extends/constructor.mjs
 function ExtendsConstructor(inferred, parameters, returnType, right) {
   return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsConstructor2(right) ? Match3(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["instanceType"]), () => ExtendsFalse()) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/dependent.mjs
+// ../../node_modules/typebox/build/type/extends/dependent.mjs
 function ExtendsDependent(inferred, if_, then_, else_, right) {
   return Match3(ExtendsLeft(inferred, if_, right), () => ExtendsLeft(inferred, then_, right), () => ExtendsLeft(inferred, else_, right));
 }
 
-// node_modules/typebox/build/type/extends/enum.mjs
+// ../../node_modules/typebox/build/type/extends/enum.mjs
 function ExtendsEnum(inferred, left, right) {
   const evaluated = EvaluateEnum(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/typebox/build/type/extends/function.mjs
+// ../../node_modules/typebox/build/type/extends/function.mjs
 function ExtendsFunction(inferred, parameters, returnType, right) {
   return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsFunction2(right) ? Match3(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["returnType"]), () => ExtendsFalse()) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/integer.mjs
+// ../../node_modules/typebox/build/type/extends/integer.mjs
 function ExtendsInteger(inferred, left, right) {
   return IsInteger2(right) ? ExtendsTrue(inferred) : IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/intersect.mjs
+// ../../node_modules/typebox/build/type/extends/intersect.mjs
 function ExtendsIntersect(inferred, left, right) {
   const evaluated = EvaluateIntersect(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/typebox/build/type/extends/literal.mjs
+// ../../node_modules/typebox/build/type/extends/literal.mjs
 function ExtendsLiteralValue(inferred, left, right) {
   return left === right ? ExtendsTrue(inferred) : ExtendsFalse();
 }
@@ -19576,22 +19576,22 @@ function ExtendsLiteral(inferred, left, right) {
   return guard_exports.IsBigInt(left.const) ? ExtendsLiteralBigInt(inferred, left.const, right) : guard_exports.IsBoolean(left.const) ? ExtendsLiteralBoolean(inferred, left.const, right) : guard_exports.IsNumber(left.const) ? ExtendsLiteralNumber(inferred, left.const, right) : guard_exports.IsString(left.const) ? ExtendsLiteralString(inferred, left.const, right) : Unreachable();
 }
 
-// node_modules/typebox/build/type/extends/never.mjs
+// ../../node_modules/typebox/build/type/extends/never.mjs
 function ExtendsNever(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : ExtendsTrue(inferred);
 }
 
-// node_modules/typebox/build/type/extends/null.mjs
+// ../../node_modules/typebox/build/type/extends/null.mjs
 function ExtendsNull(inferred, left, right) {
   return IsNull2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/number.mjs
+// ../../node_modules/typebox/build/type/extends/number.mjs
 function ExtendsNumber(inferred, left, right) {
   return IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/object.mjs
+// ../../node_modules/typebox/build/type/extends/object.mjs
 function ExtendsPropertyOptional(inferred, left, right) {
   return IsOptional(left) ? IsOptional(right) ? ExtendsTrue(inferred) : ExtendsFalse() : ExtendsTrue(inferred);
 }
@@ -19642,7 +19642,7 @@ function ExtendsObject(inferred, left, right) {
   return IsRecord(right) ? ExtendsObjectToRecord(inferred, left, RecordPattern(right), RecordValue(right)) : IsObject2(right) ? ExtendsObjectToObject(inferred, left, right.properties) : ExtendsRight(inferred, _Object_(left), right);
 }
 
-// node_modules/typebox/build/type/extends/record.mjs
+// ../../node_modules/typebox/build/type/extends/record.mjs
 function FromObject2(inferred, properties) {
   return guard_exports.IsEqual(guard_exports.Keys(properties).length, 0) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
@@ -19653,23 +19653,23 @@ function ExtendsRecord(inferred, leftPattern, leftValue, right) {
   return IsRecord(right) ? FromRecord(inferred, RecordPatternToType(leftPattern), leftValue, RecordPatternToType(RecordPattern(right)), RecordValue(right)) : IsObject2(right) ? FromObject2(inferred, right.properties) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/string.mjs
+// ../../node_modules/typebox/build/type/extends/string.mjs
 function ExtendsString(inferred, left, right) {
   return IsString3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/symbol.mjs
+// ../../node_modules/typebox/build/type/extends/symbol.mjs
 function ExtendsSymbol(inferred, left, right) {
   return IsSymbol2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/template_literal.mjs
+// ../../node_modules/typebox/build/type/extends/template_literal.mjs
 function ExtendsTemplateLiteral(inferred, left, right) {
   const evaluated = EvaluateTemplateLiteral(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/typebox/build/type/extends/inference.mjs
+// ../../node_modules/typebox/build/type/extends/inference.mjs
 function Inferrable(name, type) {
   return memory_exports.Create({ "~kind": "Inferrable" }, { name, type }, {});
 }
@@ -19694,7 +19694,7 @@ function InferUnionResult(inferred, name, left, right) {
   return guard_exports.IsArray(results) ? ExtendsTrue(memory_exports.Assign(inferred, { [name]: Union(results) })) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/tuple.mjs
+// ../../node_modules/typebox/build/type/extends/tuple.mjs
 function Reverse(types) {
   return [...types].reverse();
 }
@@ -19736,12 +19736,12 @@ function ExtendsTuple(inferred, left, right) {
   return IsTuple(right) ? ExtendsTupleToTuple(inferred, instantiatedLeft, right.items) : IsArray2(right) ? ExtendsTupleToArray(inferred, instantiatedLeft, right.items) : ExtendsRight(inferred, Tuple(instantiatedLeft), right);
 }
 
-// node_modules/typebox/build/type/extends/undefined.mjs
+// ../../node_modules/typebox/build/type/extends/undefined.mjs
 function ExtendsUndefined(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : IsUndefined2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/union.mjs
+// ../../node_modules/typebox/build/type/extends/union.mjs
 function ExtendsUnionSome(inferred, type, unionTypes) {
   return guard_exports.ShiftLeft(unionTypes, (head, tail) => Match3(ExtendsLeft(inferred, type, head), (inferred2) => ExtendsTrue(inferred2), () => ExtendsUnionSome(inferred, type, tail)), () => ExtendsFalse());
 }
@@ -19753,22 +19753,22 @@ function ExtendsUnion2(inferred, left, right) {
   return IsInferable(inferrable) ? InferUnionResult(inferred, inferrable.name, left, inferrable.type) : IsUnion(right) ? ExtendsUnionLeft(inferred, left, right.anyOf) : ExtendsUnionLeft(inferred, left, [right]);
 }
 
-// node_modules/typebox/build/type/extends/unknown.mjs
+// ../../node_modules/typebox/build/type/extends/unknown.mjs
 function ExtendsUnknown(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/extends/void.mjs
+// ../../node_modules/typebox/build/type/extends/void.mjs
 function ExtendsVoid(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/typebox/build/type/extends/extends_left.mjs
+// ../../node_modules/typebox/build/type/extends/extends_left.mjs
 function ExtendsLeft(inferred, left, right) {
   return IsAny(left) ? ExtendsAny(inferred, left, right) : IsArray2(left) ? ExtendsArray(inferred, left, left.items, right) : IsBigInt2(left) ? ExtendsBigInt(inferred, left, right) : IsBoolean3(left) ? ExtendsBoolean(inferred, left, right) : IsConstructor2(left) ? ExtendsConstructor(inferred, left.parameters, left.instanceType, right) : IsDependent(left) ? ExtendsDependent(inferred, left.if, left.then, left.else, right) : IsEnum(left) ? ExtendsEnum(inferred, left.enum, right) : IsFunction2(left) ? ExtendsFunction(inferred, left.parameters, left.returnType, right) : IsInteger2(left) ? ExtendsInteger(inferred, left, right) : IsIntersect(left) ? ExtendsIntersect(inferred, left.allOf, right) : IsLiteral(left) ? ExtendsLiteral(inferred, left, right) : IsNever(left) ? ExtendsNever(inferred, left, right) : IsNull2(left) ? ExtendsNull(inferred, left, right) : IsNumber3(left) ? ExtendsNumber(inferred, left, right) : IsObject2(left) ? ExtendsObject(inferred, left.properties, right) : IsRecord(left) ? ExtendsRecord(inferred, RecordPattern(left), RecordValue(left), right) : IsString3(left) ? ExtendsString(inferred, left, right) : IsSymbol2(left) ? ExtendsSymbol(inferred, left, right) : IsTemplateLiteral(left) ? ExtendsTemplateLiteral(inferred, left.pattern, right) : IsTuple(left) ? ExtendsTuple(inferred, left.items, right) : IsUndefined2(left) ? ExtendsUndefined(inferred, left, right) : IsUnion(left) ? ExtendsUnion2(inferred, left.anyOf, right) : IsUnknown(left) ? ExtendsUnknown(inferred, left, right) : IsVoid(left) ? ExtendsVoid(inferred, left, right) : ExtendsFalse();
 }
 
-// node_modules/typebox/build/type/engine/interface/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/interface/instantiate.mjs
 function InterfaceOperation(heritage, properties) {
   const result = EvaluateIntersect([...heritage, _Object_(properties)]);
   return result;
@@ -19783,7 +19783,7 @@ function InterfaceInstantiate(context, state, heritage, properties, options) {
   return InterfaceAction(instantiatedHeritage, instantiatedProperties, options);
 }
 
-// node_modules/typebox/build/type/action/interface.mjs
+// ../../node_modules/typebox/build/type/action/interface.mjs
 function InterfaceDeferred(heritage, properties, options = {}) {
   return Deferred("Interface", [heritage, properties], options);
 }
@@ -19794,7 +19794,7 @@ function Interface(heritage, properties, options = {}) {
   return InterfaceAction(heritage, properties, options);
 }
 
-// node_modules/typebox/build/type/engine/cyclic/check.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/check.mjs
 function FromRef(stack, context, ref) {
   return stack.includes(ref) ? true : FromType3([...stack, ref], context, context[ref]);
 }
@@ -19813,7 +19813,7 @@ function CyclicCheck(stack, context, type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/cyclic/candidates.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/candidates.mjs
 function ResolveCandidateKeys(context, keys) {
   return keys.reduce((result, left) => {
     return CyclicCheck([left], context, context[left]) ? [...result, left] : result;
@@ -19825,7 +19825,7 @@ function CyclicCandidates(context) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/cyclic/dependencies.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/dependencies.mjs
 function FromRef2(context, ref, result) {
   return result.includes(ref) ? result : ref in context ? FromType4(context, context[ref], [...result, ref]) : Unreachable();
 }
@@ -19846,7 +19846,7 @@ function CyclicDependencies(context, key, type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/cyclic/extends.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/extends.mjs
 function FromRef3(_ref) {
   return Any();
 }
@@ -19870,7 +19870,7 @@ function CyclicExtends(type) {
   return CyclicAnyFromParameters(type.$defs, type.$ref);
 }
 
-// node_modules/typebox/build/type/engine/cyclic/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/instantiate.mjs
 function CyclicInterface(context, heritage, properties) {
   const instantiatedHeritage = InstantiateTypes(context, State([], []), heritage);
   const instantiatedProperties = InstantiateProperties({}, State([], []), properties);
@@ -19892,7 +19892,7 @@ function InstantiateCyclic(context, ref, type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/cyclic/target.mjs
+// ../../node_modules/typebox/build/type/engine/cyclic/target.mjs
 function Resolve(defs, ref) {
   return ref in defs ? IsRef(defs[ref]) ? Resolve(defs, defs[ref].$ref) : defs[ref] : Never();
 }
@@ -19901,7 +19901,7 @@ function CyclicTarget(defs, ref) {
   return result;
 }
 
-// node_modules/typebox/build/type/extends/extends.mjs
+// ../../node_modules/typebox/build/type/extends/extends.mjs
 function Canonical(type) {
   return IsCyclic(type) ? CyclicExtends(type) : IsUnsafe(type) ? Unknown() : type;
 }
@@ -19911,7 +19911,7 @@ function Extends(inferred, left, right) {
   return ExtendsLeft(inferred, canonicalLeft, canonicalRight);
 }
 
-// node_modules/typebox/build/type/engine/evaluate/compare.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/compare.mjs
 var ResultEqual = "equal";
 var ResultDisjoint = "disjoint";
 var ResultLeftInside = "left-inside";
@@ -19924,7 +19924,7 @@ function Compare(left, right) {
   return result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? ResultEqual : result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsFalse(extendsCheck[1]) ? ResultLeftInside : result_exports.IsExtendsFalse(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? ResultRightInside : ResultDisjoint;
 }
 
-// node_modules/typebox/build/type/engine/evaluate/broaden.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/broaden.mjs
 function BroadFilter(type, types) {
   return types.filter((left) => {
     return Compare(type, left) === ResultRightInside ? false : true;
@@ -19958,7 +19958,7 @@ function Broaden(types) {
   return flattened;
 }
 
-// node_modules/typebox/build/type/engine/evaluate/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/evaluate/instantiate.mjs
 function EvaluateAction(type, options) {
   const result = memory_exports.Update(EvaluateType(type), {}, options);
   return result;
@@ -19968,7 +19968,7 @@ function EvaluateInstantiate(context, state, type, options) {
   return EvaluateAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/engine/call/distribute_arguments.mjs
+// ../../node_modules/typebox/build/type/engine/call/distribute_arguments.mjs
 function CollectDistributionNames(expression, result = []) {
   return (
     // Conditional
@@ -20004,7 +20004,7 @@ function DistributeArguments(parameters, arguments_, expression) {
   return IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Conditional") ? Distribute2(zippedArguments) : IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Mapped") ? Distribute2(zippedArguments) : [arguments_];
 }
 
-// node_modules/typebox/build/type/engine/call/resolve_target.mjs
+// ../../node_modules/typebox/build/type/engine/call/resolve_target.mjs
 function FromNotResolvable() {
   return ["(not-resolvable)", Never()];
 }
@@ -20024,7 +20024,7 @@ function ResolveTarget(context, target, arguments_) {
   return FromType6(context, "(anonymous)", target, arguments_);
 }
 
-// node_modules/typebox/build/type/engine/call/resolve_arguments.mjs
+// ../../node_modules/typebox/build/type/engine/call/resolve_arguments.mjs
 function AssertArgumentExtends(name, type, extends_) {
   if (IsInfer(type) || IsCall(type) || result_exports.IsExtendsTrueLike(Extends({}, type, extends_)))
     return;
@@ -20048,7 +20048,7 @@ function ResolveArgumentsContext(context, state, parameters, arguments_) {
   return BindParameters(context, state, parameters, arguments_);
 }
 
-// node_modules/typebox/build/type/engine/call/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/call/instantiate.mjs
 function Peek(state) {
   const result = guard_exports.IsGreaterThan(state.callstack.length, 0) ? state.callstack[state.callstack.length - 1] : "";
   return result;
@@ -20080,7 +20080,7 @@ function CallInstantiate(context, state, target, arguments_) {
   return result;
 }
 
-// node_modules/typebox/build/type/types/call.mjs
+// ../../node_modules/typebox/build/type/types/call.mjs
 function CallConstruct(target, arguments_) {
   return memory_exports.Create({ ["~kind"]: "Call" }, { type: "call", target, arguments: arguments_ }, {});
 }
@@ -20091,7 +20091,7 @@ function IsCall(value) {
   return IsKind(value, "Call");
 }
 
-// node_modules/typebox/build/type/engine/immutable/instantiate_remove.mjs
+// ../../node_modules/typebox/build/type/engine/immutable/instantiate_remove.mjs
 function RemoveImmutableOperation(type) {
   return memory_exports.Discard(type, ["~immutable"]);
 }
@@ -20104,35 +20104,35 @@ function RemoveImmutableInstantiate(context, state, type, options) {
   return RemoveImmutableAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/mapping.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/mapping.mjs
 function ApplyMapping(mapping, value) {
   return mapping(value);
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/from_literal.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/from_literal.mjs
 function FromLiteral3(mapping, value) {
   return guard_exports.IsString(value) ? Literal(ApplyMapping(mapping, value)) : Literal(value);
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/from_template_literal.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/from_template_literal.mjs
 function FromTemplateLiteral(mapping, pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType7(mapping, evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/from_union.mjs
 function FromUnion2(mapping, types) {
   const result = types.map((type) => FromType7(mapping, type));
   return Union(result);
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/from_type.mjs
 function FromType7(mapping, type) {
   return IsLiteral(type) ? FromLiteral3(mapping, type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral(mapping, type.pattern) : IsUnion(type) ? FromUnion2(mapping, type.anyOf) : type;
 }
 
-// node_modules/typebox/build/type/action/capitalize.mjs
+// ../../node_modules/typebox/build/type/action/capitalize.mjs
 function CapitalizeDeferred(type, options = {}) {
   return Deferred("Capitalize", [type], options);
 }
@@ -20140,7 +20140,7 @@ function Capitalize(type, options = {}) {
   return CapitalizeAction(type, options);
 }
 
-// node_modules/typebox/build/type/action/lowercase.mjs
+// ../../node_modules/typebox/build/type/action/lowercase.mjs
 function LowercaseDeferred(type, options = {}) {
   return Deferred("Lowercase", [type], options);
 }
@@ -20148,7 +20148,7 @@ function Lowercase(type, options = {}) {
   return LowercaseAction(type, options);
 }
 
-// node_modules/typebox/build/type/action/uncapitalize.mjs
+// ../../node_modules/typebox/build/type/action/uncapitalize.mjs
 function UncapitalizeDeferred(type, options = {}) {
   return Deferred("Uncapitalize", [type], options);
 }
@@ -20156,7 +20156,7 @@ function Uncapitalize(type, options = {}) {
   return UncapitalizeAction(type, options);
 }
 
-// node_modules/typebox/build/type/action/uppercase.mjs
+// ../../node_modules/typebox/build/type/action/uppercase.mjs
 function UppercaseDeferred(type, options = {}) {
   return Deferred("Uppercase", [type], options);
 }
@@ -20164,7 +20164,7 @@ function Uppercase(type, options = {}) {
   return UppercaseAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/intrinsics/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/intrinsics/instantiate.mjs
 var CapitalizeMapping = (input) => input[0].toUpperCase() + input.slice(1);
 var LowercaseMapping = (input) => input.toLowerCase();
 var UncapitalizeMapping = (input) => input[0].toLowerCase() + input.slice(1);
@@ -20202,7 +20202,7 @@ function UppercaseInstantiate(context, state, type, options) {
   return UppercaseAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/conditional.mjs
+// ../../node_modules/typebox/build/type/action/conditional.mjs
 function ConditionalDeferred(left, right, true_, false_, options = {}) {
   return Deferred("Conditional", [left, right, true_, false_], options);
 }
@@ -20210,7 +20210,7 @@ function Conditional(left, right, true_, false_, options = {}) {
   return ConditionalAction({}, State([], []), left, right, true_, false_, options);
 }
 
-// node_modules/typebox/build/type/engine/conditional/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/conditional/instantiate.mjs
 function ConditionalOperation(context, state, left, right, true_, false_) {
   const extendsResult = Extends(context, left, right);
   return result_exports.IsExtendsUnion(extendsResult) ? Union([InstantiateType(extendsResult.inferred, state, true_), InstantiateType(context, state, false_)]) : result_exports.IsExtendsTrue(extendsResult) ? InstantiateType(extendsResult.inferred, state, true_) : InstantiateType(context, state, false_);
@@ -20225,7 +20225,7 @@ function ConditionalInstantiate(context, state, left, right, true_, false_, opti
   return ConditionalAction(context, state, instantiatedLeft, instantiatedRight, true_, false_, options);
 }
 
-// node_modules/typebox/build/type/action/constructor_parameters.mjs
+// ../../node_modules/typebox/build/type/action/constructor_parameters.mjs
 function ConstructorParametersDeferred(type, options = {}) {
   return Deferred("ConstructorParameters", [type], options);
 }
@@ -20233,7 +20233,7 @@ function ConstructorParameters(type, options = {}) {
   return ConstructorParametersAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/constructor_parameters/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/constructor_parameters/instantiate.mjs
 function ConstructorParametersOperation(type) {
   const parameters = IsConstructor2(type) ? type["parameters"] : [];
   const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
@@ -20249,7 +20249,7 @@ function ConstructorParametersInstantiate(context, state, type, options) {
   return ConstructorParametersAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/exclude.mjs
+// ../../node_modules/typebox/build/type/action/exclude.mjs
 function ExcludeDeferred(left, right, options = {}) {
   return Deferred("Exclude", [left, right], options);
 }
@@ -20257,7 +20257,7 @@ function Exclude(left, right, options = {}) {
   return ExcludeAction(left, right, options);
 }
 
-// node_modules/typebox/build/type/engine/exclude/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/exclude/instantiate.mjs
 function ExcludeAction(left, right, options) {
   const result = CanInstantiate([left, right]) ? memory_exports.Update(ExcludeOperation(left, right), {}, options) : ExcludeDeferred(left, right, options);
   return result;
@@ -20268,7 +20268,7 @@ function ExcludeInstantiate(context, state, left, right, options) {
   return ExcludeAction(instantiatedLeft, instantiatedRight, options);
 }
 
-// node_modules/typebox/build/type/action/extract.mjs
+// ../../node_modules/typebox/build/type/action/extract.mjs
 function ExtractDeferred(left, right, options = {}) {
   return Deferred("Extract", [left, right], options);
 }
@@ -20276,7 +20276,7 @@ function Extract(left, right, options = {}) {
   return ExtractAction(left, right, options);
 }
 
-// node_modules/typebox/build/type/engine/extract/operation.mjs
+// ../../node_modules/typebox/build/type/engine/extract/operation.mjs
 function ExtractType(left, right) {
   const check = Extends({}, left, right);
   const result = result_exports.IsExtendsTrueLike(check) ? [left] : [];
@@ -20295,7 +20295,7 @@ function ExtractOperation(left, right) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/extract/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/extract/instantiate.mjs
 function ExtractAction(left, right, options) {
   const result = CanInstantiate([left, right]) ? memory_exports.Update(ExtractOperation(left, right), {}, options) : ExtractDeferred(left, right, options);
   return result;
@@ -20306,7 +20306,7 @@ function ExtractInstantiate(context, state, left, right, options) {
   return ExtractAction(instantiatedLeft, instantiatedRight, options);
 }
 
-// node_modules/typebox/build/type/engine/helpers/keys_to_indexer.mjs
+// ../../node_modules/typebox/build/type/engine/helpers/keys_to_indexer.mjs
 function KeysToLiterals(keys) {
   return keys.reduce((result, left) => {
     return IsLiteralValue(left) ? [...result, Literal(left)] : result;
@@ -20318,7 +20318,7 @@ function KeysToIndexer(keys) {
   return result;
 }
 
-// node_modules/typebox/build/type/action/indexed.mjs
+// ../../node_modules/typebox/build/type/action/indexed.mjs
 function IndexDeferred(type, indexer, options = {}) {
   return Deferred("Index", [type, indexer], options);
 }
@@ -20327,21 +20327,21 @@ function Index(type, indexer_or_keys, options = {}) {
   return IndexAction(type, indexer, options);
 }
 
-// node_modules/typebox/build/type/engine/object/from_cyclic.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_cyclic.mjs
 function FromCyclic(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const result = FromType8(target);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/object/from_dependent.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_dependent.mjs
 function FromDependent(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType8(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/object/from_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_intersect.mjs
 function CollapseIntersectProperties(left, right) {
   const leftKeys = guard_exports.Keys(left).filter((key) => !guard_exports.HasPropertyKey(right, key));
   const rightKeys = guard_exports.Keys(right).filter((key) => !guard_exports.HasPropertyKey(left, key));
@@ -20359,19 +20359,19 @@ function FromIntersect(types) {
   }, {});
 }
 
-// node_modules/typebox/build/type/engine/object/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_object.mjs
 function FromObject3(properties) {
   return properties;
 }
 
-// node_modules/typebox/build/type/engine/object/from_tuple.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_tuple.mjs
 function FromTuple(types) {
   const object = TupleToObject(Tuple(types));
   const result = FromType8(object);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/object/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_union.mjs
 function CollapseUnionProperties(left, right) {
   const sharedKeys = guard_exports.Keys(left).filter((key) => key in right);
   const result = sharedKeys.reduce((result2, key) => {
@@ -20386,26 +20386,26 @@ function FromUnion3(types) {
   return guard_exports.ShiftLeft(types, (left, right) => ReduceVariants(right, FromType8(left)), () => Unreachable());
 }
 
-// node_modules/typebox/build/type/engine/object/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/object/from_type.mjs
 function FromType8(type) {
   return IsCyclic(type) ? FromCyclic(type.$defs, type.$ref) : IsDependent(type) ? FromDependent(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect(type.allOf) : IsUnion(type) ? FromUnion3(type.anyOf) : IsTuple(type) ? FromTuple(type.items) : IsObject2(type) ? FromObject3(type.properties) : {};
 }
 
-// node_modules/typebox/build/type/engine/object/collapse.mjs
+// ../../node_modules/typebox/build/type/engine/object/collapse.mjs
 function CollapseToObject(type) {
   const properties = FromType8(type);
   const result = _Object_(properties);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/helpers/keys.mjs
+// ../../node_modules/typebox/build/type/engine/helpers/keys.mjs
 var integerKeyPattern = new RegExp("^(?:0|[1-9][0-9]*)$");
 function ConvertToIntegerKey(value) {
   const normal = `${value}`;
   return integerKeyPattern.test(normal) ? parseInt(normal) : value;
 }
 
-// node_modules/typebox/build/type/engine/indexed/from_array.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/from_array.mjs
 function NormalizeLiteral(value) {
   return Literal(ConvertToIntegerKey(value));
 }
@@ -20425,66 +20425,66 @@ function FromArray2(type, indexer) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_cyclic.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_cyclic.mjs
 function FromCyclic2(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const result = FromType9(target);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_dependent.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_dependent.mjs
 function FromDependent2(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_enum.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_enum.mjs
 function FromEnum(values) {
   const evaluated = EvaluateEnum(values);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_intersect.mjs
 function FromIntersect2(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_literal.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_literal.mjs
 function FromLiteral4(value) {
   const result = [`${value}`];
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_template_literal.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_template_literal.mjs
 function FromTemplateLiteral2(pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_union.mjs
 function FromUnion4(types) {
   return types.reduce((result, left) => {
     return [...result, ...FromType9(left)];
   }, []);
 }
 
-// node_modules/typebox/build/type/engine/indexable/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/from_type.mjs
 function FromType9(type) {
   return IsCyclic(type) ? FromCyclic2(type.$defs, type.$ref) : IsDependent(type) ? FromDependent2(type.if, type.then, type.else) : IsEnum(type) ? FromEnum(type.enum) : IsIntersect(type) ? FromIntersect2(type.allOf) : IsLiteral(type) ? FromLiteral4(type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral2(type.pattern) : IsUnion(type) ? FromUnion4(type.anyOf) : [];
 }
 
-// node_modules/typebox/build/type/engine/indexable/to_indexable_keys.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/to_indexable_keys.mjs
 function ToIndexableKeys(type) {
   const result = FromType9(type);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/this/expand_this.mjs
+// ../../node_modules/typebox/build/type/engine/this/expand_this.mjs
 function FromTypes5(properties, types) {
   return types.map((type) => FromType10(properties, type));
 }
@@ -20496,7 +20496,7 @@ function ExpandThis(properties, type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexed/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/from_object.mjs
 function IndexProperty(properties, key) {
   const selectedType = key in properties ? properties[key] : Never();
   const result = ExpandThis(properties, selectedType);
@@ -20530,7 +20530,7 @@ function FromObject4(properties, indexer) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/indexed/array_indexer.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/array_indexer.mjs
 function ConvertLiteral(value) {
   return Literal(ConvertToIntegerKey(value));
 }
@@ -20541,7 +20541,7 @@ function FormatArrayIndexer(type) {
   return IsIntersect(type) ? Intersect(ArrayIndexerTypes(type.allOf)) : IsUnion(type) ? Union(ArrayIndexerTypes(type.anyOf)) : IsLiteral(type) ? ConvertLiteral(type.const) : type;
 }
 
-// node_modules/typebox/build/type/engine/indexed/from_tuple.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/from_tuple.mjs
 function IndexElementsWithIndexer(types, indexer) {
   return types.reduceRight((result, right, index) => {
     const check = Extends({}, Literal(index), indexer);
@@ -20563,12 +20563,12 @@ function FromTuple2(types, indexer) {
   );
 }
 
-// node_modules/typebox/build/type/engine/indexed/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/from_type.mjs
 function FromType11(type, indexer) {
   return IsArray2(type) ? FromArray2(type.items, indexer) : IsObject2(type) ? FromObject4(type.properties, indexer) : IsTuple(type) ? FromTuple2(type.items, indexer) : Never();
 }
 
-// node_modules/typebox/build/type/engine/indexed/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/indexed/instantiate.mjs
 function NormalizeType(type) {
   const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
   return result;
@@ -20583,7 +20583,7 @@ function IndexInstantiate(context, state, type, indexer, options) {
   return IndexAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/typebox/build/type/action/instance_type.mjs
+// ../../node_modules/typebox/build/type/action/instance_type.mjs
 function InstanceTypeDeferred(type, options = {}) {
   return Deferred("InstanceType", [type], options);
 }
@@ -20591,7 +20591,7 @@ function InstanceType(type, options = {}) {
   return InstanceTypeAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/instance_type/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/instance_type/instantiate.mjs
 function InstanceTypeOperation(type) {
   return IsConstructor2(type) ? type["instanceType"] : Never();
 }
@@ -20604,7 +20604,7 @@ function InstanceTypeInstantiate(context, state, type, options = {}) {
   return InstanceTypeAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/keyof.mjs
+// ../../node_modules/typebox/build/type/action/keyof.mjs
 function KeyOfDeferred(type, options = {}) {
   return Deferred("KeyOf", [type], options);
 }
@@ -20612,17 +20612,17 @@ function KeyOf2(type, options = {}) {
   return KeyOfAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_any.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_any.mjs
 function FromAny() {
   return Union([Number2(), String2(), Symbol2()]);
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_array.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_array.mjs
 function FromArray3(_type) {
   return Number2();
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_object.mjs
 function FromPropertyKeys(keys) {
   const result = keys.reduce((result2, left) => {
     return IsLiteralValue(left) ? [...result2, Literal(ConvertToIntegerKey(left))] : Unreachable();
@@ -20636,23 +20636,23 @@ function FromObject5(properties) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_record.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_record.mjs
 function FromRecord2(type) {
   return RecordKey(type);
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_tuple.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_tuple.mjs
 function FromTuple3(types) {
   const result = types.map((_, index) => Literal(index));
   return EvaluateUnionFast(result);
 }
 
-// node_modules/typebox/build/type/engine/keyof/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/from_type.mjs
 function FromType12(type) {
   return IsAny(type) ? FromAny() : IsArray2(type) ? FromArray3(type.items) : IsObject2(type) ? FromObject5(type.properties) : IsRecord(type) ? FromRecord2(type) : IsTuple(type) ? FromTuple3(type.items) : Never();
 }
 
-// node_modules/typebox/build/type/engine/keyof/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/keyof/instantiate.mjs
 function NormalizeType2(type) {
   const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
   return result;
@@ -20665,7 +20665,7 @@ function KeyOfInstantiate(context, state, type, options) {
   return KeyOfAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/mapped.mjs
+// ../../node_modules/typebox/build/type/action/mapped.mjs
 function MappedDeferred(identifier, type, as, property, options = {}) {
   return Deferred("Mapped", [identifier, type, as, property], options);
 }
@@ -20673,7 +20673,7 @@ function Mapped(identifier, type, as, property, options = {}) {
   return MappedAction({}, State([], []), identifier, type, as, property, options);
 }
 
-// node_modules/typebox/build/type/engine/mapped/mapped_variants.mjs
+// ../../node_modules/typebox/build/type/engine/mapped/mapped_variants.mjs
 function FromTemplateLiteral3(pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType13(evaluated);
@@ -20702,7 +20702,7 @@ function MappedVariants(type) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/mapped/mapped_operation.mjs
+// ../../node_modules/typebox/build/type/engine/mapped/mapped_operation.mjs
 function CanonicalAs(instantiatedAs) {
   const result = IsTemplateLiteral(instantiatedAs) ? EvaluateTemplateLiteral(instantiatedAs.pattern) : instantiatedAs;
   return result;
@@ -20732,7 +20732,7 @@ function MappedOperation(context, state, identifier, type, as, property) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/mapped/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/mapped/instantiate.mjs
 function MappedAction(context, state, identifier, type, as, property, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(MappedOperation(context, state, identifier, type, as, property), {}, options) : MappedDeferred(identifier, type, as, property, options);
   return result;
@@ -20742,7 +20742,7 @@ function MappedInstantiate(context, state, identifier, type, as, property, optio
   return MappedAction(context, state, identifier, instantiatedType, as, property, options);
 }
 
-// node_modules/typebox/build/type/engine/module/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/module/instantiate.mjs
 function InstantiateCyclics(context, declarations, cyclicKeys) {
   const declarationContext = memory_exports.Assign(context, declarations);
   const declarationKeys = guard_exports.Keys(declarations).filter((key) => cyclicKeys.includes(key));
@@ -20769,7 +20769,7 @@ function ModuleInstantiate(context, _state, declarations, options) {
   return instantiatedModule;
 }
 
-// node_modules/typebox/build/type/action/non_nullable.mjs
+// ../../node_modules/typebox/build/type/action/non_nullable.mjs
 function NonNullableDeferred(type, options = {}) {
   return Deferred("NonNullable", [type], options);
 }
@@ -20777,7 +20777,7 @@ function NonNullable(type, options = {}) {
   return NonNullableAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/non_nullable/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/non_nullable/instantiate.mjs
 function NonNullableOperation(type) {
   const excluded = Union([Null(), Undefined()]);
   return ExcludeAction(type, excluded, {});
@@ -20791,7 +20791,7 @@ function NonNullableInstantiate(context, state, type, options) {
   return NonNullableAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/omit.mjs
+// ../../node_modules/typebox/build/type/action/omit.mjs
 function OmitDeferred(type, indexer, options = {}) {
   return Deferred("Omit", [type, indexer], options);
 }
@@ -20800,14 +20800,14 @@ function Omit(type, indexer_or_keys, options = {}) {
   return OmitAction(type, indexer, options);
 }
 
-// node_modules/typebox/build/type/engine/indexable/to_indexable.mjs
+// ../../node_modules/typebox/build/type/engine/indexable/to_indexable.mjs
 function ToIndexable(type) {
   const collapsed = CollapseToObject(type);
   const result = IsObject2(collapsed) ? collapsed.properties : Unreachable();
   return result;
 }
 
-// node_modules/typebox/build/type/engine/omit/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/omit/from_type.mjs
 function FromKeys(properties, keys) {
   const result = guard_exports.Keys(properties).reduce((result2, key) => {
     return keys.includes(key) ? result2 : { ...result2, [key]: properties[key] };
@@ -20822,7 +20822,7 @@ function FromType14(type, indexer) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/omit/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/omit/instantiate.mjs
 function OmitAction(type, indexer, options) {
   const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType14(type, indexer), {}, options) : OmitDeferred(type, indexer, options);
   return result;
@@ -20833,7 +20833,7 @@ function OmitInstantiate(context, state, type, indexer, options) {
   return OmitAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/typebox/build/type/action/parameters.mjs
+// ../../node_modules/typebox/build/type/action/parameters.mjs
 function ParametersDeferred(type, options = {}) {
   return Deferred("Parameters", [type], options);
 }
@@ -20841,7 +20841,7 @@ function Parameters(type, options = {}) {
   return ParametersAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/parameters/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/parameters/instantiate.mjs
 function ParametersOperation(type) {
   const parameters = IsFunction2(type) ? type["parameters"] : [];
   const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
@@ -20857,7 +20857,7 @@ function ParametersInstantiate(context, state, type, options) {
   return ParametersAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/partial.mjs
+// ../../node_modules/typebox/build/type/action/partial.mjs
 function PartialDeferred(type, options = {}) {
   return Deferred("Partial", [type], options);
 }
@@ -20865,7 +20865,7 @@ function Partial(type, options = {}) {
   return PartialAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/partial/from_cyclic.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_cyclic.mjs
 function FromCyclic3(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType15(target);
@@ -20873,27 +20873,27 @@ function FromCyclic3(defs, ref) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/partial/from_dependent.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_dependent.mjs
 function FromDependent3(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType15(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/partial/from_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_intersect.mjs
 function FromIntersect3(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType15(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/partial/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_union.mjs
 function FromUnion6(types) {
   const result = types.map((type) => FromType15(type));
   return Union(result);
 }
 
-// node_modules/typebox/build/type/engine/partial/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_object.mjs
 function FromObject6(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: AddOptional(properties[left]) };
@@ -20902,12 +20902,12 @@ function FromObject6(properties) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/partial/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/partial/from_type.mjs
 function FromType15(type) {
   return IsCyclic(type) ? FromCyclic3(type.$defs, type.$ref) : IsDependent(type) ? FromDependent3(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect3(type.allOf) : IsUnion(type) ? FromUnion6(type.anyOf) : IsObject2(type) ? FromObject6(type.properties) : _Object_({});
 }
 
-// node_modules/typebox/build/type/engine/partial/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/partial/instantiate.mjs
 function PartialAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType15(type), {}, options) : PartialDeferred(type, options);
   return result;
@@ -20917,7 +20917,7 @@ function PartialInstantiate(context, state, type, options) {
   return PartialAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/pick.mjs
+// ../../node_modules/typebox/build/type/action/pick.mjs
 function PickDeferred(type, indexer, options = {}) {
   return Deferred("Pick", [type, indexer], options);
 }
@@ -20926,7 +20926,7 @@ function Pick(type, indexer_or_keys, options = {}) {
   return PickAction(type, indexer, options);
 }
 
-// node_modules/typebox/build/type/engine/pick/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/pick/from_type.mjs
 function FromKeys2(properties, keys) {
   const result = guard_exports.Keys(properties).reduce((result2, key) => {
     return keys.includes(key) ? memory_exports.Assign(result2, { [key]: properties[key] }) : result2;
@@ -20941,7 +20941,7 @@ function FromType16(type, indexer) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/pick/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/pick/instantiate.mjs
 function PickAction(type, indexer, options) {
   const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType16(type, indexer), {}, options) : PickDeferred(type, indexer, options);
   return result;
@@ -20952,7 +20952,7 @@ function PickInstantiate(context, state, type, indexer, options) {
   return PickAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/typebox/build/type/action/readonly_object.mjs
+// ../../node_modules/typebox/build/type/action/readonly_object.mjs
 function ReadonlyObjectDeferred(type, options = {}) {
   return Deferred("ReadonlyObject", [type], options);
 }
@@ -20961,13 +20961,13 @@ function ReadonlyObject(type, options = {}) {
 }
 var ReadonlyType = ReadonlyObject;
 
-// node_modules/typebox/build/type/engine/readonly_object/from_array.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_array.mjs
 function FromArray4(type) {
   const result = AddImmutable(_Array_(type));
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_cyclic.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_cyclic.mjs
 function FromCyclic4(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType17(target);
@@ -20975,21 +20975,21 @@ function FromCyclic4(defs, ref) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_dependent.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_dependent.mjs
 function FromDependent4(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType17(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_intersect.mjs
 function FromIntersect4(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType17(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_object.mjs
 function FromObject7(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: AddReadonly(properties[left]) };
@@ -20998,24 +20998,24 @@ function FromObject7(properties) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_tuple.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_tuple.mjs
 function FromTuple4(types) {
   const result = AddImmutable(Tuple(types));
   return result;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_union.mjs
 function FromUnion7(types) {
   const result = types.map((type) => FromType17(type));
   return Union(result);
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/from_type.mjs
 function FromType17(type) {
   return IsArray2(type) ? FromArray4(type.items) : IsCyclic(type) ? FromCyclic4(type.$defs, type.$ref) : IsDependent(type) ? FromDependent4(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect4(type.allOf) : IsObject2(type) ? FromObject7(type.properties) : IsTuple(type) ? FromTuple4(type.items) : IsUnion(type) ? FromUnion7(type.anyOf) : type;
 }
 
-// node_modules/typebox/build/type/engine/readonly_object/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/readonly_object/instantiate.mjs
 function ReadonlyObjectAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType17(type), {}, options) : ReadonlyObjectDeferred(type);
   return result;
@@ -21025,12 +21025,12 @@ function ReadonlyObjectInstantiate(context, state, type, options) {
   return ReadonlyObjectAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/engine/ref/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/ref/instantiate.mjs
 function RefInstantiate(context, state, type, ref) {
   return state.visited.includes(ref) ? type : ref in context ? InstantiateType(context, State(state["callstack"], [...state["visited"], ref]), context[ref]) : type;
 }
 
-// node_modules/typebox/build/type/engine/required/from_cyclic.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_cyclic.mjs
 function FromCyclic5(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType18(target);
@@ -21038,27 +21038,27 @@ function FromCyclic5(defs, ref) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/required/from_dependent.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_dependent.mjs
 function FromDependent5(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType18(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/required/from_intersect.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_intersect.mjs
 function FromIntersect5(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType18(evaluated);
   return result;
 }
 
-// node_modules/typebox/build/type/engine/required/from_union.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_union.mjs
 function FromUnion8(types) {
   const result = types.map((type) => FromType18(type));
   return Union(result);
 }
 
-// node_modules/typebox/build/type/engine/required/from_object.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_object.mjs
 function FromObject8(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: RemoveOptional(properties[left]) };
@@ -21067,12 +21067,12 @@ function FromObject8(properties) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/required/from_type.mjs
+// ../../node_modules/typebox/build/type/engine/required/from_type.mjs
 function FromType18(type) {
   return IsCyclic(type) ? FromCyclic5(type.$defs, type.$ref) : IsDependent(type) ? FromDependent5(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect5(type.allOf) : IsUnion(type) ? FromUnion8(type.anyOf) : IsObject2(type) ? FromObject8(type.properties) : _Object_({});
 }
 
-// node_modules/typebox/build/type/action/required.mjs
+// ../../node_modules/typebox/build/type/action/required.mjs
 function RequiredDeferred(type, options = {}) {
   return Deferred("Required", [type], options);
 }
@@ -21080,7 +21080,7 @@ function Required(type, options = {}) {
   return RequiredAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/required/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/required/instantiate.mjs
 function RequiredAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType18(type), {}, options) : RequiredDeferred(type, options);
   return result;
@@ -21090,7 +21090,7 @@ function RequiredInstantiate(context, state, type, options) {
   return RequiredAction(instaniatedType, options);
 }
 
-// node_modules/typebox/build/type/action/return_type.mjs
+// ../../node_modules/typebox/build/type/action/return_type.mjs
 function ReturnTypeDeferred(type, options = {}) {
   return Deferred("ReturnType", [type], options);
 }
@@ -21098,7 +21098,7 @@ function ReturnType(type, options = {}) {
   return ReturnTypeAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/return_type/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/return_type/instantiate.mjs
 function ReturnTypeOperation(type) {
   return IsFunction2(type) ? type["returnType"] : Never();
 }
@@ -21111,7 +21111,7 @@ function ReturnTypeInstantiate(context, state, type, options = {}) {
   return ReturnTypeAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/with.mjs
+// ../../node_modules/typebox/build/type/action/with.mjs
 function WithDeferred(type, options) {
   return Deferred("With", [type, options], {});
 }
@@ -21119,7 +21119,7 @@ function With2(type, options) {
   return WithAction(type, options);
 }
 
-// node_modules/typebox/build/type/engine/with/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/with/instantiate.mjs
 function WithAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(type, {}, options) : WithDeferred(type, options);
   return result;
@@ -21129,7 +21129,7 @@ function WithInstantiate(context, state, type, options) {
   return WithAction(instaniatedType, options);
 }
 
-// node_modules/typebox/build/type/engine/rest/spread.mjs
+// ../../node_modules/typebox/build/type/engine/rest/spread.mjs
 function SpreadElement(type) {
   const result = IsRest(type) ? IsTuple(type.items) ? RestSpread(type.items.items) : IsInfer(type.items) ? [type] : IsRef(type.items) ? [type] : [Never()] : [type];
   return result;
@@ -21141,7 +21141,7 @@ function RestSpread(types) {
   return result;
 }
 
-// node_modules/typebox/build/type/engine/instantiate.mjs
+// ../../node_modules/typebox/build/type/engine/instantiate.mjs
 function State(callstack, visited) {
   return { callstack, visited };
 }
@@ -21189,7 +21189,7 @@ function Instantiate(context, type) {
   return InstantiateType(context, State([], []), type);
 }
 
-// node_modules/typebox/build/type/engine/immutable/instantiate_add.mjs
+// ../../node_modules/typebox/build/type/engine/immutable/instantiate_add.mjs
 function AddImmutableOperation(type) {
   return memory_exports.Update(type, { "~immutable": true }, {});
 }
@@ -21202,7 +21202,7 @@ function AddImmutableInstantiate(context, state, type, options) {
   return AddImmutableAction(instantiatedType, options);
 }
 
-// node_modules/typebox/build/type/action/_add_immutable.mjs
+// ../../node_modules/typebox/build/type/action/_add_immutable.mjs
 function AddImmutableDeferred(type, options = {}) {
   return Deferred("AddImmutable", [type], options);
 }
@@ -21210,7 +21210,7 @@ function AddImmutable(type, options = {}) {
   return AddImmutableAction(type, options);
 }
 
-// node_modules/typebox/build/type/action/evaluate.mjs
+// ../../node_modules/typebox/build/type/action/evaluate.mjs
 function EvaluateDeferred(type, options = {}) {
   return Deferred("Evaluate", [type], options);
 }
@@ -21218,7 +21218,7 @@ function Evaluate(type, options = {}) {
   return EvaluateAction(type, options);
 }
 
-// node_modules/typebox/build/type/action/module.mjs
+// ../../node_modules/typebox/build/type/action/module.mjs
 function ModuleDeferred(declarations, options = {}) {
   return Deferred("Module", [declarations], options);
 }
@@ -21226,7 +21226,7 @@ function Module2(declarations, options = {}) {
   return ModuleInstantiate({}, State([], []), declarations, options);
 }
 
-// node_modules/typebox/build/type/script/script.mjs
+// ../../node_modules/typebox/build/type/script/script.mjs
 function Script2(...args) {
   const [context, input, options] = arguments_exports.Match(args, {
     2: (script, options2) => guard_exports.IsString(script) ? [{}, script, options2] : [script, options2, {}],
@@ -21238,7 +21238,7 @@ function Script2(...args) {
   return memory_exports.Update(parsed, {}, options);
 }
 
-// node_modules/typebox/build/typebox.mjs
+// ../../node_modules/typebox/build/typebox.mjs
 var typebox_exports = {};
 __export(typebox_exports, {
   Any: () => Any,
