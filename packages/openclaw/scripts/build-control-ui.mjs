@@ -15,7 +15,8 @@
 //   - tsconfigRaw 打开 experimentalDecorators，为将来第 4 步迁移 Lit 组件预留装饰器语法
 //     （Taskfold 现有 Lit 用法目前不用装饰器，这里只是不给将来挖坑）。
 //
-// 产物落在顶层 `dist/control-ui/`（不是 `ui/dist/`），因为宿主对 `openclaw.plugin.json`
+// 前端源码在共享 workspace `packages/ui`（VS Code 扩展也从它构建）。产物落在本包根的
+// `dist/control-ui/`，因为宿主对 `openclaw.plugin.json`
 // 的 `controlUi.entry` 有硬编码正则 `^dist\/(?:[\w-][\w.-]*\/)+[\w-][\w.-]*\.m?js$`：
 // 必须以字面量 `dist/` 开头，且至少嵌套一层子目录。
 import * as esbuild from "esbuild";
@@ -24,10 +25,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ENTRY_SOURCE = path.join(ROOT_DIR, "browser/index.ts");
-const OUT_DIR = path.join(ROOT_DIR, "dist/control-ui");
-const MANIFEST_PATH = path.join(ROOT_DIR, "openclaw.plugin.json");
+const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ENTRY_SOURCE = path.join(PACKAGE_DIR, "..", "ui", "src", "index.ts");
+const OUT_DIR = path.join(PACKAGE_DIR, "dist/control-ui");
+const MANIFEST_PATH = path.join(PACKAGE_DIR, "openclaw.plugin.json");
 
 const MAX_ASSET_BYTES = 4 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -90,7 +91,7 @@ function upsertControlUiBlock(raw, entry, styles) {
 async function build() {
   const result = await esbuild.build({
     entryPoints: { index: ENTRY_SOURCE },
-    absWorkingDir: ROOT_DIR,
+    absWorkingDir: PACKAGE_DIR,
     outdir: OUT_DIR,
     bundle: true,
     format: "esm",

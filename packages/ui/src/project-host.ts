@@ -1300,7 +1300,7 @@ class TaskfoldProjectHost extends LitElement {
   }
 }
 
-// `browser/index.ts`'s page `mount()` creates a `<taskfold-app>` element and
+// `packages/ui/src/index.ts`'s page `mount()` creates a `<taskfold-app>` element and
 // appends it into the host-provided container, so this definition just needs
 // to exist before that happens. Guarded because the host may keep the module
 // registered across a mount/unmount cycle (page navigation away and back)

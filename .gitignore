@@ -36,3 +36,11 @@ packages/vscode/dist/
 packages/vscode/media/
 packages/vscode/LICENSE
 packages/vscode/*.vsix
+
+# 发布前由 scripts/release-files.mjs 从仓库根临时复制进来的发布文件副本，
+# 源文件只保留仓库根这一份。
+packages/openclaw/README.md
+packages/openclaw/LICENSE
+packages/openclaw/THIRD-PARTY-NOTICES
+packages/openclaw/UPSTREAM.md
+packages/openclaw/docs/CLAW_HUB_PUBLISHING.md

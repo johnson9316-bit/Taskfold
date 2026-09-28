@@ -10,10 +10,10 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
 } from "@taskfold/core/persistence-types.js";
-import { createTaskfoldSqliteStores } from "../src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { normalizeAutomation } from "@taskfold/core/store-normalizers.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
 
 const roots: string[] = [];

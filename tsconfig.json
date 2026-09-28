@@ -14,11 +14,11 @@
     "useDefineForClassFields": true
   },
   "include": [
-    "src/**/*.ts",
+    "packages/openclaw/src/**/*.ts",
     "packages/core/src/**/*.ts",
     "packages/cli/src/**/*.ts",
     "test/**/*.ts",
-    "browser/index.ts",
-    "browser/vscode-index.ts"
+    "packages/ui/src/index.ts",
+    "packages/ui/src/vscode-index.ts"
   ]
 }

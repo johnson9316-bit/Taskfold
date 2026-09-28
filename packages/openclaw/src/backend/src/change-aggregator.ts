@@ -2,7 +2,7 @@
 // TASK-10 接进生产路径）。
 //
 // 文件后端下 core 的变更游标按项目：每个项目一份 `.taskfold/.runtime/changes.log`，各有各的
-// epoch 与 revision，彼此不能比较。而前端（browser/project-host.ts 的 waitForChanges）调用
+// epoch 与 revision，彼此不能比较。而前端（packages/ui/src/project-host.ts 的 waitForChanges）调用
 // `taskfold.changes.wait` 时不带项目，拿的是一个全局游标。这里把所有已打开的项目聚合成一个
 // ChangeSource，交给组合 store（project-routed-stores.ts）上唯一的 TaskfoldStore：epoch 是本
 // Gateway 进程自己的（每个进程一个，重启后前端整页刷新一次），revision 是单调计数，任一项目

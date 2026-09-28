@@ -9,9 +9,9 @@
 // 用两个最小 stub（而不是引入 jsdom）满足这条副作用导入，是被删除的旧测试本就采用的做法。
 import { beforeAll, describe, expect, it } from "vitest";
 
-let createTaskfoldProjectUiState: typeof import("../browser/pages/projects/project-view.ts")["createTaskfoldProjectUiState"];
-let reorderVisibleItemIds: typeof import("../browser/pages/projects/project-view.ts")["reorderVisibleItemIds"];
-let taskfoldNativeChatHref: typeof import("../browser/pages/projects/project-view.ts")["taskfoldNativeChatHref"];
+let createTaskfoldProjectUiState: typeof import("../packages/ui/src/pages/projects/project-view.ts")["createTaskfoldProjectUiState"];
+let reorderVisibleItemIds: typeof import("../packages/ui/src/pages/projects/project-view.ts")["reorderVisibleItemIds"];
+let taskfoldNativeChatHref: typeof import("../packages/ui/src/pages/projects/project-view.ts")["taskfoldNativeChatHref"];
 
 beforeAll(async () => {
   class HTMLElementShim {}
@@ -25,7 +25,7 @@ beforeAll(async () => {
     },
   });
   ({ createTaskfoldProjectUiState, reorderVisibleItemIds, taskfoldNativeChatHref } = await import(
-    "../browser/pages/projects/project-view.ts"
+    "../packages/ui/src/pages/projects/project-view.ts"
   ));
 });
 

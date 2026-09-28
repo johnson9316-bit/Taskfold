@@ -2,9 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldSqliteStores } from "../src/backend/src/sqlite-store.js";
+import { createTaskfoldSqliteStores } from "../packages/openclaw/src/backend/src/sqlite-store.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { TASKFOLD_PROMPT_VERSION } from "@taskfold/core/worker-prompt.js";
 
 const roots: string[] = [];

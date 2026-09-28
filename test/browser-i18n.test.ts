@@ -9,14 +9,14 @@
 // `browser/openclaw-host.ts` 的 `createOpenClawLocalePreference`。下面的 manager 用例
 // 注入这个实现，断言与搬迁前逐条一致。
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { TranslationMap } from "../browser/i18n/lib/types.ts";
+import type { TranslationMap } from "../packages/ui/src/i18n/lib/types.ts";
 import {
   resolveInitialTaskfoldLocale,
   resolveTaskfoldLocale,
   type TaskfoldLocale,
   type TaskfoldLocalePreference,
-} from "../browser/i18n/lib/translate.ts";
-import { createOpenClawLocalePreference } from "../browser/openclaw-host.ts";
+} from "../packages/ui/src/i18n/lib/translate.ts";
+import { createOpenClawLocalePreference } from "../packages/ui/src/openclaw-host.ts";
 
 type TestI18nManager = {
   initialize(preference?: TaskfoldLocalePreference): Promise<boolean>;

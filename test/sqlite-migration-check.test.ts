@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTaskfoldSqliteMigrationCheckService } from "../src/backend/src/sqlite-migration-check.js";
+import { createTaskfoldSqliteMigrationCheckService } from "../packages/openclaw/src/backend/src/sqlite-migration-check.js";
 
 const roots: string[] = [];
 

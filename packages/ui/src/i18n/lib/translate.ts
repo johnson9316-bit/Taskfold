@@ -22,9 +22,9 @@ type SetLocaleOptions = {
 export type TaskfoldLocale = Extract<Locale, "en" | "zh-CN">;
 
 /**
- * 语言偏好的来源与回写，由宿主提供（`TaskfoldHost.locale`，见 `browser/host.ts`）。
+ * 语言偏好的来源与回写，由宿主提供（`TaskfoldHost.locale`，见 `packages/ui/src/host.ts`）。
  * 本模块不再直接读写 localStorage：OpenClaw 实现的 localStorage 读写在
- * `browser/openclaw-host.ts`，其他宿主（如 VS Code 跟随编辑器语言）各自实现。
+ * `packages/ui/src/openclaw-host.ts`，其他宿主（如 VS Code 跟随编辑器语言）各自实现。
  */
 export type TaskfoldLocalePreference = {
   /** 启动时的语言，可以是任意语言标签，由 `resolveTaskfoldLocale` 归一为 en / zh-CN。 */

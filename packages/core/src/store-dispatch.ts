@@ -1,5 +1,5 @@
 // Taskfold core：派发与批量操作层（需求/18 §3.2：store.ts 的 dispatch() 等原样搬进 core）。
-// 原先写在 OpenClaw 适配层 src/backend/src/store.ts 的 TaskfoldStore 里，靠继承直接用 core 的
+// 原先写在 OpenClaw 适配层 packages/openclaw/src/backend/src/store.ts 的 TaskfoldStore 里，靠继承直接用 core 的
 // protected 内部方法；TASK-6 搬到这里，适配层只留工厂方法。CLI 仍只用 TaskfoldProjectStore，
 // 不暴露这些执行相关的方法。
 import { randomUUID } from "node:crypto";

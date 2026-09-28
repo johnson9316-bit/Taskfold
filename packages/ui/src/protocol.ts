@@ -1,7 +1,7 @@
 // Webview ⇄ 扩展进程的 postMessage 协议（需求/18 §5「判别联合类型，双向都有类型定义」）。
 //
 // 两端共用本文件：扩展进程（packages/vscode/src/panel.ts）和 Webview 里的 host 实现
-// （browser/vscode-host.ts）。这里不依赖 `vscode`、Node 或 DOM，两边都能打包。
+// （packages/ui/src/vscode-host.ts）。这里不依赖 `vscode`、Node 或 DOM，两边都能打包。
 // 结构守卫只校验判别字段与必需字段的类型，收到不认识的消息一律丢弃。
 
 /** Webview → 扩展进程。 */

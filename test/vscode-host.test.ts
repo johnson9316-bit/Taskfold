@@ -2,7 +2,7 @@
 // VS Code 界面实现（vscode API 替身，见 test/helpers/vscode-stub.ts）、面板 HTML 的 CSP。
 import * as vscode from "vscode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createVsCodeTaskfoldHost } from "../browser/vscode-host.ts";
+import { createVsCodeTaskfoldHost } from "../packages/ui/src/vscode-host.ts";
 import { taskfoldExtensionStrings } from "../packages/vscode/src/l10n.ts";
 import { renderTaskfoldBoardHtml, TASKFOLD_BOARD_VIEW_TYPE } from "../packages/vscode/src/panel.ts";
 import {
@@ -10,7 +10,7 @@ import {
   isTaskfoldWebviewMessage,
   type TaskfoldExtensionMessage,
   type TaskfoldWebviewMessage,
-} from "../packages/vscode/src/protocol.ts";
+} from "../packages/ui/src/protocol.ts";
 import { createTaskfoldVscodeUi, TaskfoldLocalDocumentProvider } from "../packages/vscode/src/vscode-ui.ts";
 
 function webviewHarness() {

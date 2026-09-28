@@ -4,7 +4,7 @@
 // 一旦以后有人把 try/catch 去掉，所有在隐私模式/存储被禁用的浏览器里运行的原生 UI
 // 都会直接抛错崩溃，而不是像现在这样优雅降级为"当作没有存储"。
 import { afterEach, describe, expect, it } from "vitest";
-import { getSafeLocalStorage } from "../browser/local-storage.ts";
+import { getSafeLocalStorage } from "../packages/ui/src/local-storage.ts";
 
 const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 

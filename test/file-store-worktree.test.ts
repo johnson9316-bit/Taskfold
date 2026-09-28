@@ -8,7 +8,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { resolveTaskfoldMainCheckoutPath } from "@taskfold/core/file-store-path-resolver.js";
-import { TaskfoldStore } from "../src/backend/src/store.js";
+import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 
 const roots: string[] = [];
 

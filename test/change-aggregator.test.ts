@@ -8,12 +8,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawPluginApi } from "../src/backend/api.js";
+import type { OpenClawPluginApi } from "../packages/openclaw/src/backend/api.js";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
-import { TaskfoldStore as CoreFileStore } from "../src/backend/src/store.js";
-import { createTaskfoldChangeEventService } from "../src/backend/src/change-events.js";
-import { registerTaskfoldGatewayMethods } from "../src/backend/src/gateway.js";
-import { createTaskfoldProjectRoutedStores } from "../src/backend/src/project-routed-stores.js";
+import { TaskfoldStore as CoreFileStore } from "../packages/openclaw/src/backend/src/store.js";
+import { createTaskfoldChangeEventService } from "../packages/openclaw/src/backend/src/change-events.js";
+import { registerTaskfoldGatewayMethods } from "../packages/openclaw/src/backend/src/gateway.js";
+import { createTaskfoldProjectRoutedStores } from "../packages/openclaw/src/backend/src/project-routed-stores.js";
 
 const roots: string[] = [];
 
