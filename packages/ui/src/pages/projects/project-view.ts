@@ -802,7 +802,7 @@ function renderCard(
       >
         <span class="taskfold-project__priority tf-priority-${card.priority}"></span>
         <span class="taskfold-project__card-title">${card.title}</span>
-        ${card.notes ? html`<span class="taskfold-project__card-notes">${card.notes}</span>` : nothing}
+        ${card.notes ? html`<span class="taskfold-project__card-notes" title=${card.notes}>${card.notes}</span>` : nothing}
         ${card.delivery
           ? html`
               <span class="taskfold-project__delivery-badges">
@@ -840,6 +840,7 @@ function renderCard(
         </select>
         <select
           class="taskfold-project__compact-select taskfold-project__move-card"
+          title=${project.milestones.find((milestone) => milestone.id === card.milestoneId)?.title ?? t("taskfoldProject.unassigned")}
           aria-label=${t("taskfoldProject.moveTo")}
           ?disabled=${isProjectArchived}
           .value=${card.milestoneId ?? ""}
@@ -908,7 +909,7 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
       }}
     >
       <header class="taskfold-project__column-header">
-        <div>
+        <div class="taskfold-project__column-heading">
           ${params.requirement
             ? html`
                 <button
@@ -919,7 +920,7 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
                 >${params.title}</button>
               `
             : html`<h2>${params.title}</h2>`}
-          <span>${params.subtitle || t("taskfoldProject.cards", { count: String(params.cards.length) })}</span>
+          <span class="taskfold-project__column-subtitle">${params.subtitle || t("taskfoldProject.cards", { count: String(params.cards.length) })}</span>
         </div>
         <div class="taskfold-project__column-actions">
           ${milestone
@@ -935,6 +936,7 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
                   class="taskfold-project__icon-button"
                   type="button"
                   title=${t("taskfoldProject.editMilestone")}
+                  aria-label=${t("taskfoldProject.editMilestone")}
                   @click=${() => controller.openModal({ kind: "milestone", milestone })}
                 >...</button>
                 ${milestone.state === "active"
@@ -943,12 +945,14 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${t("taskfoldProject.completeMilestone")}
+                        aria-label=${t("taskfoldProject.completeMilestone")}
                         @click=${() => controller.completeMilestone(milestone.id)}
                       >&#10003;</button>
                       <button
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${t("taskfoldProject.archiveMilestone")}
+                        aria-label=${t("taskfoldProject.archiveMilestone")}
                         @click=${() => controller.archiveMilestone(milestone.id, true)}
                       >&#8942;</button>
                     `
@@ -957,6 +961,7 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${t("taskfoldProject.restoreMilestone")}
+                        aria-label=${t("taskfoldProject.restoreMilestone")}
                         @click=${() => controller.archiveMilestone(milestone.id, false)}
                       >&#8635;</button>
                     `}
@@ -966,6 +971,7 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
             class="taskfold-project__icon-button"
             type="button"
             title=${t("taskfoldProject.newCard")}
+            aria-label=${t("taskfoldProject.newCard")}
             ?disabled=${!controller.connected || projectArchived || (milestone && milestone.state !== "active")}
             @click=${params.onCreate}
           >+</button>

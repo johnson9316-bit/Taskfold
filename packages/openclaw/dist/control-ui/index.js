@@ -423,7 +423,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
       >
         <span class="taskfold-project__priority tf-priority-${e.priority}"></span>
         <span class="taskfold-project__card-title">${e.title}</span>
-        ${e.notes?me`<span class="taskfold-project__card-notes">${e.notes}</span>`:Ue}
+        ${e.notes?me`<span class="taskfold-project__card-notes" title=${e.notes}>${e.notes}</span>`:Ue}
         ${e.delivery?me`
               <span class="taskfold-project__delivery-badges">
                 ${e.delivery.implementationState?me`<small>${uI("implementation",e.delivery.implementationState)}</small>`:Ue}
@@ -443,6 +443,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
         </select>
         <select
           class="taskfold-project__compact-select taskfold-project__move-card"
+          title=${i.milestones.find(A=>A.id===e.milestoneId)?.title??z("taskfoldProject.unassigned")}
           aria-label=${z("taskfoldProject.moveTo")}
           ?disabled=${a}
           .value=${e.milestoneId??""}
@@ -464,7 +465,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
       @drop=${l=>{l.preventDefault();let c=l.dataTransfer?.getData("text/plain")||t.draggedCardId;c&&e.onDrop(c)}}
     >
       <header class="taskfold-project__column-header">
-        <div>
+        <div class="taskfold-project__column-heading">
           ${e.requirement?me`
                 <button
                   class="taskfold-project__column-title-button"
@@ -472,7 +473,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
                   @click=${()=>r.openModal({kind:"card-detail",cardId:e.requirement.id})}
                 >${e.title}</button>
               `:me`<h2>${e.title}</h2>`}
-          <span>${e.subtitle||z("taskfoldProject.cards",{count:String(e.cards.length)})}</span>
+          <span class="taskfold-project__column-subtitle">${e.subtitle||z("taskfoldProject.cards",{count:String(e.cards.length)})}</span>
         </div>
         <div class="taskfold-project__column-actions">
           ${i?me`
@@ -481,6 +482,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
                   class="taskfold-project__icon-button"
                   type="button"
                   title=${z("taskfoldProject.editMilestone")}
+                  aria-label=${z("taskfoldProject.editMilestone")}
                   @click=${()=>r.openModal({kind:"milestone",milestone:i})}
                 >...</button>
                 ${i.state==="active"?me`
@@ -488,12 +490,14 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${z("taskfoldProject.completeMilestone")}
+                        aria-label=${z("taskfoldProject.completeMilestone")}
                         @click=${()=>r.completeMilestone(i.id)}
                       >&#10003;</button>
                       <button
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${z("taskfoldProject.archiveMilestone")}
+                        aria-label=${z("taskfoldProject.archiveMilestone")}
                         @click=${()=>r.archiveMilestone(i.id,!0)}
                       >&#8942;</button>
                     `:me`
@@ -501,6 +505,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
                         class="taskfold-project__icon-button"
                         type="button"
                         title=${z("taskfoldProject.restoreMilestone")}
+                        aria-label=${z("taskfoldProject.restoreMilestone")}
                         @click=${()=>r.archiveMilestone(i.id,!1)}
                       >&#8635;</button>
                     `}
@@ -509,6 +514,7 @@ ${a.statusLabel??a.status} \xB7 ${a.priority}`:""}${a.childCount?`  (${a.childCo
             class="taskfold-project__icon-button"
             type="button"
             title=${z("taskfoldProject.newCard")}
+            aria-label=${z("taskfoldProject.newCard")}
             ?disabled=${!r.connected||n||i&&i.state!=="active"}
             @click=${e.onCreate}
           >+</button>

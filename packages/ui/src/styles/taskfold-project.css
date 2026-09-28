@@ -101,7 +101,7 @@
 }
 
 .taskfold-project__refresh:hover,
-.taskfold-project__icon-button:hover {
+.taskfold-project__icon-button:hover:not(:disabled) {
   background: var(--panel-strong);
   border-color: var(--border);
   color: var(--text);
@@ -411,8 +411,10 @@
 .taskfold-project__kanban {
   display: grid;
   gap: 12px;
-  grid-auto-columns: minmax(250px, 1fr);
+  grid-auto-columns: minmax(min(280px, 100%), 1fr);
   grid-auto-flow: column;
+  min-width: 0;
+  max-width: 100%;
   min-height: calc(100vh - 180px);
   overflow-x: auto;
   padding-bottom: 8px;
@@ -433,10 +435,17 @@
 }
 
 .taskfold-project__column-header {
+  align-items: stretch;
+  flex-direction: column;
   border-bottom: 1px solid var(--border);
   justify-content: space-between;
   min-height: 58px;
   padding: 10px;
+}
+
+.taskfold-project__column-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .taskfold-project__column-header h2 {
@@ -462,7 +471,7 @@
   color: var(--accent);
 }
 
-.taskfold-project__column-header span {
+.taskfold-project__column-subtitle {
   color: var(--muted);
   display: block;
   font-size: 11px;
@@ -470,7 +479,18 @@
 }
 
 .taskfold-project__column-actions {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.taskfold-project__column-actions .taskfold-project__icon-button {
+  flex: 0 0 auto;
+}
+
+.taskfold-project__column button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .taskfold-project__column-actions .taskfold-project__order-actions {
@@ -492,7 +512,7 @@
   border-radius: 5px;
   cursor: grab;
   min-height: 86px;
-  padding: 9px;
+  padding: 12px;
   position: relative;
 }
 
@@ -641,7 +661,8 @@ taskfold-graph-canvas,
 .taskfold-project__card-title {
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .taskfold-project__card-notes {
@@ -671,8 +692,40 @@ taskfold-graph-canvas,
 }
 
 .taskfold-project__card-footer {
-  justify-content: space-between;
-  margin-top: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.taskfold-project__card-footer > .taskfold-project__order-actions {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.taskfold-project__card-footer > select {
+  min-width: 0;
+  font-size: 12px;
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.taskfold-project__card-footer > select:first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.taskfold-project__card-footer > select:first-child:nth-last-child(2) {
+  grid-column: 1 / -1;
+}
+
+.taskfold-project__card-footer > select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.taskfold-project__card-footer > select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .taskfold-project__compact-select {
@@ -686,7 +739,9 @@ taskfold-graph-canvas,
 }
 
 .taskfold-project__move-card {
-  max-width: 112px;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1446,6 +1501,6 @@ taskfold-graph-canvas,
   }
 
   .taskfold-project__kanban {
-    grid-auto-columns: minmax(236px, 84vw);
+    grid-auto-columns: min(100%, max(236px, 84vw));
   }
 }
