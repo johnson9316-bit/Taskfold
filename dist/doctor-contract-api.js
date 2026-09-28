@@ -1,3 +1,5 @@
+import { createRequire as __taskfoldCreateRequire } from "node:module"; const require = __taskfoldCreateRequire(import.meta.url);
+
 // src/backend/src/sqlite-store.ts
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";

@@ -1,33 +1,2571 @@
+import { createRequire as __taskfoldCreateRequire } from "node:module"; const require = __taskfoldCreateRequire(import.meta.url);
+var __create = Object.create;
 var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __commonJS = (cb, mod) => function __require2() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
-// packages/core/src/card-redaction.ts
-function redactClaimToken(card) {
-  const claim = card.metadata?.claim;
-  if (!claim) {
-    return card;
+// packages/core/src/file-store-paths.ts
+import fs from "node:fs";
+import path from "node:path";
+function resolveTaskfoldDataDir(workspace) {
+  const root = workspace.sourcePath ?? workspace.path;
+  if (!root) {
+    throw new Error(
+      `taskfold file store requires a workspace with "path" or "sourcePath" (kind: ${workspace.kind}).`
+    );
+  }
+  return path.join(root, ".taskfold");
+}
+function resolveTaskfoldPluginDir(stateDir) {
+  return path.join(stateDir, ...PLUGIN_RELATIVE_PATH);
+}
+function resolveTaskfoldFileStoreLayout(options) {
+  const dataDir = path.resolve(options.dataDir);
+  const pluginDir = options.pluginDir === void 0 ? void 0 : path.resolve(options.pluginDir);
+  return {
+    dataDir,
+    cardsDir: path.join(dataDir, "cards"),
+    archiveCardsDir: path.join(dataDir, "archive", "cards"),
+    milestonesDir: path.join(dataDir, "milestones"),
+    documentsDir: path.join(dataDir, "documents"),
+    attachmentsDir: path.join(dataDir, "attachments"),
+    locksDir: path.join(dataDir, ".locks"),
+    runtimeCardsDir: path.join(dataDir, ".runtime", "cards"),
+    changesLogPath: path.join(dataDir, ".runtime", "changes.log"),
+    configPath: path.join(dataDir, "config.yml"),
+    ...pluginDir === void 0 ? {} : {
+      pluginDir,
+      projectsJsonPath: path.join(pluginDir, "projects.json"),
+      subscriptionsDir: path.join(pluginDir, "subscriptions"),
+      runsDir: path.join(pluginDir, "runs"),
+      metricsDir: path.join(pluginDir, "metrics")
+    }
+  };
+}
+function chmodIfExists(targetPath, mode) {
+  try {
+    fs.chmodSync(targetPath, mode);
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+  }
+}
+function ensureHardenedDir(dir) {
+  fs.mkdirSync(dir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+  chmodIfExists(dir, TASKFOLD_FILE_STORE_DIR_MODE);
+}
+function ensureRuntimeGitignored(dataDir) {
+  const gitignorePath = path.join(dataDir, ".gitignore");
+  let existing;
+  try {
+    existing = fs.readFileSync(gitignorePath, "utf8");
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+  }
+  const presentLines = new Set((existing ?? "").split(/\r?\n/).map((line) => line.trim()));
+  const missing = RUNTIME_GITIGNORE_ENTRIES.filter((entry) => !presentLines.has(entry));
+  if (missing.length === 0) {
+    return;
+  }
+  const text = missing.map((entry) => `${entry}
+`).join("");
+  if (existing === void 0) {
+    fs.writeFileSync(gitignorePath, text);
+    return;
+  }
+  const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+  fs.appendFileSync(gitignorePath, `${separator}${text}`);
+}
+function ensureTaskfoldDataDirectories(layout) {
+  ensureHardenedDir(layout.cardsDir);
+  ensureHardenedDir(layout.milestonesDir);
+  ensureHardenedDir(layout.documentsDir);
+  ensureHardenedDir(layout.attachmentsDir);
+  ensureHardenedDir(layout.locksDir);
+  ensureHardenedDir(layout.runtimeCardsDir);
+  ensureRuntimeGitignored(layout.dataDir);
+}
+function ensureTaskfoldPluginDirectories(layout) {
+  if (layout.pluginDir === void 0 || layout.subscriptionsDir === void 0) {
+    return;
+  }
+  ensureHardenedDir(layout.pluginDir);
+  ensureHardenedDir(layout.subscriptionsDir);
+}
+var TASKFOLD_FILE_STORE_DIR_MODE, TASKFOLD_FILE_STORE_FILE_MODE, PLUGIN_RELATIVE_PATH, RUNTIME_GITIGNORE_ENTRIES;
+var init_file_store_paths = __esm({
+  "packages/core/src/file-store-paths.ts"() {
+    "use strict";
+    TASKFOLD_FILE_STORE_DIR_MODE = 448;
+    TASKFOLD_FILE_STORE_FILE_MODE = 384;
+    PLUGIN_RELATIVE_PATH = ["plugins", "taskfold"];
+    RUNTIME_GITIGNORE_ENTRIES = [".locks/", ".runtime/"];
+  }
+});
+
+// packages/core/src/file-store-path-resolver.ts
+import { execFileSync } from "node:child_process";
+import fs2 from "node:fs";
+import path2 from "node:path";
+function splitExistingAncestor(target) {
+  const rest = [];
+  let current = target;
+  while (!fs2.existsSync(current)) {
+    const parent = path2.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    rest.unshift(path2.basename(current));
+    current = parent;
+  }
+  return { existing: fs2.realpathSync(current), rest };
+}
+function repoDiscoveryEnv() {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_COMMON_DIR;
+  return env;
+}
+function readGitLocation(cwd) {
+  let output;
+  try {
+    output = execFileSync("git", ["rev-parse", "--show-toplevel", "--git-common-dir"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      env: repoDiscoveryEnv()
+    });
+  } catch {
+    return void 0;
+  }
+  const [topLevel, commonDir] = output.split(/\r?\n/);
+  if (!topLevel || !commonDir) {
+    return void 0;
   }
   return {
-    ...card,
-    metadata: {
-      ...card.metadata,
-      claim: {
-        ...claim,
-        token: "[redacted]"
+    topLevel: fs2.realpathSync(topLevel),
+    commonDir: fs2.realpathSync(path2.resolve(cwd, commonDir))
+  };
+}
+function resolveTaskfoldMainCheckoutPath(target) {
+  const absolute = path2.resolve(target);
+  const { existing, rest } = splitExistingAncestor(absolute);
+  const location = readGitLocation(existing);
+  if (!location || path2.basename(location.commonDir) !== ".git") {
+    return absolute;
+  }
+  const mainRoot = path2.dirname(location.commonDir);
+  if (mainRoot === location.topLevel) {
+    return absolute;
+  }
+  const relative = path2.relative(location.topLevel, path2.join(existing, ...rest));
+  return path2.join(mainRoot, relative);
+}
+var init_file_store_path_resolver = __esm({
+  "packages/core/src/file-store-path-resolver.ts"() {
+    "use strict";
+  }
+});
+
+// packages/core/src/file-store-atomic.ts
+import { randomUUID } from "node:crypto";
+import fs3 from "node:fs";
+import path3 from "node:path";
+function asBlobContent(value) {
+  return Buffer.from(value, "base64");
+}
+function blobToBase64(value) {
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("base64");
+  }
+  if (typeof value === "string") {
+    return Buffer.from(value).toString("base64");
+  }
+  return "";
+}
+function writeFileAtomic(filePath, content, mode = TASKFOLD_FILE_STORE_FILE_MODE, beforeRename) {
+  const dir = path3.dirname(filePath);
+  fs3.mkdirSync(dir, { recursive: true });
+  const tmpPath = path3.join(dir, `.${path3.basename(filePath)}.${randomUUID()}.tmp`);
+  fs3.writeFileSync(tmpPath, content, { mode });
+  try {
+    beforeRename?.();
+  } catch (error) {
+    removeFileIfExists(tmpPath);
+    throw error;
+  }
+  fs3.renameSync(tmpPath, filePath);
+  chmodIfExists(filePath, mode);
+}
+function createFileExclusive(filePath, content, mode = TASKFOLD_FILE_STORE_FILE_MODE) {
+  const dir = path3.dirname(filePath);
+  fs3.mkdirSync(dir, { recursive: true });
+  try {
+    fs3.writeFileSync(filePath, content, { mode, flag: "wx" });
+    return true;
+  } catch (err) {
+    if (err.code === "EEXIST") {
+      return false;
+    }
+    throw err;
+  }
+}
+function removeFileIfExists(filePath) {
+  try {
+    fs3.unlinkSync(filePath);
+    return true;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return false;
+    }
+    throw err;
+  }
+}
+function readFileIfExists(filePath) {
+  try {
+    return fs3.readFileSync(filePath, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return void 0;
+    }
+    throw err;
+  }
+}
+function readBufferIfExists(filePath) {
+  try {
+    return fs3.readFileSync(filePath);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return void 0;
+    }
+    throw err;
+  }
+}
+function listFileNamesSafe(dir) {
+  try {
+    return fs3.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return [];
+    }
+    throw err;
+  }
+}
+function sanitizeFilenameSegment(segment) {
+  const cleaned = segment.replaceAll(/[ -/\\:*?"<>|]/g, " ").replaceAll(/\s+/g, " ").trim();
+  return cleaned.length > 0 ? cleaned.slice(0, 120) : "untitled";
+}
+function filenameIdToken(fileNameWithoutExtension) {
+  const separatorIndex = fileNameWithoutExtension.indexOf(" - ");
+  return separatorIndex === -1 ? fileNameWithoutExtension : fileNameWithoutExtension.slice(0, separatorIndex);
+}
+function parseCanonicalOrdinalId(raw) {
+  const match = /^([A-Za-z]+)-(\d+)$/.exec(raw.trim());
+  if (!match) {
+    return void 0;
+  }
+  return { prefix: match[1].toUpperCase(), number: Number.parseInt(match[2], 10) };
+}
+function sameEntityId(a, b) {
+  const canonicalA = parseCanonicalOrdinalId(a);
+  const canonicalB = parseCanonicalOrdinalId(b);
+  if (canonicalA && canonicalB) {
+    return canonicalA.prefix === canonicalB.prefix && canonicalA.number === canonicalB.number;
+  }
+  return a === b;
+}
+var init_file_store_atomic = __esm({
+  "packages/core/src/file-store-atomic.ts"() {
+    "use strict";
+    init_file_store_paths();
+  }
+});
+
+// packages/core/src/file-store-format.ts
+import fs4 from "node:fs";
+function readFormatVersion(configPath) {
+  const content = readFileIfExists(configPath);
+  const match = content === void 0 ? null : FORMAT_VERSION_LINE.exec(content);
+  if (!match) {
+    return void 0;
+  }
+  const raw = match[1].replace(/\s#.*$/, "").trim();
+  const unquoted = raw.replace(/^(["'])(.*)\1$/, "$2");
+  return /^\d+$/.test(unquoted) ? Number(unquoted) : raw;
+}
+function unsupportedFormatVersion(configPath) {
+  const version = readFormatVersion(configPath);
+  if (version === void 0 || typeof version === "number" && version <= TASKFOLD_FORMAT_VERSION) {
+    return void 0;
+  }
+  return String(version);
+}
+function isTaskfoldFormatWritable(configPath) {
+  return unsupportedFormatVersion(configPath) === void 0;
+}
+function assertTaskfoldFormatWritable(configPath) {
+  const found = unsupportedFormatVersion(configPath);
+  if (found !== void 0) {
+    throw new TaskfoldFormatTooNewError(configPath, found);
+  }
+}
+function ensureTaskfoldFormatVersion(configPath) {
+  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}
+`;
+  if (createFileExclusive(configPath, line)) {
+    return;
+  }
+  const existing = readFileIfExists(configPath) ?? "";
+  if (FORMAT_VERSION_LINE.test(existing)) {
+    return;
+  }
+  const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+  fs4.appendFileSync(configPath, `${separator}${line}`);
+}
+var TASKFOLD_FORMAT_VERSION, FORMAT_VERSION_KEY, FORMAT_VERSION_LINE, TaskfoldFormatTooNewError;
+var init_file_store_format = __esm({
+  "packages/core/src/file-store-format.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    TASKFOLD_FORMAT_VERSION = 1;
+    FORMAT_VERSION_KEY = "format_version";
+    FORMAT_VERSION_LINE = /^format_version:(.*)$/m;
+    TaskfoldFormatTooNewError = class extends Error {
+      code = "EFORMATTOONEW";
+      constructor(configPath, found) {
+        super(
+          `taskfold file store: ${configPath} \u7684 ${FORMAT_VERSION_KEY} \u662F ${found}\uFF0C\u672C\u7248 Taskfold \u53EA\u652F\u6301\u5230 ${TASKFOLD_FORMAT_VERSION}\u3002\u4E3A\u514D\u5199\u574F\u66F4\u65B0\u683C\u5F0F\u7684\u6570\u636E\uFF0C\u5DF2\u8F6C\u4E3A\u53EA\u8BFB\uFF0C\u5199\u5165\u4E00\u5F8B\u62D2\u7EDD\u3002\u8BF7\u628A Taskfold\uFF08CLI\u3001VS Code \u6269\u5C55\u3001OpenClaw \u63D2\u4EF6\uFF09\u5347\u7EA7\u5230\u652F\u6301\u8BE5\u683C\u5F0F\u7684\u7248\u672C\u3002`
+        );
+        this.name = "TaskfoldFormatTooNewError";
+      }
+    };
+  }
+});
+
+// node_modules/graceful-fs/polyfills.js
+var require_polyfills = __commonJS({
+  "node_modules/graceful-fs/polyfills.js"(exports, module) {
+    var constants = __require("constants");
+    var origCwd = process.cwd;
+    var cwd = null;
+    var platform = process.env.GRACEFUL_FS_PLATFORM || process.platform;
+    process.cwd = function() {
+      if (!cwd)
+        cwd = origCwd.call(process);
+      return cwd;
+    };
+    try {
+      process.cwd();
+    } catch (er) {
+    }
+    if (typeof process.chdir === "function") {
+      chdir = process.chdir;
+      process.chdir = function(d) {
+        cwd = null;
+        chdir.call(process, d);
+      };
+      if (Object.setPrototypeOf) Object.setPrototypeOf(process.chdir, chdir);
+    }
+    var chdir;
+    module.exports = patch;
+    function patch(fs14) {
+      if (constants.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
+        patchLchmod(fs14);
+      }
+      if (!fs14.lutimes) {
+        patchLutimes(fs14);
+      }
+      fs14.chown = chownFix(fs14.chown);
+      fs14.fchown = chownFix(fs14.fchown);
+      fs14.lchown = chownFix(fs14.lchown);
+      fs14.chmod = chmodFix(fs14.chmod);
+      fs14.fchmod = chmodFix(fs14.fchmod);
+      fs14.lchmod = chmodFix(fs14.lchmod);
+      fs14.chownSync = chownFixSync(fs14.chownSync);
+      fs14.fchownSync = chownFixSync(fs14.fchownSync);
+      fs14.lchownSync = chownFixSync(fs14.lchownSync);
+      fs14.chmodSync = chmodFixSync(fs14.chmodSync);
+      fs14.fchmodSync = chmodFixSync(fs14.fchmodSync);
+      fs14.lchmodSync = chmodFixSync(fs14.lchmodSync);
+      fs14.stat = statFix(fs14.stat);
+      fs14.fstat = statFix(fs14.fstat);
+      fs14.lstat = statFix(fs14.lstat);
+      fs14.statSync = statFixSync(fs14.statSync);
+      fs14.fstatSync = statFixSync(fs14.fstatSync);
+      fs14.lstatSync = statFixSync(fs14.lstatSync);
+      if (fs14.chmod && !fs14.lchmod) {
+        fs14.lchmod = function(path20, mode, cb) {
+          if (cb) process.nextTick(cb);
+        };
+        fs14.lchmodSync = function() {
+        };
+      }
+      if (fs14.chown && !fs14.lchown) {
+        fs14.lchown = function(path20, uid, gid, cb) {
+          if (cb) process.nextTick(cb);
+        };
+        fs14.lchownSync = function() {
+        };
+      }
+      if (platform === "win32") {
+        fs14.rename = typeof fs14.rename !== "function" ? fs14.rename : (function(fs$rename) {
+          function rename(from, to, cb) {
+            var start = Date.now();
+            var backoff = 0;
+            fs$rename(from, to, function CB(er) {
+              if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
+                setTimeout(function() {
+                  fs14.stat(to, function(stater, st) {
+                    if (stater && stater.code === "ENOENT")
+                      fs$rename(from, to, CB);
+                    else
+                      cb(er);
+                  });
+                }, backoff);
+                if (backoff < 100)
+                  backoff += 10;
+                return;
+              }
+              if (cb) cb(er);
+            });
+          }
+          if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
+          return rename;
+        })(fs14.rename);
+      }
+      fs14.read = typeof fs14.read !== "function" ? fs14.read : (function(fs$read) {
+        function read(fd, buffer, offset, length, position, callback_) {
+          var callback;
+          if (callback_ && typeof callback_ === "function") {
+            var eagCounter = 0;
+            callback = function(er, _, __) {
+              if (er && er.code === "EAGAIN" && eagCounter < 10) {
+                eagCounter++;
+                return fs$read.call(fs14, fd, buffer, offset, length, position, callback);
+              }
+              callback_.apply(this, arguments);
+            };
+          }
+          return fs$read.call(fs14, fd, buffer, offset, length, position, callback);
+        }
+        if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
+        return read;
+      })(fs14.read);
+      fs14.readSync = typeof fs14.readSync !== "function" ? fs14.readSync : /* @__PURE__ */ (function(fs$readSync) {
+        return function(fd, buffer, offset, length, position) {
+          var eagCounter = 0;
+          while (true) {
+            try {
+              return fs$readSync.call(fs14, fd, buffer, offset, length, position);
+            } catch (er) {
+              if (er.code === "EAGAIN" && eagCounter < 10) {
+                eagCounter++;
+                continue;
+              }
+              throw er;
+            }
+          }
+        };
+      })(fs14.readSync);
+      function patchLchmod(fs15) {
+        fs15.lchmod = function(path20, mode, callback) {
+          fs15.open(
+            path20,
+            constants.O_WRONLY | constants.O_SYMLINK,
+            mode,
+            function(err, fd) {
+              if (err) {
+                if (callback) callback(err);
+                return;
+              }
+              fs15.fchmod(fd, mode, function(err2) {
+                fs15.close(fd, function(err22) {
+                  if (callback) callback(err2 || err22);
+                });
+              });
+            }
+          );
+        };
+        fs15.lchmodSync = function(path20, mode) {
+          var fd = fs15.openSync(path20, constants.O_WRONLY | constants.O_SYMLINK, mode);
+          var threw = true;
+          var ret;
+          try {
+            ret = fs15.fchmodSync(fd, mode);
+            threw = false;
+          } finally {
+            if (threw) {
+              try {
+                fs15.closeSync(fd);
+              } catch (er) {
+              }
+            } else {
+              fs15.closeSync(fd);
+            }
+          }
+          return ret;
+        };
+      }
+      function patchLutimes(fs15) {
+        if (constants.hasOwnProperty("O_SYMLINK") && fs15.futimes) {
+          fs15.lutimes = function(path20, at, mt, cb) {
+            fs15.open(path20, constants.O_SYMLINK, function(er, fd) {
+              if (er) {
+                if (cb) cb(er);
+                return;
+              }
+              fs15.futimes(fd, at, mt, function(er2) {
+                fs15.close(fd, function(er22) {
+                  if (cb) cb(er2 || er22);
+                });
+              });
+            });
+          };
+          fs15.lutimesSync = function(path20, at, mt) {
+            var fd = fs15.openSync(path20, constants.O_SYMLINK);
+            var ret;
+            var threw = true;
+            try {
+              ret = fs15.futimesSync(fd, at, mt);
+              threw = false;
+            } finally {
+              if (threw) {
+                try {
+                  fs15.closeSync(fd);
+                } catch (er) {
+                }
+              } else {
+                fs15.closeSync(fd);
+              }
+            }
+            return ret;
+          };
+        } else if (fs15.futimes) {
+          fs15.lutimes = function(_a, _b, _c, cb) {
+            if (cb) process.nextTick(cb);
+          };
+          fs15.lutimesSync = function() {
+          };
+        }
+      }
+      function chmodFix(orig) {
+        if (!orig) return orig;
+        return function(target, mode, cb) {
+          return orig.call(fs14, target, mode, function(er) {
+            if (chownErOk(er)) er = null;
+            if (cb) cb.apply(this, arguments);
+          });
+        };
+      }
+      function chmodFixSync(orig) {
+        if (!orig) return orig;
+        return function(target, mode) {
+          try {
+            return orig.call(fs14, target, mode);
+          } catch (er) {
+            if (!chownErOk(er)) throw er;
+          }
+        };
+      }
+      function chownFix(orig) {
+        if (!orig) return orig;
+        return function(target, uid, gid, cb) {
+          return orig.call(fs14, target, uid, gid, function(er) {
+            if (chownErOk(er)) er = null;
+            if (cb) cb.apply(this, arguments);
+          });
+        };
+      }
+      function chownFixSync(orig) {
+        if (!orig) return orig;
+        return function(target, uid, gid) {
+          try {
+            return orig.call(fs14, target, uid, gid);
+          } catch (er) {
+            if (!chownErOk(er)) throw er;
+          }
+        };
+      }
+      function statFix(orig) {
+        if (!orig) return orig;
+        return function(target, options, cb) {
+          if (typeof options === "function") {
+            cb = options;
+            options = null;
+          }
+          function callback(er, stats) {
+            if (stats) {
+              if (stats.uid < 0) stats.uid += 4294967296;
+              if (stats.gid < 0) stats.gid += 4294967296;
+            }
+            if (cb) cb.apply(this, arguments);
+          }
+          return options ? orig.call(fs14, target, options, callback) : orig.call(fs14, target, callback);
+        };
+      }
+      function statFixSync(orig) {
+        if (!orig) return orig;
+        return function(target, options) {
+          var stats = options ? orig.call(fs14, target, options) : orig.call(fs14, target);
+          if (stats) {
+            if (stats.uid < 0) stats.uid += 4294967296;
+            if (stats.gid < 0) stats.gid += 4294967296;
+          }
+          return stats;
+        };
+      }
+      function chownErOk(er) {
+        if (!er)
+          return true;
+        if (er.code === "ENOSYS")
+          return true;
+        var nonroot = !process.getuid || process.getuid() !== 0;
+        if (nonroot) {
+          if (er.code === "EINVAL" || er.code === "EPERM")
+            return true;
+        }
+        return false;
+      }
+    }
+  }
+});
+
+// node_modules/graceful-fs/legacy-streams.js
+var require_legacy_streams = __commonJS({
+  "node_modules/graceful-fs/legacy-streams.js"(exports, module) {
+    var Stream = __require("stream").Stream;
+    module.exports = legacy;
+    function legacy(fs14) {
+      return {
+        ReadStream,
+        WriteStream
+      };
+      function ReadStream(path20, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path20, options);
+        Stream.call(this);
+        var self = this;
+        this.path = path20;
+        this.fd = null;
+        this.readable = true;
+        this.paused = false;
+        this.flags = "r";
+        this.mode = 438;
+        this.bufferSize = 64 * 1024;
+        options = options || {};
+        var keys = Object.keys(options);
+        for (var index = 0, length = keys.length; index < length; index++) {
+          var key = keys[index];
+          this[key] = options[key];
+        }
+        if (this.encoding) this.setEncoding(this.encoding);
+        if (this.start !== void 0) {
+          if ("number" !== typeof this.start) {
+            throw TypeError("start must be a Number");
+          }
+          if (this.end === void 0) {
+            this.end = Infinity;
+          } else if ("number" !== typeof this.end) {
+            throw TypeError("end must be a Number");
+          }
+          if (this.start > this.end) {
+            throw new Error("start must be <= end");
+          }
+          this.pos = this.start;
+        }
+        if (this.fd !== null) {
+          process.nextTick(function() {
+            self._read();
+          });
+          return;
+        }
+        fs14.open(this.path, this.flags, this.mode, function(err, fd) {
+          if (err) {
+            self.emit("error", err);
+            self.readable = false;
+            return;
+          }
+          self.fd = fd;
+          self.emit("open", fd);
+          self._read();
+        });
+      }
+      function WriteStream(path20, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path20, options);
+        Stream.call(this);
+        this.path = path20;
+        this.fd = null;
+        this.writable = true;
+        this.flags = "w";
+        this.encoding = "binary";
+        this.mode = 438;
+        this.bytesWritten = 0;
+        options = options || {};
+        var keys = Object.keys(options);
+        for (var index = 0, length = keys.length; index < length; index++) {
+          var key = keys[index];
+          this[key] = options[key];
+        }
+        if (this.start !== void 0) {
+          if ("number" !== typeof this.start) {
+            throw TypeError("start must be a Number");
+          }
+          if (this.start < 0) {
+            throw new Error("start must be >= zero");
+          }
+          this.pos = this.start;
+        }
+        this.busy = false;
+        this._queue = [];
+        if (this.fd === null) {
+          this._open = fs14.open;
+          this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
+          this.flush();
+        }
+      }
+    }
+  }
+});
+
+// node_modules/graceful-fs/clone.js
+var require_clone = __commonJS({
+  "node_modules/graceful-fs/clone.js"(exports, module) {
+    "use strict";
+    module.exports = clone;
+    var getPrototypeOf = Object.getPrototypeOf || function(obj) {
+      return obj.__proto__;
+    };
+    function clone(obj) {
+      if (obj === null || typeof obj !== "object")
+        return obj;
+      if (obj instanceof Object)
+        var copy = { __proto__: getPrototypeOf(obj) };
+      else
+        var copy = /* @__PURE__ */ Object.create(null);
+      Object.getOwnPropertyNames(obj).forEach(function(key) {
+        Object.defineProperty(copy, key, Object.getOwnPropertyDescriptor(obj, key));
+      });
+      return copy;
+    }
+  }
+});
+
+// node_modules/graceful-fs/graceful-fs.js
+var require_graceful_fs = __commonJS({
+  "node_modules/graceful-fs/graceful-fs.js"(exports, module) {
+    var fs14 = __require("fs");
+    var polyfills = require_polyfills();
+    var legacy = require_legacy_streams();
+    var clone = require_clone();
+    var util = __require("util");
+    var gracefulQueue;
+    var previousSymbol;
+    if (typeof Symbol === "function" && typeof Symbol.for === "function") {
+      gracefulQueue = Symbol.for("graceful-fs.queue");
+      previousSymbol = Symbol.for("graceful-fs.previous");
+    } else {
+      gracefulQueue = "___graceful-fs.queue";
+      previousSymbol = "___graceful-fs.previous";
+    }
+    function noop() {
+    }
+    function publishQueue(context, queue2) {
+      Object.defineProperty(context, gracefulQueue, {
+        get: function() {
+          return queue2;
+        }
+      });
+    }
+    var debug = noop;
+    if (util.debuglog)
+      debug = util.debuglog("gfs4");
+    else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || ""))
+      debug = function() {
+        var m = util.format.apply(util, arguments);
+        m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
+        console.error(m);
+      };
+    if (!fs14[gracefulQueue]) {
+      queue = global[gracefulQueue] || [];
+      publishQueue(fs14, queue);
+      fs14.close = (function(fs$close) {
+        function close(fd, cb) {
+          return fs$close.call(fs14, fd, function(err) {
+            if (!err) {
+              resetQueue();
+            }
+            if (typeof cb === "function")
+              cb.apply(this, arguments);
+          });
+        }
+        Object.defineProperty(close, previousSymbol, {
+          value: fs$close
+        });
+        return close;
+      })(fs14.close);
+      fs14.closeSync = (function(fs$closeSync) {
+        function closeSync(fd) {
+          fs$closeSync.apply(fs14, arguments);
+          resetQueue();
+        }
+        Object.defineProperty(closeSync, previousSymbol, {
+          value: fs$closeSync
+        });
+        return closeSync;
+      })(fs14.closeSync);
+      if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
+        process.on("exit", function() {
+          debug(fs14[gracefulQueue]);
+          __require("assert").equal(fs14[gracefulQueue].length, 0);
+        });
+      }
+    }
+    var queue;
+    if (!global[gracefulQueue]) {
+      publishQueue(global, fs14[gracefulQueue]);
+    }
+    module.exports = patch(clone(fs14));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs14.__patched) {
+      module.exports = patch(fs14);
+      fs14.__patched = true;
+    }
+    function patch(fs15) {
+      polyfills(fs15);
+      fs15.gracefulify = patch;
+      fs15.createReadStream = createReadStream;
+      fs15.createWriteStream = createWriteStream;
+      var fs$readFile = fs15.readFile;
+      fs15.readFile = readFile;
+      function readFile(path20, options, cb) {
+        if (typeof options === "function")
+          cb = options, options = null;
+        return go$readFile(path20, options, cb);
+        function go$readFile(path21, options2, cb2, startTime) {
+          return fs$readFile(path21, options2, function(err) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([go$readFile, [path21, options2, cb2], err, startTime || Date.now(), Date.now()]);
+            else {
+              if (typeof cb2 === "function")
+                cb2.apply(this, arguments);
+            }
+          });
+        }
+      }
+      var fs$writeFile = fs15.writeFile;
+      fs15.writeFile = writeFile;
+      function writeFile(path20, data, options, cb) {
+        if (typeof options === "function")
+          cb = options, options = null;
+        return go$writeFile(path20, data, options, cb);
+        function go$writeFile(path21, data2, options2, cb2, startTime) {
+          return fs$writeFile(path21, data2, options2, function(err) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([go$writeFile, [path21, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+            else {
+              if (typeof cb2 === "function")
+                cb2.apply(this, arguments);
+            }
+          });
+        }
+      }
+      var fs$appendFile = fs15.appendFile;
+      if (fs$appendFile)
+        fs15.appendFile = appendFile;
+      function appendFile(path20, data, options, cb) {
+        if (typeof options === "function")
+          cb = options, options = null;
+        return go$appendFile(path20, data, options, cb);
+        function go$appendFile(path21, data2, options2, cb2, startTime) {
+          return fs$appendFile(path21, data2, options2, function(err) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([go$appendFile, [path21, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+            else {
+              if (typeof cb2 === "function")
+                cb2.apply(this, arguments);
+            }
+          });
+        }
+      }
+      var fs$copyFile = fs15.copyFile;
+      if (fs$copyFile)
+        fs15.copyFile = copyFile;
+      function copyFile(src, dest, flags, cb) {
+        if (typeof flags === "function") {
+          cb = flags;
+          flags = 0;
+        }
+        return go$copyFile(src, dest, flags, cb);
+        function go$copyFile(src2, dest2, flags2, cb2, startTime) {
+          return fs$copyFile(src2, dest2, flags2, function(err) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([go$copyFile, [src2, dest2, flags2, cb2], err, startTime || Date.now(), Date.now()]);
+            else {
+              if (typeof cb2 === "function")
+                cb2.apply(this, arguments);
+            }
+          });
+        }
+      }
+      var fs$readdir = fs15.readdir;
+      fs15.readdir = readdir;
+      var noReaddirOptionVersions = /^v[0-5]\./;
+      function readdir(path20, options, cb) {
+        if (typeof options === "function")
+          cb = options, options = null;
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path21, options2, cb2, startTime) {
+          return fs$readdir(path21, fs$readdirCallback(
+            path21,
+            options2,
+            cb2,
+            startTime
+          ));
+        } : function go$readdir2(path21, options2, cb2, startTime) {
+          return fs$readdir(path21, options2, fs$readdirCallback(
+            path21,
+            options2,
+            cb2,
+            startTime
+          ));
+        };
+        return go$readdir(path20, options, cb);
+        function fs$readdirCallback(path21, options2, cb2, startTime) {
+          return function(err, files) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([
+                go$readdir,
+                [path21, options2, cb2],
+                err,
+                startTime || Date.now(),
+                Date.now()
+              ]);
+            else {
+              if (files && files.sort)
+                files.sort();
+              if (typeof cb2 === "function")
+                cb2.call(this, err, files);
+            }
+          };
+        }
+      }
+      if (process.version.substr(0, 4) === "v0.8") {
+        var legStreams = legacy(fs15);
+        ReadStream = legStreams.ReadStream;
+        WriteStream = legStreams.WriteStream;
+      }
+      var fs$ReadStream = fs15.ReadStream;
+      if (fs$ReadStream) {
+        ReadStream.prototype = Object.create(fs$ReadStream.prototype);
+        ReadStream.prototype.open = ReadStream$open;
+      }
+      var fs$WriteStream = fs15.WriteStream;
+      if (fs$WriteStream) {
+        WriteStream.prototype = Object.create(fs$WriteStream.prototype);
+        WriteStream.prototype.open = WriteStream$open;
+      }
+      Object.defineProperty(fs15, "ReadStream", {
+        get: function() {
+          return ReadStream;
+        },
+        set: function(val) {
+          ReadStream = val;
+        },
+        enumerable: true,
+        configurable: true
+      });
+      Object.defineProperty(fs15, "WriteStream", {
+        get: function() {
+          return WriteStream;
+        },
+        set: function(val) {
+          WriteStream = val;
+        },
+        enumerable: true,
+        configurable: true
+      });
+      var FileReadStream = ReadStream;
+      Object.defineProperty(fs15, "FileReadStream", {
+        get: function() {
+          return FileReadStream;
+        },
+        set: function(val) {
+          FileReadStream = val;
+        },
+        enumerable: true,
+        configurable: true
+      });
+      var FileWriteStream = WriteStream;
+      Object.defineProperty(fs15, "FileWriteStream", {
+        get: function() {
+          return FileWriteStream;
+        },
+        set: function(val) {
+          FileWriteStream = val;
+        },
+        enumerable: true,
+        configurable: true
+      });
+      function ReadStream(path20, options) {
+        if (this instanceof ReadStream)
+          return fs$ReadStream.apply(this, arguments), this;
+        else
+          return ReadStream.apply(Object.create(ReadStream.prototype), arguments);
+      }
+      function ReadStream$open() {
+        var that = this;
+        open(that.path, that.flags, that.mode, function(err, fd) {
+          if (err) {
+            if (that.autoClose)
+              that.destroy();
+            that.emit("error", err);
+          } else {
+            that.fd = fd;
+            that.emit("open", fd);
+            that.read();
+          }
+        });
+      }
+      function WriteStream(path20, options) {
+        if (this instanceof WriteStream)
+          return fs$WriteStream.apply(this, arguments), this;
+        else
+          return WriteStream.apply(Object.create(WriteStream.prototype), arguments);
+      }
+      function WriteStream$open() {
+        var that = this;
+        open(that.path, that.flags, that.mode, function(err, fd) {
+          if (err) {
+            that.destroy();
+            that.emit("error", err);
+          } else {
+            that.fd = fd;
+            that.emit("open", fd);
+          }
+        });
+      }
+      function createReadStream(path20, options) {
+        return new fs15.ReadStream(path20, options);
+      }
+      function createWriteStream(path20, options) {
+        return new fs15.WriteStream(path20, options);
+      }
+      var fs$open = fs15.open;
+      fs15.open = open;
+      function open(path20, flags, mode, cb) {
+        if (typeof mode === "function")
+          cb = mode, mode = null;
+        return go$open(path20, flags, mode, cb);
+        function go$open(path21, flags2, mode2, cb2, startTime) {
+          return fs$open(path21, flags2, mode2, function(err, fd) {
+            if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+              enqueue([go$open, [path21, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+            else {
+              if (typeof cb2 === "function")
+                cb2.apply(this, arguments);
+            }
+          });
+        }
+      }
+      return fs15;
+    }
+    function enqueue(elem) {
+      debug("ENQUEUE", elem[0].name, elem[1]);
+      fs14[gracefulQueue].push(elem);
+      retry();
+    }
+    var retryTimer;
+    function resetQueue() {
+      var now = Date.now();
+      for (var i = 0; i < fs14[gracefulQueue].length; ++i) {
+        if (fs14[gracefulQueue][i].length > 2) {
+          fs14[gracefulQueue][i][3] = now;
+          fs14[gracefulQueue][i][4] = now;
+        }
+      }
+      retry();
+    }
+    function retry() {
+      clearTimeout(retryTimer);
+      retryTimer = void 0;
+      if (fs14[gracefulQueue].length === 0)
+        return;
+      var elem = fs14[gracefulQueue].shift();
+      var fn = elem[0];
+      var args = elem[1];
+      var err = elem[2];
+      var startTime = elem[3];
+      var lastTime = elem[4];
+      if (startTime === void 0) {
+        debug("RETRY", fn.name, args);
+        fn.apply(null, args);
+      } else if (Date.now() - startTime >= 6e4) {
+        debug("TIMEOUT", fn.name, args);
+        var cb = args.pop();
+        if (typeof cb === "function")
+          cb.call(null, err);
+      } else {
+        var sinceAttempt = Date.now() - lastTime;
+        var sinceStart = Math.max(lastTime - startTime, 1);
+        var desiredDelay = Math.min(sinceStart * 1.2, 100);
+        if (sinceAttempt >= desiredDelay) {
+          debug("RETRY", fn.name, args);
+          fn.apply(null, args.concat([startTime]));
+        } else {
+          fs14[gracefulQueue].push(elem);
+        }
+      }
+      if (retryTimer === void 0) {
+        retryTimer = setTimeout(retry, 0);
+      }
+    }
+  }
+});
+
+// node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js
+var require_retry_operation = __commonJS({
+  "node_modules/proper-lockfile/node_modules/retry/lib/retry_operation.js"(exports, module) {
+    function RetryOperation(timeouts, options) {
+      if (typeof options === "boolean") {
+        options = { forever: options };
+      }
+      this._originalTimeouts = JSON.parse(JSON.stringify(timeouts));
+      this._timeouts = timeouts;
+      this._options = options || {};
+      this._maxRetryTime = options && options.maxRetryTime || Infinity;
+      this._fn = null;
+      this._errors = [];
+      this._attempts = 1;
+      this._operationTimeout = null;
+      this._operationTimeoutCb = null;
+      this._timeout = null;
+      this._operationStart = null;
+      if (this._options.forever) {
+        this._cachedTimeouts = this._timeouts.slice(0);
+      }
+    }
+    module.exports = RetryOperation;
+    RetryOperation.prototype.reset = function() {
+      this._attempts = 1;
+      this._timeouts = this._originalTimeouts;
+    };
+    RetryOperation.prototype.stop = function() {
+      if (this._timeout) {
+        clearTimeout(this._timeout);
+      }
+      this._timeouts = [];
+      this._cachedTimeouts = null;
+    };
+    RetryOperation.prototype.retry = function(err) {
+      if (this._timeout) {
+        clearTimeout(this._timeout);
+      }
+      if (!err) {
+        return false;
+      }
+      var currentTime = (/* @__PURE__ */ new Date()).getTime();
+      if (err && currentTime - this._operationStart >= this._maxRetryTime) {
+        this._errors.unshift(new Error("RetryOperation timeout occurred"));
+        return false;
+      }
+      this._errors.push(err);
+      var timeout = this._timeouts.shift();
+      if (timeout === void 0) {
+        if (this._cachedTimeouts) {
+          this._errors.splice(this._errors.length - 1, this._errors.length);
+          this._timeouts = this._cachedTimeouts.slice(0);
+          timeout = this._timeouts.shift();
+        } else {
+          return false;
+        }
+      }
+      var self = this;
+      var timer = setTimeout(function() {
+        self._attempts++;
+        if (self._operationTimeoutCb) {
+          self._timeout = setTimeout(function() {
+            self._operationTimeoutCb(self._attempts);
+          }, self._operationTimeout);
+          if (self._options.unref) {
+            self._timeout.unref();
+          }
+        }
+        self._fn(self._attempts);
+      }, timeout);
+      if (this._options.unref) {
+        timer.unref();
+      }
+      return true;
+    };
+    RetryOperation.prototype.attempt = function(fn, timeoutOps) {
+      this._fn = fn;
+      if (timeoutOps) {
+        if (timeoutOps.timeout) {
+          this._operationTimeout = timeoutOps.timeout;
+        }
+        if (timeoutOps.cb) {
+          this._operationTimeoutCb = timeoutOps.cb;
+        }
+      }
+      var self = this;
+      if (this._operationTimeoutCb) {
+        this._timeout = setTimeout(function() {
+          self._operationTimeoutCb();
+        }, self._operationTimeout);
+      }
+      this._operationStart = (/* @__PURE__ */ new Date()).getTime();
+      this._fn(this._attempts);
+    };
+    RetryOperation.prototype.try = function(fn) {
+      console.log("Using RetryOperation.try() is deprecated");
+      this.attempt(fn);
+    };
+    RetryOperation.prototype.start = function(fn) {
+      console.log("Using RetryOperation.start() is deprecated");
+      this.attempt(fn);
+    };
+    RetryOperation.prototype.start = RetryOperation.prototype.try;
+    RetryOperation.prototype.errors = function() {
+      return this._errors;
+    };
+    RetryOperation.prototype.attempts = function() {
+      return this._attempts;
+    };
+    RetryOperation.prototype.mainError = function() {
+      if (this._errors.length === 0) {
+        return null;
+      }
+      var counts = {};
+      var mainError = null;
+      var mainErrorCount = 0;
+      for (var i = 0; i < this._errors.length; i++) {
+        var error = this._errors[i];
+        var message = error.message;
+        var count = (counts[message] || 0) + 1;
+        counts[message] = count;
+        if (count >= mainErrorCount) {
+          mainError = error;
+          mainErrorCount = count;
+        }
+      }
+      return mainError;
+    };
+  }
+});
+
+// node_modules/proper-lockfile/node_modules/retry/lib/retry.js
+var require_retry = __commonJS({
+  "node_modules/proper-lockfile/node_modules/retry/lib/retry.js"(exports) {
+    var RetryOperation = require_retry_operation();
+    exports.operation = function(options) {
+      var timeouts = exports.timeouts(options);
+      return new RetryOperation(timeouts, {
+        forever: options && options.forever,
+        unref: options && options.unref,
+        maxRetryTime: options && options.maxRetryTime
+      });
+    };
+    exports.timeouts = function(options) {
+      if (options instanceof Array) {
+        return [].concat(options);
+      }
+      var opts = {
+        retries: 10,
+        factor: 2,
+        minTimeout: 1 * 1e3,
+        maxTimeout: Infinity,
+        randomize: false
+      };
+      for (var key in options) {
+        opts[key] = options[key];
+      }
+      if (opts.minTimeout > opts.maxTimeout) {
+        throw new Error("minTimeout is greater than maxTimeout");
+      }
+      var timeouts = [];
+      for (var i = 0; i < opts.retries; i++) {
+        timeouts.push(this.createTimeout(i, opts));
+      }
+      if (options && options.forever && !timeouts.length) {
+        timeouts.push(this.createTimeout(i, opts));
+      }
+      timeouts.sort(function(a, b) {
+        return a - b;
+      });
+      return timeouts;
+    };
+    exports.createTimeout = function(attempt, opts) {
+      var random = opts.randomize ? Math.random() + 1 : 1;
+      var timeout = Math.round(random * opts.minTimeout * Math.pow(opts.factor, attempt));
+      timeout = Math.min(timeout, opts.maxTimeout);
+      return timeout;
+    };
+    exports.wrap = function(obj, options, methods) {
+      if (options instanceof Array) {
+        methods = options;
+        options = null;
+      }
+      if (!methods) {
+        methods = [];
+        for (var key in obj) {
+          if (typeof obj[key] === "function") {
+            methods.push(key);
+          }
+        }
+      }
+      for (var i = 0; i < methods.length; i++) {
+        var method = methods[i];
+        var original = obj[method];
+        obj[method] = function retryWrapper(original2) {
+          var op = exports.operation(options);
+          var args = Array.prototype.slice.call(arguments, 1);
+          var callback = args.pop();
+          args.push(function(err) {
+            if (op.retry(err)) {
+              return;
+            }
+            if (err) {
+              arguments[0] = op.mainError();
+            }
+            callback.apply(this, arguments);
+          });
+          op.attempt(function() {
+            original2.apply(obj, args);
+          });
+        }.bind(obj, original);
+        obj[method].options = options;
+      }
+    };
+  }
+});
+
+// node_modules/proper-lockfile/node_modules/retry/index.js
+var require_retry2 = __commonJS({
+  "node_modules/proper-lockfile/node_modules/retry/index.js"(exports, module) {
+    module.exports = require_retry();
+  }
+});
+
+// node_modules/proper-lockfile/node_modules/signal-exit/signals.js
+var require_signals = __commonJS({
+  "node_modules/proper-lockfile/node_modules/signal-exit/signals.js"(exports, module) {
+    module.exports = [
+      "SIGABRT",
+      "SIGALRM",
+      "SIGHUP",
+      "SIGINT",
+      "SIGTERM"
+    ];
+    if (process.platform !== "win32") {
+      module.exports.push(
+        "SIGVTALRM",
+        "SIGXCPU",
+        "SIGXFSZ",
+        "SIGUSR2",
+        "SIGTRAP",
+        "SIGSYS",
+        "SIGQUIT",
+        "SIGIOT"
+        // should detect profiler and enable/disable accordingly.
+        // see #21
+        // 'SIGPROF'
+      );
+    }
+    if (process.platform === "linux") {
+      module.exports.push(
+        "SIGIO",
+        "SIGPOLL",
+        "SIGPWR",
+        "SIGSTKFLT",
+        "SIGUNUSED"
+      );
+    }
+  }
+});
+
+// node_modules/proper-lockfile/node_modules/signal-exit/index.js
+var require_signal_exit = __commonJS({
+  "node_modules/proper-lockfile/node_modules/signal-exit/index.js"(exports, module) {
+    var process2 = global.process;
+    var processOk = function(process3) {
+      return process3 && typeof process3 === "object" && typeof process3.removeListener === "function" && typeof process3.emit === "function" && typeof process3.reallyExit === "function" && typeof process3.listeners === "function" && typeof process3.kill === "function" && typeof process3.pid === "number" && typeof process3.on === "function";
+    };
+    if (!processOk(process2)) {
+      module.exports = function() {
+        return function() {
+        };
+      };
+    } else {
+      assert = __require("assert");
+      signals = require_signals();
+      isWin = /^win/i.test(process2.platform);
+      EE = __require("events");
+      if (typeof EE !== "function") {
+        EE = EE.EventEmitter;
+      }
+      if (process2.__signal_exit_emitter__) {
+        emitter = process2.__signal_exit_emitter__;
+      } else {
+        emitter = process2.__signal_exit_emitter__ = new EE();
+        emitter.count = 0;
+        emitter.emitted = {};
+      }
+      if (!emitter.infinite) {
+        emitter.setMaxListeners(Infinity);
+        emitter.infinite = true;
+      }
+      module.exports = function(cb, opts) {
+        if (!processOk(global.process)) {
+          return function() {
+          };
+        }
+        assert.equal(typeof cb, "function", "a callback must be provided for exit handler");
+        if (loaded === false) {
+          load();
+        }
+        var ev = "exit";
+        if (opts && opts.alwaysLast) {
+          ev = "afterexit";
+        }
+        var remove = function() {
+          emitter.removeListener(ev, cb);
+          if (emitter.listeners("exit").length === 0 && emitter.listeners("afterexit").length === 0) {
+            unload();
+          }
+        };
+        emitter.on(ev, cb);
+        return remove;
+      };
+      unload = function unload2() {
+        if (!loaded || !processOk(global.process)) {
+          return;
+        }
+        loaded = false;
+        signals.forEach(function(sig) {
+          try {
+            process2.removeListener(sig, sigListeners[sig]);
+          } catch (er) {
+          }
+        });
+        process2.emit = originalProcessEmit;
+        process2.reallyExit = originalProcessReallyExit;
+        emitter.count -= 1;
+      };
+      module.exports.unload = unload;
+      emit = function emit2(event, code, signal) {
+        if (emitter.emitted[event]) {
+          return;
+        }
+        emitter.emitted[event] = true;
+        emitter.emit(event, code, signal);
+      };
+      sigListeners = {};
+      signals.forEach(function(sig) {
+        sigListeners[sig] = function listener() {
+          if (!processOk(global.process)) {
+            return;
+          }
+          var listeners = process2.listeners(sig);
+          if (listeners.length === emitter.count) {
+            unload();
+            emit("exit", null, sig);
+            emit("afterexit", null, sig);
+            if (isWin && sig === "SIGHUP") {
+              sig = "SIGINT";
+            }
+            process2.kill(process2.pid, sig);
+          }
+        };
+      });
+      module.exports.signals = function() {
+        return signals;
+      };
+      loaded = false;
+      load = function load2() {
+        if (loaded || !processOk(global.process)) {
+          return;
+        }
+        loaded = true;
+        emitter.count += 1;
+        signals = signals.filter(function(sig) {
+          try {
+            process2.on(sig, sigListeners[sig]);
+            return true;
+          } catch (er) {
+            return false;
+          }
+        });
+        process2.emit = processEmit;
+        process2.reallyExit = processReallyExit;
+      };
+      module.exports.load = load;
+      originalProcessReallyExit = process2.reallyExit;
+      processReallyExit = function processReallyExit2(code) {
+        if (!processOk(global.process)) {
+          return;
+        }
+        process2.exitCode = code || /* istanbul ignore next */
+        0;
+        emit("exit", process2.exitCode, null);
+        emit("afterexit", process2.exitCode, null);
+        originalProcessReallyExit.call(process2, process2.exitCode);
+      };
+      originalProcessEmit = process2.emit;
+      processEmit = function processEmit2(ev, arg) {
+        if (ev === "exit" && processOk(global.process)) {
+          if (arg !== void 0) {
+            process2.exitCode = arg;
+          }
+          var ret = originalProcessEmit.apply(this, arguments);
+          emit("exit", process2.exitCode, null);
+          emit("afterexit", process2.exitCode, null);
+          return ret;
+        } else {
+          return originalProcessEmit.apply(this, arguments);
+        }
+      };
+    }
+    var assert;
+    var signals;
+    var isWin;
+    var EE;
+    var emitter;
+    var unload;
+    var emit;
+    var sigListeners;
+    var loaded;
+    var load;
+    var originalProcessReallyExit;
+    var processReallyExit;
+    var originalProcessEmit;
+    var processEmit;
+  }
+});
+
+// node_modules/proper-lockfile/lib/mtime-precision.js
+var require_mtime_precision = __commonJS({
+  "node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
+    "use strict";
+    var cacheSymbol = Symbol();
+    function probe(file, fs14, callback) {
+      const cachedPrecision = fs14[cacheSymbol];
+      if (cachedPrecision) {
+        return fs14.stat(file, (err, stat2) => {
+          if (err) {
+            return callback(err);
+          }
+          callback(null, stat2.mtime, cachedPrecision);
+        });
+      }
+      const mtime = new Date(Math.ceil(Date.now() / 1e3) * 1e3 + 5);
+      fs14.utimes(file, mtime, mtime, (err) => {
+        if (err) {
+          return callback(err);
+        }
+        fs14.stat(file, (err2, stat2) => {
+          if (err2) {
+            return callback(err2);
+          }
+          const precision = stat2.mtime.getTime() % 1e3 === 0 ? "s" : "ms";
+          Object.defineProperty(fs14, cacheSymbol, { value: precision });
+          callback(null, stat2.mtime, precision);
+        });
+      });
+    }
+    function getMtime(precision) {
+      let now = Date.now();
+      if (precision === "s") {
+        now = Math.ceil(now / 1e3) * 1e3;
+      }
+      return new Date(now);
+    }
+    module.exports.probe = probe;
+    module.exports.getMtime = getMtime;
+  }
+});
+
+// node_modules/proper-lockfile/lib/lockfile.js
+var require_lockfile = __commonJS({
+  "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
+    "use strict";
+    var path20 = __require("path");
+    var fs14 = require_graceful_fs();
+    var retry = require_retry2();
+    var onExit = require_signal_exit();
+    var mtimePrecision = require_mtime_precision();
+    var locks = {};
+    function getLockFile(file, options) {
+      return options.lockfilePath || `${file}.lock`;
+    }
+    function resolveCanonicalPath(file, options, callback) {
+      if (!options.realpath) {
+        return callback(null, path20.resolve(file));
+      }
+      options.fs.realpath(file, callback);
+    }
+    function acquireLock(file, options, callback) {
+      const lockfilePath = getLockFile(file, options);
+      options.fs.mkdir(lockfilePath, (err) => {
+        if (!err) {
+          return mtimePrecision.probe(lockfilePath, options.fs, (err2, mtime, mtimePrecision2) => {
+            if (err2) {
+              options.fs.rmdir(lockfilePath, () => {
+              });
+              return callback(err2);
+            }
+            callback(null, mtime, mtimePrecision2);
+          });
+        }
+        if (err.code !== "EEXIST") {
+          return callback(err);
+        }
+        if (options.stale <= 0) {
+          return callback(Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED", file }));
+        }
+        options.fs.stat(lockfilePath, (err2, stat2) => {
+          if (err2) {
+            if (err2.code === "ENOENT") {
+              return acquireLock(file, { ...options, stale: 0 }, callback);
+            }
+            return callback(err2);
+          }
+          if (!isLockStale(stat2, options)) {
+            return callback(Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED", file }));
+          }
+          removeLock(file, options, (err3) => {
+            if (err3) {
+              return callback(err3);
+            }
+            acquireLock(file, { ...options, stale: 0 }, callback);
+          });
+        });
+      });
+    }
+    function isLockStale(stat2, options) {
+      return stat2.mtime.getTime() < Date.now() - options.stale;
+    }
+    function removeLock(file, options, callback) {
+      options.fs.rmdir(getLockFile(file, options), (err) => {
+        if (err && err.code !== "ENOENT") {
+          return callback(err);
+        }
+        callback();
+      });
+    }
+    function updateLock(file, options) {
+      const lock2 = locks[file];
+      if (lock2.updateTimeout) {
+        return;
+      }
+      lock2.updateDelay = lock2.updateDelay || options.update;
+      lock2.updateTimeout = setTimeout(() => {
+        lock2.updateTimeout = null;
+        options.fs.stat(lock2.lockfilePath, (err, stat2) => {
+          const isOverThreshold = lock2.lastUpdate + options.stale < Date.now();
+          if (err) {
+            if (err.code === "ENOENT" || isOverThreshold) {
+              return setLockAsCompromised(file, lock2, Object.assign(err, { code: "ECOMPROMISED" }));
+            }
+            lock2.updateDelay = 1e3;
+            return updateLock(file, options);
+          }
+          const isMtimeOurs = lock2.mtime.getTime() === stat2.mtime.getTime();
+          if (!isMtimeOurs) {
+            return setLockAsCompromised(
+              file,
+              lock2,
+              Object.assign(
+                new Error("Unable to update lock within the stale threshold"),
+                { code: "ECOMPROMISED" }
+              )
+            );
+          }
+          const mtime = mtimePrecision.getMtime(lock2.mtimePrecision);
+          options.fs.utimes(lock2.lockfilePath, mtime, mtime, (err2) => {
+            const isOverThreshold2 = lock2.lastUpdate + options.stale < Date.now();
+            if (lock2.released) {
+              return;
+            }
+            if (err2) {
+              if (err2.code === "ENOENT" || isOverThreshold2) {
+                return setLockAsCompromised(file, lock2, Object.assign(err2, { code: "ECOMPROMISED" }));
+              }
+              lock2.updateDelay = 1e3;
+              return updateLock(file, options);
+            }
+            lock2.mtime = mtime;
+            lock2.lastUpdate = Date.now();
+            lock2.updateDelay = null;
+            updateLock(file, options);
+          });
+        });
+      }, lock2.updateDelay);
+      if (lock2.updateTimeout.unref) {
+        lock2.updateTimeout.unref();
+      }
+    }
+    function setLockAsCompromised(file, lock2, err) {
+      lock2.released = true;
+      if (lock2.updateTimeout) {
+        clearTimeout(lock2.updateTimeout);
+      }
+      if (locks[file] === lock2) {
+        delete locks[file];
+      }
+      lock2.options.onCompromised(err);
+    }
+    function lock(file, options, callback) {
+      options = {
+        stale: 1e4,
+        update: null,
+        realpath: true,
+        retries: 0,
+        fs: fs14,
+        onCompromised: (err) => {
+          throw err;
+        },
+        ...options
+      };
+      options.retries = options.retries || 0;
+      options.retries = typeof options.retries === "number" ? { retries: options.retries } : options.retries;
+      options.stale = Math.max(options.stale || 0, 2e3);
+      options.update = options.update == null ? options.stale / 2 : options.update || 0;
+      options.update = Math.max(Math.min(options.update, options.stale / 2), 1e3);
+      resolveCanonicalPath(file, options, (err, file2) => {
+        if (err) {
+          return callback(err);
+        }
+        const operation = retry.operation(options.retries);
+        operation.attempt(() => {
+          acquireLock(file2, options, (err2, mtime, mtimePrecision2) => {
+            if (operation.retry(err2)) {
+              return;
+            }
+            if (err2) {
+              return callback(operation.mainError());
+            }
+            const lock2 = locks[file2] = {
+              lockfilePath: getLockFile(file2, options),
+              mtime,
+              mtimePrecision: mtimePrecision2,
+              options,
+              lastUpdate: Date.now()
+            };
+            updateLock(file2, options);
+            callback(null, (releasedCallback) => {
+              if (lock2.released) {
+                return releasedCallback && releasedCallback(Object.assign(new Error("Lock is already released"), { code: "ERELEASED" }));
+              }
+              unlock(file2, { ...options, realpath: false }, releasedCallback);
+            });
+          });
+        });
+      });
+    }
+    function unlock(file, options, callback) {
+      options = {
+        fs: fs14,
+        realpath: true,
+        ...options
+      };
+      resolveCanonicalPath(file, options, (err, file2) => {
+        if (err) {
+          return callback(err);
+        }
+        const lock2 = locks[file2];
+        if (!lock2) {
+          return callback(Object.assign(new Error("Lock is not acquired/owned by you"), { code: "ENOTACQUIRED" }));
+        }
+        lock2.updateTimeout && clearTimeout(lock2.updateTimeout);
+        lock2.released = true;
+        delete locks[file2];
+        removeLock(file2, options, callback);
+      });
+    }
+    function check(file, options, callback) {
+      options = {
+        stale: 1e4,
+        realpath: true,
+        fs: fs14,
+        ...options
+      };
+      options.stale = Math.max(options.stale || 0, 2e3);
+      resolveCanonicalPath(file, options, (err, file2) => {
+        if (err) {
+          return callback(err);
+        }
+        options.fs.stat(getLockFile(file2, options), (err2, stat2) => {
+          if (err2) {
+            return err2.code === "ENOENT" ? callback(null, false) : callback(err2);
+          }
+          return callback(null, !isLockStale(stat2, options));
+        });
+      });
+    }
+    function getLocks() {
+      return locks;
+    }
+    onExit(() => {
+      for (const file in locks) {
+        const options = locks[file].options;
+        try {
+          options.fs.rmdirSync(getLockFile(file, options));
+        } catch (e) {
+        }
+      }
+    });
+    module.exports.lock = lock;
+    module.exports.unlock = unlock;
+    module.exports.check = check;
+    module.exports.getLocks = getLocks;
+  }
+});
+
+// node_modules/proper-lockfile/lib/adapter.js
+var require_adapter = __commonJS({
+  "node_modules/proper-lockfile/lib/adapter.js"(exports, module) {
+    "use strict";
+    var fs14 = require_graceful_fs();
+    function createSyncFs(fs15) {
+      const methods = ["mkdir", "realpath", "stat", "rmdir", "utimes"];
+      const newFs = { ...fs15 };
+      methods.forEach((method) => {
+        newFs[method] = (...args) => {
+          const callback = args.pop();
+          let ret;
+          try {
+            ret = fs15[`${method}Sync`](...args);
+          } catch (err) {
+            return callback(err);
+          }
+          callback(null, ret);
+        };
+      });
+      return newFs;
+    }
+    function toPromise(method) {
+      return (...args) => new Promise((resolve, reject) => {
+        args.push((err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+        method(...args);
+      });
+    }
+    function toSync(method) {
+      return (...args) => {
+        let err;
+        let result;
+        args.push((_err, _result) => {
+          err = _err;
+          result = _result;
+        });
+        method(...args);
+        if (err) {
+          throw err;
+        }
+        return result;
+      };
+    }
+    function toSyncOptions(options) {
+      options = { ...options };
+      options.fs = createSyncFs(options.fs || fs14);
+      if (typeof options.retries === "number" && options.retries > 0 || options.retries && typeof options.retries.retries === "number" && options.retries.retries > 0) {
+        throw Object.assign(new Error("Cannot use retries with the sync api"), { code: "ESYNC" });
+      }
+      return options;
+    }
+    module.exports = {
+      toPromise,
+      toSync,
+      toSyncOptions
+    };
+  }
+});
+
+// node_modules/proper-lockfile/index.js
+var require_proper_lockfile = __commonJS({
+  "node_modules/proper-lockfile/index.js"(exports, module) {
+    "use strict";
+    var lockfile2 = require_lockfile();
+    var { toPromise, toSync, toSyncOptions } = require_adapter();
+    async function lock(file, options) {
+      const release = await toPromise(lockfile2.lock)(file, options);
+      return toPromise(release);
+    }
+    function lockSync(file, options) {
+      const release = toSync(lockfile2.lock)(file, toSyncOptions(options));
+      return toSync(release);
+    }
+    function unlock(file, options) {
+      return toPromise(lockfile2.unlock)(file, options);
+    }
+    function unlockSync(file, options) {
+      return toSync(lockfile2.unlock)(file, toSyncOptions(options));
+    }
+    function check(file, options) {
+      return toPromise(lockfile2.check)(file, options);
+    }
+    function checkSync(file, options) {
+      return toSync(lockfile2.check)(file, toSyncOptions(options));
+    }
+    module.exports = lock;
+    module.exports.lock = lock;
+    module.exports.unlock = unlock;
+    module.exports.lockSync = lockSync;
+    module.exports.unlockSync = unlockSync;
+    module.exports.check = check;
+    module.exports.checkSync = checkSync;
+  }
+});
+
+// packages/core/src/file-store-locks.ts
+import fs5 from "node:fs";
+import path4 from "node:path";
+function isTaskfoldLockConflictError(error) {
+  return error instanceof TaskfoldLockTimeoutError || error instanceof TaskfoldLockCompromisedError;
+}
+function taskfoldGlobalLockPath(locksDir) {
+  return path4.join(locksDir, "global.lock");
+}
+function taskfoldCardLockPath(locksDir, cardKey) {
+  return path4.join(locksDir, `card-${encodeURIComponent(cardKey)}.lock`);
+}
+function lockOptions(held) {
+  return {
+    lockfilePath: held.lockfilePath,
+    realpath: false,
+    stale: TASKFOLD_LOCK_STALE_MS,
+    update: TASKFOLD_LOCK_UPDATE_MS,
+    retries: 0,
+    // 默认实现是在定时器里 throw，会直接打崩进程。这里只记下来，由 assertHeld 放弃写入。
+    onCompromised: () => {
+      held.compromised = true;
+    }
+  };
+}
+function isLockedError(error) {
+  return error?.code === "ELOCKED";
+}
+function retryDelayMs() {
+  return TASKFOLD_LOCK_RETRY_MIN_MS + Math.floor(Math.random() * (TASKFOLD_LOCK_RETRY_MAX_MS - TASKFOLD_LOCK_RETRY_MIN_MS + 1));
+}
+function guardFor(held) {
+  return {
+    assertHeld() {
+      if (held.compromised) {
+        throw new TaskfoldLockCompromisedError(held.lockfilePath);
+      }
+      let mtimeMs;
+      try {
+        mtimeMs = fs5.statSync(held.lockfilePath).mtimeMs;
+      } catch {
+        throw new TaskfoldLockCompromisedError(held.lockfilePath);
+      }
+      if (mtimeMs !== held.mtimeMs) {
+        throw new TaskfoldLockCompromisedError(held.lockfilePath);
       }
     }
   };
 }
-var init_card_redaction = __esm({
-  "packages/core/src/card-redaction.ts"() {
+function newHeldLock(lockfilePath) {
+  fs5.mkdirSync(path4.dirname(lockfilePath), { recursive: true });
+  return { lockfilePath, mtimeMs: 0, compromised: false };
+}
+function runSection(held, section) {
+  try {
+    return { result: section(guardFor(held)), release: true };
+  } catch (error) {
+    return { error, release: !(error instanceof TaskfoldLockCompromisedError) };
+  }
+}
+async function withTaskfoldFileLock(target, lockfilePath, section) {
+  const held = newHeldLock(lockfilePath);
+  const deadline = Date.now() + TASKFOLD_LOCK_WAIT_MS;
+  let release;
+  for (; ; ) {
+    try {
+      release = await import_proper_lockfile.default.lock(target, lockOptions(held));
+      break;
+    } catch (error) {
+      if (!isLockedError(error)) {
+        throw error;
+      }
+      const delay = retryDelayMs();
+      if (Date.now() + delay > deadline) {
+        throw new TaskfoldLockTimeoutError(lockfilePath);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  held.mtimeMs = fs5.statSync(lockfilePath).mtimeMs;
+  const outcome = runSection(held, section);
+  if (outcome.release) {
+    await release().catch(() => {
+    });
+  }
+  if ("error" in outcome) {
+    throw outcome.error;
+  }
+  return outcome.result;
+}
+function withTaskfoldFileLockSync(target, lockfilePath, section, waitMs = TASKFOLD_LOCK_WAIT_MS) {
+  const held = newHeldLock(lockfilePath);
+  const deadline = Date.now() + waitMs;
+  let release;
+  for (; ; ) {
+    try {
+      release = import_proper_lockfile.default.lockSync(target, lockOptions(held));
+      break;
+    } catch (error) {
+      if (!isLockedError(error)) {
+        throw error;
+      }
+      const delay = retryDelayMs();
+      if (Date.now() + delay > deadline) {
+        throw new TaskfoldLockTimeoutError(lockfilePath);
+      }
+      Atomics.wait(syncSleepCell, 0, 0, delay);
+    }
+  }
+  held.mtimeMs = fs5.statSync(lockfilePath).mtimeMs;
+  const outcome = runSection(held, section);
+  if (outcome.release) {
+    try {
+      release();
+    } catch {
+    }
+  }
+  if ("error" in outcome) {
+    throw outcome.error;
+  }
+  return outcome.result;
+}
+async function withTaskfoldGlobalLock(locksDir, section) {
+  const lockfilePath = taskfoldGlobalLockPath(locksDir);
+  return await withTaskfoldFileLock(lockfilePath.slice(0, -".lock".length), lockfilePath, section);
+}
+function withTaskfoldGlobalLockSync(locksDir, section) {
+  const lockfilePath = taskfoldGlobalLockPath(locksDir);
+  return withTaskfoldFileLockSync(lockfilePath.slice(0, -".lock".length), lockfilePath, section);
+}
+function tryWithTaskfoldGlobalLockSync(locksDir, section) {
+  const lockfilePath = taskfoldGlobalLockPath(locksDir);
+  return withTaskfoldFileLockSync(lockfilePath.slice(0, -".lock".length), lockfilePath, section, 0);
+}
+async function withTaskfoldCardLock(locksDir, cardKey, cardFilePath, section) {
+  return await withTaskfoldFileLock(cardFilePath, taskfoldCardLockPath(locksDir, cardKey), section);
+}
+function tryWithTaskfoldCardLockSync(locksDir, cardKey, cardFilePath, section) {
+  return withTaskfoldFileLockSync(cardFilePath, taskfoldCardLockPath(locksDir, cardKey), section, 0);
+}
+var import_proper_lockfile, TASKFOLD_LOCK_STALE_MS, TASKFOLD_LOCK_UPDATE_MS, TASKFOLD_LOCK_WAIT_MS, TASKFOLD_LOCK_RETRY_MIN_MS, TASKFOLD_LOCK_RETRY_MAX_MS, TaskfoldLockTimeoutError, TaskfoldLockCompromisedError, syncSleepCell;
+var init_file_store_locks = __esm({
+  "packages/core/src/file-store-locks.ts"() {
     "use strict";
+    import_proper_lockfile = __toESM(require_proper_lockfile(), 1);
+    TASKFOLD_LOCK_STALE_MS = 1e4;
+    TASKFOLD_LOCK_UPDATE_MS = TASKFOLD_LOCK_STALE_MS / 2;
+    TASKFOLD_LOCK_WAIT_MS = 2e3;
+    TASKFOLD_LOCK_RETRY_MIN_MS = 10;
+    TASKFOLD_LOCK_RETRY_MAX_MS = 50;
+    TaskfoldLockTimeoutError = class extends Error {
+      code = "ELOCKTIMEOUT";
+      constructor(lockfilePath) {
+        super(`taskfold file store: \u7B49\u9501\u8D85\u65F6\uFF08${TASKFOLD_LOCK_WAIT_MS}ms\uFF09\uFF1A${lockfilePath}`);
+        this.name = "TaskfoldLockTimeoutError";
+      }
+    };
+    TaskfoldLockCompromisedError = class extends Error {
+      code = "ECOMPROMISED";
+      constructor(lockfilePath) {
+        super(`taskfold file store: \u9501\u5DF2\u5931\u6548\uFF08\u88AB\u5176\u4ED6\u8FDB\u7A0B\u63A5\u7BA1\uFF09\uFF1A${lockfilePath}`);
+        this.name = "TaskfoldLockCompromisedError";
+      }
+    };
+    syncSleepCell = new Int32Array(new SharedArrayBuffer(4));
+  }
+});
+
+// packages/core/src/file-store-change-cursor.ts
+import fs6 from "node:fs";
+import { randomUUID as randomUUID2 } from "node:crypto";
+function parseLines(content) {
+  const records = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === "object" && "type" in parsed && (parsed.type === "epoch" || parsed.type === "reserve")) {
+        records.push(parsed);
+      }
+    } catch {
+    }
+  }
+  return records;
+}
+function readChangeLogRecords(changesLogPath) {
+  const content = readFileIfExists(changesLogPath);
+  return content ? parseLines(content) : [];
+}
+function firstEpoch(records) {
+  return records.find((record) => record.type === "epoch")?.epoch;
+}
+function lastCeiling(records) {
+  let base = 0;
+  for (const record of records) {
+    if (record.type === "reserve" && Number.isSafeInteger(record.ceiling) && record.ceiling > 0) {
+      base = record.ceiling;
+    }
+  }
+  return base;
+}
+function epochLine(epoch) {
+  return `${JSON.stringify({ type: "epoch", epoch })}
+`;
+}
+function reserveLine(ceiling) {
+  return `${JSON.stringify({ type: "reserve", ceiling })}
+`;
+}
+function reserveLocked(changesLogPath, count, guard) {
+  const records = readChangeLogRecords(changesLogPath);
+  const base = lastCeiling(records);
+  const existingEpoch = firstEpoch(records);
+  guard.assertHeld();
+  if (existingEpoch === void 0 || records.length >= CHANGE_LOG_COMPACT_THRESHOLD) {
+    const epoch = existingEpoch ?? randomUUID2();
+    writeFileAtomic(
+      changesLogPath,
+      `${epochLine(epoch)}${reserveLine(base + count)}`,
+      TASKFOLD_FILE_STORE_FILE_MODE,
+      guard.assertHeld
+    );
+    return { epoch, base };
+  }
+  fs6.appendFileSync(changesLogPath, reserveLine(base + count), { mode: TASKFOLD_FILE_STORE_FILE_MODE });
+  return { epoch: existingEpoch, base };
+}
+function ensureFileChangeEpoch(changesLogPath, locksDir, canWrite = true) {
+  const existing = firstEpoch(readChangeLogRecords(changesLogPath));
+  if (existing !== void 0) {
+    return existing;
+  }
+  if (!canWrite) {
+    return randomUUID2();
+  }
+  return withTaskfoldGlobalLockSync(locksDir, (guard) => {
+    const records = readChangeLogRecords(changesLogPath);
+    const raced = firstEpoch(records);
+    if (raced !== void 0) {
+      return raced;
+    }
+    const epoch = randomUUID2();
+    const ceiling = lastCeiling(records);
+    guard.assertHeld();
+    writeFileAtomic(
+      changesLogPath,
+      `${epochLine(epoch)}${ceiling > 0 ? reserveLine(ceiling) : ""}`,
+      TASKFOLD_FILE_STORE_FILE_MODE,
+      guard.assertHeld
+    );
+    return epoch;
+  });
+}
+function reserveFileChangeRevisions(changesLogPath, count, locksDir) {
+  return withTaskfoldGlobalLockSync(locksDir, (guard) => reserveLocked(changesLogPath, count, guard).base);
+}
+function readFileChangeHead(changesLogPath) {
+  const records = readChangeLogRecords(changesLogPath);
+  const epoch = firstEpoch(records);
+  const revision = lastCeiling(records);
+  return epoch !== void 0 && revision > 0 ? { epoch, revision } : void 0;
+}
+function isAhead(head, seen) {
+  return !seen || head.epoch !== seen.epoch || head.revision > seen.revision;
+}
+function createTaskfoldFileChangeSource(options) {
+  const { changesLogPath, locksDir, dataVersion } = options;
+  const canWrite = options.canWrite ?? (() => true);
+  let seen = readFileChangeHead(changesLogPath);
+  let externalDataVersion = dataVersion?.();
+  let recordPending = false;
+  function recorded({ epoch, base }) {
+    recordPending = false;
+    seen = { epoch, revision: base + 1 };
+    return seen;
+  }
+  function deferOnLockConflict(error) {
+    if (isTaskfoldLockConflictError(error)) {
+      recordPending = true;
+      return void 0;
+    }
+    throw error;
+  }
+  function recordOnce() {
+    if (!canWrite()) {
+      return void 0;
+    }
+    try {
+      return recorded(tryWithTaskfoldGlobalLockSync(locksDir, (guard) => reserveLocked(changesLogPath, 1, guard)));
+    } catch (error) {
+      return deferOnLockConflict(error);
+    }
+  }
+  return {
+    announce() {
+      const head = readFileChangeHead(changesLogPath);
+      if (head) {
+        seen = head;
+        return head;
+      }
+      return recordOnce();
+    },
+    async record() {
+      if (!canWrite()) {
+        return void 0;
+      }
+      try {
+        return recorded(await withTaskfoldGlobalLock(locksDir, (guard) => reserveLocked(changesLogPath, 1, guard)));
+      } catch (error) {
+        return deferOnLockConflict(error);
+      }
+    },
+    poll() {
+      if (dataVersion) {
+        const current = dataVersion();
+        if (current !== externalDataVersion) {
+          externalDataVersion = current;
+          recordPending = true;
+        }
+      }
+      if (recordPending) {
+        const change = recordOnce();
+        if (change) {
+          return change;
+        }
+      }
+      const head = readFileChangeHead(changesLogPath);
+      if (head && isAhead(head, seen)) {
+        seen = head;
+        return head;
+      }
+      return void 0;
+    }
+  };
+}
+var CHANGE_LOG_COMPACT_THRESHOLD;
+var init_file_store_change_cursor = __esm({
+  "packages/core/src/file-store-change-cursor.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_locks();
+    init_file_store_paths();
+    CHANGE_LOG_COMPACT_THRESHOLD = 1e3;
+  }
+});
+
+// packages/core/src/sdk-utils.ts
+import { timingSafeEqual } from "node:crypto";
+function asFiniteNumber(value) {
+  return Number.isFinite(value) ? value : void 0;
+}
+function asDateTimestampMs(value) {
+  const number = asFiniteNumber(value);
+  if (number === void 0 || number < -MAX_DATE_TIMESTAMP_MS || number > MAX_DATE_TIMESTAMP_MS) {
+    return void 0;
+  }
+  return number;
+}
+function asPositiveSafeInteger(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : void 0;
+}
+function isDateRepresentable(value) {
+  return asDateTimestampMs(value) !== void 0;
+}
+function isFutureDateTimestampMs(value, opts = {}) {
+  const timestampMs = asDateTimestampMs(value);
+  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
+  return timestampMs !== void 0 && nowMs !== void 0 && timestampMs > nowMs;
+}
+function resolveExpiresAtMsFromDurationMs(value, opts = {}) {
+  const durationMs = asPositiveSafeInteger(value);
+  if (durationMs === void 0) {
+    return void 0;
+  }
+  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
+  const bufferMs = asFiniteNumber(opts.bufferMs ?? 0);
+  if (nowMs === void 0 || bufferMs === void 0) {
+    return void 0;
+  }
+  const expiresAt = nowMs + durationMs - bufferMs;
+  if (!Number.isSafeInteger(expiresAt) || !isDateRepresentable(expiresAt)) {
+    return void 0;
+  }
+  const minRemainingMs = opts.minRemainingMs;
+  if (minRemainingMs === void 0) {
+    return expiresAt;
+  }
+  const minExpiresAt = nowMs + minRemainingMs;
+  if (!Number.isSafeInteger(minExpiresAt) || !isDateRepresentable(minExpiresAt)) {
+    return expiresAt;
+  }
+  return Math.max(expiresAt, minExpiresAt);
+}
+function padSecretBytes(bytes, length) {
+  if (bytes.length === length) {
+    return bytes;
+  }
+  const padded = Buffer.alloc(length);
+  bytes.copy(padded);
+  return padded;
+}
+function safeEqualSecret(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string") {
+    return false;
+  }
+  const providedBytes = Buffer.from(provided, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const byteLength = Math.max(providedBytes.length, expectedBytes.length);
+  if (byteLength === 0) {
+    return true;
+  }
+  return timingSafeEqual(
+    padSecretBytes(providedBytes, byteLength),
+    padSecretBytes(expectedBytes, byteLength)
+  ) && providedBytes.length === expectedBytes.length;
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isHighSurrogate(codeUnit) {
+  return codeUnit >= 55296 && codeUnit <= 56319;
+}
+function isLowSurrogate(codeUnit) {
+  return codeUnit >= 56320 && codeUnit <= 57343;
+}
+function sliceUtf16Safe(input, start, end) {
+  const len = input.length;
+  let from = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+  let to = end === void 0 ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+  if (to <= from) {
+    return "";
+  }
+  if (from > 0 && from < len) {
+    if (isLowSurrogate(input.charCodeAt(from)) && isHighSurrogate(input.charCodeAt(from - 1))) {
+      from += 1;
+    }
+  }
+  if (to > 0 && to < len) {
+    if (isHighSurrogate(input.charCodeAt(to - 1)) && isLowSurrogate(input.charCodeAt(to))) {
+      to -= 1;
+    }
+  }
+  return input.slice(from, to);
+}
+function truncateUtf16Safe(input, maxLen) {
+  const limit = Math.max(0, Math.floor(maxLen));
+  if (input.length <= limit) {
+    return input;
+  }
+  return sliceUtf16Safe(input, 0, limit);
+}
+function resolveGlobalSingleton(key, create) {
+  const globalStore = globalThis;
+  if (Object.hasOwn(globalStore, key)) {
+    return globalStore[key];
+  }
+  const value = create();
+  globalStore[key] = value;
+  return value;
+}
+var MAX_DATE_TIMESTAMP_MS;
+var init_sdk_utils = __esm({
+  "packages/core/src/sdk-utils.ts"() {
+    "use strict";
+    MAX_DATE_TIMESTAMP_MS = 864e13;
+  }
+});
+
+// packages/core/src/store-constants.ts
+function nextTaskfoldCardRevision(current) {
+  return Number.isSafeInteger(current) && current > 0 ? current + 1 : TASKFOLD_INITIAL_CARD_REVISION;
+}
+function isTaskfoldClaimReclaimable(claim, now) {
+  return Boolean(claim?.expiresAt && now - claim.expiresAt > CLAIM_RECLAIM_MS);
+}
+function secondsToDurationMs(seconds) {
+  const ms = Math.trunc(seconds) * 1e3;
+  return Number.isFinite(ms) ? Math.min(MAX_DATE_TIMESTAMP_MS, Math.max(1, ms)) : MAX_DATE_TIMESTAMP_MS;
+}
+function addTaskfoldDurationMs(now, durationMs) {
+  return resolveExpiresAtMsFromDurationMs(durationMs, { nowMs: now }) ?? MAX_DATE_TIMESTAMP_MS;
+}
+var POSITION_STEP, MAX_CARDS, MAX_CARD_EVENTS, MAX_CARD_ATTEMPTS, MAX_CARD_COMMENTS, MAX_CARD_LINKS, MAX_CARD_PROOF, MAX_CARD_ARTIFACTS, MAX_CARD_ATTACHMENTS, MAX_ATTACHMENT_ENTRIES, MAX_CARD_WORKER_LOGS, MAX_ATTACHMENT_BYTES, MAX_CARD_DIAGNOSTICS, MAX_CARD_NOTIFICATIONS, MAX_CARD_METADATA_BYTES, DEFAULT_CLAIM_TTL_MS, READY_STRANDED_MS, RUNNING_HEARTBEAT_STALE_MS, BLOCKED_TOO_LONG_MS, CLAIM_RECLAIM_MS, TASKFOLD_INITIAL_CARD_REVISION, TASKFOLD_PROMPT_VERSION;
+var init_store_constants = __esm({
+  "packages/core/src/store-constants.ts"() {
+    "use strict";
+    init_sdk_utils();
+    POSITION_STEP = 1e3;
+    MAX_CARDS = 2e3;
+    MAX_CARD_EVENTS = 50;
+    MAX_CARD_ATTEMPTS = 30;
+    MAX_CARD_COMMENTS = 50;
+    MAX_CARD_LINKS = 50;
+    MAX_CARD_PROOF = 40;
+    MAX_CARD_ARTIFACTS = 40;
+    MAX_CARD_ATTACHMENTS = 20;
+    MAX_ATTACHMENT_ENTRIES = MAX_CARDS * (MAX_CARD_ATTACHMENTS + 1);
+    MAX_CARD_WORKER_LOGS = 40;
+    MAX_ATTACHMENT_BYTES = 256 * 1024;
+    MAX_CARD_DIAGNOSTICS = 12;
+    MAX_CARD_NOTIFICATIONS = 20;
+    MAX_CARD_METADATA_BYTES = 24 * 1024;
+    DEFAULT_CLAIM_TTL_MS = 30 * 60 * 1e3;
+    READY_STRANDED_MS = 60 * 60 * 1e3;
+    RUNNING_HEARTBEAT_STALE_MS = 20 * 60 * 1e3;
+    BLOCKED_TOO_LONG_MS = 24 * 60 * 60 * 1e3;
+    CLAIM_RECLAIM_MS = 5 * 60 * 1e3;
+    TASKFOLD_INITIAL_CARD_REVISION = 1;
+    TASKFOLD_PROMPT_VERSION = 1;
+  }
+});
+
+// packages/core/src/file-store-card-runtime.ts
+import { createHash } from "node:crypto";
+import path5 from "node:path";
+function cardRuntimePath(runtimeCardsDir, cardKey) {
+  return path5.join(runtimeCardsDir, `${encodeURIComponent(cardKey)}.json`);
+}
+function hashCardFileContent(content) {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+}
+function readCardRuntime(filePath) {
+  const content = readFileIfExists(filePath);
+  if (content === void 0) {
+    return void 0;
+  }
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.version !== 1 || !Number.isSafeInteger(parsed.revision) || typeof parsed.contentHash !== "string" || typeof parsed.fields !== "object" || parsed.fields === null) {
+      return void 0;
+    }
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function writeCardRuntime(filePath, runtime, beforeRename) {
+  writeFileAtomic(filePath, `${JSON.stringify(runtime, null, 2)}
+`, void 0, beforeRename);
+}
+function removeCardRuntime(filePath) {
+  removeFileIfExists(filePath);
+}
+function splitCardRuntime(card) {
+  const mdCard = { ...card };
+  const fields = {};
+  delete mdCard.revision;
+  for (const key of TOP_LEVEL_RUNTIME_FIELDS) {
+    if (key in mdCard) {
+      if (mdCard[key] !== void 0) {
+        fields[key] = mdCard[key];
+      }
+      delete mdCard[key];
+    }
+  }
+  if (card.metadata && "claim" in card.metadata) {
+    const { claim, ...metadata } = card.metadata;
+    if (claim !== void 0) {
+      fields.claim = claim;
+    }
+    if (Object.keys(metadata).length > 0) {
+      mdCard.metadata = metadata;
+    } else {
+      delete mdCard.metadata;
+    }
+  }
+  return { mdCard, fields };
+}
+function mergeCardRuntime(parsed, runtime, revision) {
+  if (!runtime) {
+    return { ...parsed, revision };
+  }
+  const { mdCard } = splitCardRuntime(parsed);
+  const card = { ...mdCard, revision, updatedAt: Math.max(mdCard.updatedAt, runtime.updatedAt ?? 0) };
+  const { claim, ...topLevel } = runtime.fields;
+  Object.assign(card, topLevel);
+  if ("claim" in runtime.fields) {
+    card.metadata = { ...card.metadata, claim };
+  }
+  return card;
+}
+function resolveCardRuntime(mdContent, parsed, stored) {
+  const contentHash = hashCardFileContent(mdContent);
+  if (!stored) {
+    const legacyRevision = Number.isSafeInteger(parsed.revision) && parsed.revision > 0 ? nextTaskfoldCardRevision(parsed.revision) : TASKFOLD_INITIAL_CARD_REVISION;
+    return {
+      runtime: { version: 1, revision: legacyRevision, contentHash, fields: splitCardRuntime(parsed).fields },
+      changed: true,
+      external: true
+    };
+  }
+  if (stored.contentHash !== contentHash) {
+    return {
+      runtime: { ...stored, revision: nextTaskfoldCardRevision(stored.revision), contentHash },
+      changed: true,
+      external: true
+    };
+  }
+  return { runtime: stored, changed: false, external: false };
+}
+var TOP_LEVEL_RUNTIME_FIELDS;
+var init_file_store_card_runtime = __esm({
+  "packages/core/src/file-store-card-runtime.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_store_constants();
+    TOP_LEVEL_RUNTIME_FIELDS = ["sessionKey", "runId", "taskId", "execution", "events"];
   }
 });
 
@@ -160,6 +2698,3610 @@ var init_contract = __esm({
   }
 });
 
+// packages/core/src/markdown-card-format.ts
+function stringValue(row, key) {
+  const value = row[key];
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function numberValue(row, key) {
+  const value = row[key];
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  return void 0;
+}
+function requiredString(row, key) {
+  const value = stringValue(row, key);
+  if (!value) {
+    throw new Error(`markdown-card-format: \u7F3A\u5C11\u5FC5\u586B\u5B57\u6BB5 "${key}"`);
+  }
+  return value;
+}
+function optional(value) {
+  return Object.keys(value).length > 0 ? value : void 0;
+}
+function arrayOfStrings(row, key) {
+  const value = row[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item) => typeof item === "string");
+}
+function unescapeDoubleQuotedYaml(text) {
+  return text.replace(/\\(.)/g, (_match, ch) => {
+    switch (ch) {
+      case "n":
+        return "\n";
+      case "t":
+        return "	";
+      case "r":
+        return "\r";
+      case "0":
+        return "\0";
+      case "\\":
+        return "\\";
+      case '"':
+        return '"';
+      default:
+        return ch;
+    }
+  });
+}
+function parseYamlScalar(raw) {
+  const text = raw.trim();
+  if (text.length >= 2 && text[0] === "'" && text[text.length - 1] === "'") {
+    return text.slice(1, -1).replace(/''/g, "'");
+  }
+  if (text.length >= 2 && text[0] === '"' && text[text.length - 1] === '"') {
+    return unescapeDoubleQuotedYaml(text.slice(1, -1));
+  }
+  if (text === "") {
+    return "";
+  }
+  if (YAML_NULL_PATTERN.test(text)) {
+    return null;
+  }
+  if (YAML_BOOL_TRUE_PATTERN.test(text)) {
+    return true;
+  }
+  if (YAML_BOOL_FALSE_PATTERN.test(text)) {
+    return false;
+  }
+  if (YAML_INT_PATTERN.test(text)) {
+    return Number(text.replace(/_/g, ""));
+  }
+  if (YAML_FLOAT_PATTERN.test(text)) {
+    return Number(text.replace(/_/g, ""));
+  }
+  if (YAML_TIMESTAMP_DATE_PATTERN.test(text) || YAML_TIMESTAMP_DATETIME_PATTERN.test(text)) {
+    return text;
+  }
+  return text;
+}
+function isPlainSafeFirstChar(ch) {
+  if (ch === " " || ch === "	") {
+    return false;
+  }
+  return !"-?:,[]{}#&*!|=>'\"%@`".includes(ch);
+}
+function isPlainSafeChar(ch, prev) {
+  if (",[]{}:".includes(ch)) {
+    return false;
+  }
+  if (ch === "#") {
+    return prev !== void 0 && prev !== " " && prev !== "	";
+  }
+  return true;
+}
+function isPlainYamlScalar(text) {
+  if (text.length === 0 || text.includes("\n")) {
+    return false;
+  }
+  const firstChar = text[0] ?? "";
+  const lastChar = text[text.length - 1] ?? "";
+  if (!isPlainSafeFirstChar(firstChar) || lastChar === " " || lastChar === "	") {
+    return false;
+  }
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i] ?? "";
+    const prev = i > 0 ? text[i - 1] : void 0;
+    if (!isPlainSafeChar(ch, prev)) {
+      return false;
+    }
+  }
+  return true;
+}
+function isAmbiguousYamlScalar(text) {
+  return YAML_NULL_PATTERN.test(text) || YAML_BOOL_TRUE_PATTERN.test(text) || YAML_BOOL_FALSE_PATTERN.test(text) || YAML_INT_PATTERN.test(text) || YAML_FLOAT_PATTERN.test(text) || YAML_TIMESTAMP_DATE_PATTERN.test(text) || YAML_TIMESTAMP_DATETIME_PATTERN.test(text) || YAML_DEPRECATED_BOOLEAN_WORDS.has(text) || YAML_HEX_PATTERN.test(text) || YAML_BINARY_PATTERN.test(text) || YAML_LEADING_ZERO_OCTAL_PATTERN.test(text) || YAML_INF_PATTERN.test(text) || YAML_NAN_PATTERN.test(text) || YAML_SEXAGESIMAL_PATTERN.test(text);
+}
+function quoteYamlScalar(text) {
+  return `'${text.replace(/'/g, "''")}'`;
+}
+function stringifyYamlScalar(value) {
+  if (typeof value === "number") {
+    return String(value);
+  }
+  const normalized2 = value.replace(/\n/g, " ");
+  if (!isPlainYamlScalar(normalized2) || isAmbiguousYamlScalar(normalized2)) {
+    return quoteYamlScalar(normalized2);
+  }
+  return normalized2;
+}
+function stringifyFrontmatterBlock(entries) {
+  const lines = [];
+  for (const [key, value] of entries) {
+    if (value === void 0) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        lines.push(`${key}: []`);
+      } else {
+        lines.push(`${key}:`);
+        for (const item of value) {
+          lines.push(`  - ${stringifyYamlScalar(item)}`);
+        }
+      }
+      continue;
+    }
+    lines.push(`${key}: ${stringifyYamlScalar(value)}`);
+  }
+  return lines.join("\n");
+}
+function parseFrontmatterBlock(text) {
+  const lines = text.split("\n");
+  const result = {};
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (line.trim() === "") {
+      i += 1;
+      continue;
+    }
+    const match = FRONTMATTER_KEY_LINE_PATTERN.exec(line);
+    if (!match) {
+      i += 1;
+      continue;
+    }
+    const key = match[1] ?? "";
+    const rest = (match[2] ?? "").trim();
+    if (rest === "[]") {
+      result[key] = [];
+      i += 1;
+      continue;
+    }
+    if (rest !== "") {
+      result[key] = parseYamlScalar(rest);
+      i += 1;
+      continue;
+    }
+    const items = [];
+    let j = i + 1;
+    while (j < lines.length) {
+      const itemMatch = FRONTMATTER_LIST_ITEM_PATTERN.exec(lines[j] ?? "");
+      if (!itemMatch) {
+        break;
+      }
+      items.push(parseYamlScalar(itemMatch[1] ?? ""));
+      j += 1;
+    }
+    result[key] = items;
+    i = j;
+  }
+  return result;
+}
+function splitFrontmatter(markdown) {
+  const normalized2 = markdown.replace(/\r\n/g, "\n");
+  const lines = normalized2.split("\n");
+  if (lines[0] !== "---") {
+    throw new Error("markdown-card-format: \u6587\u4EF6\u5FC5\u987B\u4EE5 --- \u5F00\u5934\u7684 frontmatter \u5206\u9694\u7B26\u8D77\u59CB");
+  }
+  let closeIndex = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i] === "---") {
+      closeIndex = i;
+      break;
+    }
+  }
+  if (closeIndex === -1) {
+    throw new Error("markdown-card-format: frontmatter \u672A\u6B63\u786E\u4EE5 --- \u95ED\u5408");
+  }
+  const frontmatter = lines.slice(1, closeIndex).join("\n");
+  const body = lines.slice(closeIndex + 1).join("\n").replace(/^\n+/, "");
+  return { frontmatter, body };
+}
+function formatBacklogDateTime(epochMs) {
+  const date = new Date(epochMs);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+}
+function resolvePreciseTimestamp(payloadValue, backlogMinuteValue) {
+  if (typeof payloadValue !== "number" || !Number.isFinite(payloadValue)) {
+    return backlogMinuteValue;
+  }
+  return Math.floor(payloadValue / 6e4) * 6e4 === backlogMinuteValue ? payloadValue : backlogMinuteValue;
+}
+function parseBacklogDateTime(text) {
+  const match = BACKLOG_DATETIME_PATTERN.exec(text.trim());
+  if (!match) {
+    throw new Error(`markdown-card-format: \u65E0\u6CD5\u89E3\u6790\u65E5\u671F "${text}"\uFF0Cbacklog \u5B58\u50A8\u683C\u5F0F\u987B\u4E3A "YYYY-MM-DD HH:mm"`);
+  }
+  const [, year, month, day, hour, minute] = match;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
+}
+function findSectionFamilyBlock(lines, headingTitle, markerId) {
+  const heading = `## ${headingTitle}`.toLowerCase();
+  const begin = `<!-- SECTION:${markerId}:BEGIN -->`;
+  const end = `<!-- SECTION:${markerId}:END -->`;
+  for (let index = 0; index < lines.length; index += 1) {
+    if ((lines[index] ?? "").trimEnd().toLowerCase() !== heading) {
+      continue;
+    }
+    let beginIndex = index + 1;
+    while (beginIndex < lines.length && (lines[beginIndex] ?? "").trim() === "") {
+      beginIndex += 1;
+    }
+    if ((lines[beginIndex] ?? "").trimEnd() !== begin) {
+      continue;
+    }
+    let depth = 1;
+    let endIndex = beginIndex + 1;
+    while (endIndex < lines.length) {
+      const candidate = (lines[endIndex] ?? "").trimEnd();
+      if (candidate === begin) {
+        depth += 1;
+      } else if (candidate === end) {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
+      }
+      endIndex += 1;
+    }
+    if (depth !== 0) {
+      continue;
+    }
+    return { headingLineIndex: index, beginLineIndex: beginIndex, endLineIndex: endIndex };
+  }
+  return void 0;
+}
+function findFlatMarkerBlock(lines, headingTitle, markerId) {
+  const heading = `## ${headingTitle}`.toLowerCase();
+  const begin = `<!-- ${markerId}:BEGIN -->`;
+  const end = `<!-- ${markerId}:END -->`;
+  for (let index = 0; index < lines.length; index += 1) {
+    if ((lines[index] ?? "").trimEnd().toLowerCase() !== heading) {
+      continue;
+    }
+    let beginIndex = index + 1;
+    while (beginIndex < lines.length && (lines[beginIndex] ?? "").trim() === "") {
+      beginIndex += 1;
+    }
+    if ((lines[beginIndex] ?? "").trimEnd() !== begin) {
+      continue;
+    }
+    let endIndex = beginIndex + 1;
+    while (endIndex < lines.length && (lines[endIndex] ?? "").trimEnd() !== end) {
+      endIndex += 1;
+    }
+    if (endIndex >= lines.length) {
+      continue;
+    }
+    return { headingLineIndex: index, beginLineIndex: beginIndex, endLineIndex: endIndex };
+  }
+  return void 0;
+}
+function buildSentinelSectionBlock(title, markerId, body) {
+  const begin = `<!-- SECTION:${markerId}:BEGIN -->`;
+  const end = `<!-- SECTION:${markerId}:END -->`;
+  const normalizedBody = body.replace(/[ \t]+$/gm, "").replace(/\s+$/, "");
+  const content = normalizedBody ? `${normalizedBody}
+` : "";
+  return `## ${title}
+
+${begin}
+${content}${end}`;
+}
+function buildFlatMarkerBlockText(title, markerId, body) {
+  const begin = `<!-- ${markerId}:BEGIN -->`;
+  const end = `<!-- ${markerId}:END -->`;
+  const normalizedBody = body.replace(/\s+$/, "");
+  if (!normalizedBody) {
+    return "";
+  }
+  return [`## ${title}`, begin, ...normalizedBody.split("\n"), end].join("\n");
+}
+function escapeTaskfoldBodyText(text) {
+  return text.split("\n").map((line) => {
+    const trimmed = line.replace(/[ \t]+$/, "");
+    if (GENERIC_SENTINEL_LINE_PATTERN.test(trimmed) || KNOWN_HEADING_LINE_PATTERN.test(trimmed)) {
+      return ` ${line}`;
+    }
+    return line;
+  }).join("\n");
+}
+function formatCardFrontmatterId(displayId) {
+  return `${displayId.prefix.toUpperCase()}-${displayId.numericId}`;
+}
+function parseCardFrontmatterId(id) {
+  const match = FRONTMATTER_ID_PATTERN.exec(id.trim());
+  if (!match) {
+    return void 0;
+  }
+  return { prefix: (match[1] ?? "").toUpperCase(), numericId: Number(match[2]) };
+}
+function buildTaskfoldSectionJson(card) {
+  const payload = {
+    uuid: card.id,
+    revision: card.revision,
+    // 完整精度的排序值，见文件头决策 4。
+    position: card.position,
+    // 毫秒精度的创建时间（frontmatter 的 created_date 只到分钟），见 resolvePreciseTimestamp。
+    createdAt: card.createdAt
+  };
+  if (card.kind !== void 0) payload.kind = card.kind;
+  if (card.notes !== void 0) payload.notes = card.notes;
+  if (card.sessionKey !== void 0) payload.sessionKey = card.sessionKey;
+  if (card.runId !== void 0) payload.runId = card.runId;
+  if (card.taskId !== void 0) payload.taskId = card.taskId;
+  if (card.sourceUrl !== void 0) payload.sourceUrl = card.sourceUrl;
+  if (card.execution !== void 0) payload.execution = card.execution;
+  if (card.delivery !== void 0) payload.delivery = card.delivery;
+  if (card.sourceReferences !== void 0) payload.sourceReferences = card.sourceReferences;
+  if (card.startedAt !== void 0) payload.startedAt = card.startedAt;
+  if (card.completedAt !== void 0) payload.completedAt = card.completedAt;
+  if (card.events !== void 0) payload.events = card.events;
+  if (card.metadata !== void 0) payload.metadata = card.metadata;
+  return JSON.stringify(payload, null, 2);
+}
+function serializeMarkdownCard(doc) {
+  const { card, displayId, backlogOnly } = doc;
+  const frontmatterEntries = [
+    ["id", formatCardFrontmatterId(displayId)],
+    ["title", card.title],
+    ["status", card.status],
+    ["assignee", card.agentId ? [card.agentId] : []],
+    ["reporter", backlogOnly.reporter],
+    ["created_date", formatBacklogDateTime(card.createdAt)],
+    ["updated_date", formatBacklogDateTime(card.updatedAt)],
+    ["due_date", backlogOnly.dueDate],
+    ["labels", card.labels ?? []],
+    ["milestone", card.milestoneId],
+    ["dependencies", backlogOnly.dependencies ?? []],
+    [
+      "references",
+      backlogOnly.references && backlogOnly.references.length > 0 ? backlogOnly.references : void 0
+    ],
+    [
+      "documentation",
+      backlogOnly.documentation && backlogOnly.documentation.length > 0 ? backlogOnly.documentation : void 0
+    ],
+    [
+      "modified_files",
+      backlogOnly.modifiedFiles && backlogOnly.modifiedFiles.length > 0 ? backlogOnly.modifiedFiles : void 0
+    ],
+    ["parent_task_id", backlogOnly.parentTaskId],
+    ["subtasks", backlogOnly.subtasks && backlogOnly.subtasks.length > 0 ? backlogOnly.subtasks : void 0],
+    ["priority", card.priority],
+    ["type", backlogOnly.type],
+    ["project", backlogOnly.project],
+    // ⚠️ `position` 在 contract 里是必填 number，但外部写入者（人手工编辑 .md）可能让它
+    // 变成非有限值。写出 `ordinal: NaN` 会产生真 js-yaml 读不回来的非法 YAML
+    // （YAML 1.1 的非数只认 `.nan`），属静默且不可逆的文件损坏。非有限值时省略该键——
+    // 与 backlog 自己 `task.ordinal !== undefined && { ordinal }` 的白名单规则一致；
+    // 完整精度的 position 另存于 TASKFOLD 区块，信息不丢。
+    ["ordinal", Number.isFinite(card.position) ? Math.round(card.position) : void 0],
+    ["onStatusChange", backlogOnly.onStatusChange]
+  ];
+  const frontmatterText = stringifyFrontmatterBlock(frontmatterEntries);
+  const bodyParts = [];
+  bodyParts.push(buildSentinelSectionBlock("Description", "DESCRIPTION", escapeTaskfoldBodyText(doc.descriptionBody)));
+  if (doc.acceptanceCriteriaBody !== void 0) {
+    const acBlock = buildFlatMarkerBlockText("Acceptance Criteria", "AC", doc.acceptanceCriteriaBody);
+    if (acBlock) bodyParts.push(acBlock);
+  }
+  if (doc.definitionOfDoneBody !== void 0) {
+    const dodBlock = buildFlatMarkerBlockText("Definition of Done", "DOD", doc.definitionOfDoneBody);
+    if (dodBlock) bodyParts.push(dodBlock);
+  }
+  if (doc.trailing.trim()) {
+    bodyParts.push(doc.trailing.trim());
+  }
+  bodyParts.push(buildSentinelSectionBlock("Taskfold", "TASKFOLD", buildTaskfoldSectionJson(card)));
+  const body = bodyParts.filter((part) => part.length > 0).join("\n\n");
+  return `---
+${frontmatterText}
+---
+
+${body}
+`;
+}
+function parseMarkdownCard(markdown) {
+  const { frontmatter, body } = splitFrontmatter(markdown);
+  const fm = parseFrontmatterBlock(frontmatter);
+  const lines = body.split("\n");
+  const displayIdRaw = requiredString(fm, "id");
+  const displayId = parseCardFrontmatterId(displayIdRaw);
+  if (!displayId) {
+    throw new Error(`markdown-card-format: \u65E0\u6CD5\u89E3\u6790 frontmatter id "${displayIdRaw}"`);
+  }
+  const taskfoldBlock = findSectionFamilyBlock(lines, "Taskfold", "TASKFOLD");
+  if (!taskfoldBlock) {
+    throw new Error(
+      "markdown-card-format: \u7F3A\u5C11 <!-- SECTION:TASKFOLD:BEGIN/END --> \u533A\u5757\u2014\u2014\u8BE5\u6587\u4EF6\u5C1A\u672A\u88AB Taskfold \u5199\u5165\u8FC7\u3002\u628A\u4E00\u5F20\u7EAF backlog \u5361\u7247\u6536\u7F16\u4E3A Taskfold \u5361\u7247\uFF08\u5206\u914D UUID/revision \u5E76\u9996\u6B21\u5199\u5165 TASKFOLD \u533A\u5757\uFF09\u5C5E\u4E8E\u5B58\u50A8\u540E\u7AEF\u5C42\u7684\u804C\u8D23\uFF0C\u4E0D\u5728\u683C\u5F0F\u5C42\u8303\u56F4\u5185\uFF0C\u672C\u51FD\u6570\u5BF9\u6B64\u76F4\u63A5\u629B\u9519\u3002"
+    );
+  }
+  const taskfoldJsonText = lines.slice(taskfoldBlock.beginLineIndex + 1, taskfoldBlock.endLineIndex).join("\n");
+  const payload = JSON.parse(taskfoldJsonText);
+  const status = requiredString(fm, "status");
+  const title = requiredString(fm, "title");
+  const priorityRaw = stringValue(fm, "priority");
+  const priority = priorityRaw && TASKFOLD_PRIORITIES.includes(priorityRaw) ? priorityRaw : DEFAULT_PRIORITY;
+  const assignee = arrayOfStrings(fm, "assignee");
+  const agentId = assignee[0];
+  const labels = arrayOfStrings(fm, "labels");
+  const milestoneId = stringValue(fm, "milestone");
+  const createdAt = resolvePreciseTimestamp(
+    payload.createdAt,
+    parseBacklogDateTime(requiredString(fm, "created_date"))
+  );
+  const updatedDateRaw = stringValue(fm, "updated_date");
+  const updatedAt = updatedDateRaw ? parseBacklogDateTime(updatedDateRaw) : createdAt;
+  const positionFromPayload = typeof payload.position === "number" ? payload.position : void 0;
+  const ordinal = numberValue(fm, "ordinal");
+  const position = positionFromPayload ?? ordinal ?? 0;
+  const uuid = typeof payload.uuid === "string" && payload.uuid ? payload.uuid : displayIdRaw;
+  const revision = typeof payload.revision === "number" ? payload.revision : 0;
+  const card = {
+    id: uuid,
+    title,
+    status,
+    priority,
+    labels,
+    position,
+    createdAt,
+    updatedAt,
+    revision,
+    ...agentId ? { agentId } : {},
+    ...milestoneId ? { milestoneId } : {},
+    ...payload.kind !== void 0 ? { kind: payload.kind } : {},
+    ...payload.notes !== void 0 ? { notes: payload.notes } : {},
+    ...payload.sessionKey !== void 0 ? { sessionKey: payload.sessionKey } : {},
+    ...payload.runId !== void 0 ? { runId: payload.runId } : {},
+    ...payload.taskId !== void 0 ? { taskId: payload.taskId } : {},
+    ...payload.sourceUrl !== void 0 ? { sourceUrl: payload.sourceUrl } : {},
+    ...payload.execution !== void 0 ? { execution: payload.execution } : {},
+    ...payload.delivery !== void 0 ? { delivery: payload.delivery } : {},
+    ...payload.sourceReferences !== void 0 ? { sourceReferences: payload.sourceReferences } : {},
+    ...payload.startedAt !== void 0 ? { startedAt: payload.startedAt } : {},
+    ...payload.completedAt !== void 0 ? { completedAt: payload.completedAt } : {},
+    ...payload.events !== void 0 ? { events: payload.events } : {},
+    ...payload.metadata !== void 0 ? { metadata: payload.metadata } : {}
+  };
+  const backlogOnlyRaw = {
+    ...stringValue(fm, "reporter") ? { reporter: stringValue(fm, "reporter") } : {},
+    ...stringValue(fm, "due_date") ? { dueDate: stringValue(fm, "due_date") } : {},
+    ...arrayOfStrings(fm, "references").length ? { references: arrayOfStrings(fm, "references") } : {},
+    ...arrayOfStrings(fm, "documentation").length ? { documentation: arrayOfStrings(fm, "documentation") } : {},
+    ...arrayOfStrings(fm, "modified_files").length ? { modifiedFiles: arrayOfStrings(fm, "modified_files") } : {},
+    ...stringValue(fm, "parent_task_id") ? { parentTaskId: stringValue(fm, "parent_task_id") } : {},
+    ...arrayOfStrings(fm, "subtasks").length ? { subtasks: arrayOfStrings(fm, "subtasks") } : {},
+    ...stringValue(fm, "type") ? { type: stringValue(fm, "type") } : {},
+    ...stringValue(fm, "project") ? { project: stringValue(fm, "project") } : {},
+    ...stringValue(fm, "onStatusChange") ? { onStatusChange: stringValue(fm, "onStatusChange") } : {},
+    ...arrayOfStrings(fm, "dependencies").length ? { dependencies: arrayOfStrings(fm, "dependencies") } : {}
+  };
+  const backlogOnly = optional(backlogOnlyRaw) ?? {};
+  const descriptionBlock = findSectionFamilyBlock(lines, "Description", "DESCRIPTION");
+  const descriptionBody = descriptionBlock ? lines.slice(descriptionBlock.beginLineIndex + 1, descriptionBlock.endLineIndex).join("\n") : "";
+  const acBlock = findFlatMarkerBlock(lines, "Acceptance Criteria", "AC");
+  const acceptanceCriteriaBody = acBlock ? lines.slice(acBlock.beginLineIndex + 1, acBlock.endLineIndex).join("\n") : void 0;
+  const dodBlock = findFlatMarkerBlock(lines, "Definition of Done", "DOD");
+  const definitionOfDoneBody = dodBlock ? lines.slice(dodBlock.beginLineIndex + 1, dodBlock.endLineIndex).join("\n") : void 0;
+  const consumedLineIndexes = /* @__PURE__ */ new Set();
+  const markConsumed = (block) => {
+    if (!block) return;
+    for (let i = block.headingLineIndex; i <= block.endLineIndex; i += 1) {
+      consumedLineIndexes.add(i);
+    }
+  };
+  markConsumed(descriptionBlock);
+  markConsumed(acBlock);
+  markConsumed(dodBlock);
+  markConsumed(taskfoldBlock);
+  const trailing = lines.filter((_line, index) => !consumedLineIndexes.has(index)).join("\n").trim();
+  return {
+    card,
+    displayId,
+    backlogOnly,
+    descriptionBody,
+    acceptanceCriteriaBody,
+    definitionOfDoneBody,
+    trailing
+  };
+}
+function extractTaskfoldSectionUuid(markdown) {
+  try {
+    const { body } = splitFrontmatter(markdown);
+    const lines = body.split("\n");
+    const block = findSectionFamilyBlock(lines, "Taskfold", "TASKFOLD");
+    if (!block) {
+      return void 0;
+    }
+    const jsonText = lines.slice(block.beginLineIndex + 1, block.endLineIndex).join("\n");
+    const payload = JSON.parse(jsonText);
+    return typeof payload.uuid === "string" && payload.uuid ? payload.uuid : void 0;
+  } catch {
+    return void 0;
+  }
+}
+var YAML_NULL_PATTERN, YAML_BOOL_TRUE_PATTERN, YAML_BOOL_FALSE_PATTERN, YAML_INT_PATTERN, YAML_FLOAT_PATTERN, YAML_TIMESTAMP_DATE_PATTERN, YAML_TIMESTAMP_DATETIME_PATTERN, YAML_HEX_PATTERN, YAML_BINARY_PATTERN, YAML_LEADING_ZERO_OCTAL_PATTERN, YAML_INF_PATTERN, YAML_NAN_PATTERN, YAML_SEXAGESIMAL_PATTERN, YAML_DEPRECATED_BOOLEAN_WORDS, FRONTMATTER_KEY_LINE_PATTERN, FRONTMATTER_LIST_ITEM_PATTERN, BACKLOG_DATETIME_PATTERN, GENERIC_SENTINEL_LINE_PATTERN, KNOWN_HEADING_LINE_PATTERN, FRONTMATTER_ID_PATTERN, DEFAULT_PRIORITY;
+var init_markdown_card_format = __esm({
+  "packages/core/src/markdown-card-format.ts"() {
+    "use strict";
+    init_contract();
+    YAML_NULL_PATTERN = /^(~|null|Null|NULL)$/;
+    YAML_BOOL_TRUE_PATTERN = /^(true|True|TRUE)$/;
+    YAML_BOOL_FALSE_PATTERN = /^(false|False|FALSE)$/;
+    YAML_INT_PATTERN = /^[-+]?(0|[1-9][0-9_]*)$/;
+    YAML_FLOAT_PATTERN = /^[-+]?(?:[0-9][0-9_]*)?\.[0-9_]+(?:[eE][-+]?[0-9]+)?$|^[-+]?[0-9][0-9_]*[eE][-+]?[0-9]+$/;
+    YAML_TIMESTAMP_DATE_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+    YAML_TIMESTAMP_DATETIME_PATTERN = /^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}[Tt ][0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?([ \t]*(Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?$/;
+    YAML_HEX_PATTERN = /^[-+]?0x[0-9a-fA-F_]+$/;
+    YAML_BINARY_PATTERN = /^[-+]?0b[01_]+$/;
+    YAML_LEADING_ZERO_OCTAL_PATTERN = /^[-+]?0[0-7_]+$/;
+    YAML_INF_PATTERN = /^[-+]?\.(inf|Inf|INF)$/;
+    YAML_NAN_PATTERN = /^\.(nan|NaN|NAN)$/;
+    YAML_SEXAGESIMAL_PATTERN = /^[-+]?[0-9][0-9_]*(:[0-5]?[0-9])+(\.[0-9_]*)?$/;
+    YAML_DEPRECATED_BOOLEAN_WORDS = /* @__PURE__ */ new Set([
+      "y",
+      "Y",
+      "yes",
+      "Yes",
+      "YES",
+      "n",
+      "N",
+      "no",
+      "No",
+      "NO",
+      "on",
+      "On",
+      "ON",
+      "off",
+      "Off",
+      "OFF"
+    ]);
+    FRONTMATTER_KEY_LINE_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*):[ \t]?(.*)$/;
+    FRONTMATTER_LIST_ITEM_PATTERN = /^ {2}- (.*)$/;
+    BACKLOG_DATETIME_PATTERN = /^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2})$/;
+    GENERIC_SENTINEL_LINE_PATTERN = /^<!-- (SECTION:[A-Z][A-Z0-9_]*|COMMENTS|COMMENT|AC|DOD):(BEGIN|END) -->[\t ]*$/;
+    KNOWN_HEADING_LINE_PATTERN = /^## (Description|Acceptance Criteria|Acceptance Criteria \(Optional\)|Definition of Done|Implementation Plan|Implementation Plan \(Optional\)|Implementation Notes|Implementation Notes \(Optional\)|Notes|Notes & Comments \(Optional\)|Comments|Final Summary)\s*$/i;
+    FRONTMATTER_ID_PATTERN = /^([A-Za-z]+)-([0-9]+)$/;
+    DEFAULT_PRIORITY = "normal";
+  }
+});
+
+// packages/core/src/file-store-reconcile.ts
+import fs7 from "node:fs";
+import path6 from "node:path";
+function listFilesWithExtension(dir, extension) {
+  return listFileNamesSafe(dir).filter((name) => name.endsWith(extension));
+}
+function statFingerprint(filePath) {
+  try {
+    const stat2 = fs7.statSync(filePath);
+    return `${stat2.mtimeMs}:${stat2.size}`;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return void 0;
+    }
+    throw err;
+  }
+}
+function computeFingerprint(dir, extension) {
+  const snapshot = /* @__PURE__ */ new Map();
+  for (const fileName of listFilesWithExtension(dir, extension)) {
+    const fingerprint = statFingerprint(path6.join(dir, fileName));
+    if (fingerprint !== void 0) {
+      snapshot.set(fileName, fingerprint);
+    }
+  }
+  return snapshot;
+}
+function fingerprintsEqual(a, b) {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const [fileName, value] of a) {
+    if (b.get(fileName) !== value) {
+      return false;
+    }
+  }
+  return true;
+}
+function cardIdOfRuntimeFile(fileName) {
+  try {
+    return decodeURIComponent(fileName.slice(0, -RUNTIME_EXTENSION.length));
+  } catch {
+    return void 0;
+  }
+}
+function cardIdOf(content, codec) {
+  const uuid = extractTaskfoldSectionUuid(content);
+  if (uuid !== void 0) {
+    return uuid;
+  }
+  try {
+    return codec.parse(content).id;
+  } catch {
+    return void 0;
+  }
+}
+function createTaskfoldExternalChangeReconciler(options) {
+  const { cardsDir, runtimeCardsDir, locksDir, codec } = options;
+  const canWrite = options.canWrite ?? (() => true);
+  let version = 0;
+  let mdSnapshot = /* @__PURE__ */ new Map();
+  let runtimeFingerprint = /* @__PURE__ */ new Map();
+  let orphanIds = /* @__PURE__ */ new Set();
+  let rescanPending = false;
+  function restampUnderLock(cardId, filePath) {
+    try {
+      return tryWithTaskfoldCardLockSync(locksDir, cardId, filePath, (guard) => {
+        const content = readFileIfExists(filePath);
+        if (content === void 0) {
+          return false;
+        }
+        let parsed;
+        try {
+          parsed = codec.parse(content);
+        } catch {
+          return false;
+        }
+        const runtimePath = cardRuntimePath(runtimeCardsDir, cardId);
+        const { runtime, changed } = resolveCardRuntime(content, parsed, readCardRuntime(runtimePath));
+        if (changed) {
+          writeCardRuntime(runtimePath, runtime, guard.assertHeld);
+        }
+        return changed;
+      });
+    } catch (error) {
+      if (isTaskfoldLockConflictError(error)) {
+        return void 0;
+      }
+      throw error;
+    }
+  }
+  function scanAndRestamp() {
+    let external = false;
+    let incomplete = false;
+    let writable;
+    const nextSnapshot = /* @__PURE__ */ new Map();
+    for (const fileName of listFilesWithExtension(cardsDir, CARD_EXTENSION)) {
+      const filePath = path6.join(cardsDir, fileName);
+      const fingerprint = statFingerprint(filePath);
+      const content = readFileIfExists(filePath);
+      if (fingerprint === void 0 || content === void 0) {
+        continue;
+      }
+      const cardId = cardIdOf(content, codec);
+      nextSnapshot.set(fileName, { fingerprint, cardId });
+      if (cardId === void 0) {
+        if (mdSnapshot.get(fileName)?.fingerprint !== fingerprint) {
+          external = true;
+        }
+        continue;
+      }
+      const stored = readCardRuntime(cardRuntimePath(runtimeCardsDir, cardId));
+      if (stored && stored.contentHash === hashCardFileContent(content)) {
+        continue;
+      }
+      writable ??= canWrite();
+      if (!writable) {
+        continue;
+      }
+      const restamped = restampUnderLock(cardId, filePath);
+      if (restamped === void 0) {
+        incomplete = true;
+      } else if (restamped) {
+        external = true;
+      }
+    }
+    const liveIds = new Set([...nextSnapshot.values()].map((entry) => entry.cardId));
+    const nextOrphanIds = /* @__PURE__ */ new Set();
+    for (const fileName of listFilesWithExtension(runtimeCardsDir, RUNTIME_EXTENSION)) {
+      const cardId = cardIdOfRuntimeFile(fileName);
+      if (cardId === void 0 || liveIds.has(cardId)) {
+        continue;
+      }
+      nextOrphanIds.add(cardId);
+      if (!orphanIds.has(cardId)) {
+        external = true;
+      }
+    }
+    orphanIds = nextOrphanIds;
+    mdSnapshot = nextSnapshot;
+    runtimeFingerprint = computeFingerprint(runtimeCardsDir, RUNTIME_EXTENSION);
+    rescanPending = incomplete;
+    return external;
+  }
+  function mdFingerprintUnchanged() {
+    const current = computeFingerprint(cardsDir, CARD_EXTENSION);
+    if (current.size !== mdSnapshot.size) {
+      return false;
+    }
+    for (const [fileName, value] of current) {
+      if (mdSnapshot.get(fileName)?.fingerprint !== value) {
+        return false;
+      }
+    }
+    return true;
+  }
+  scanAndRestamp();
+  return {
+    dataVersion() {
+      if (!rescanPending && mdFingerprintUnchanged() && fingerprintsEqual(computeFingerprint(runtimeCardsDir, RUNTIME_EXTENSION), runtimeFingerprint)) {
+        return version;
+      }
+      if (scanAndRestamp()) {
+        version += 1;
+      }
+      return version;
+    }
+  };
+}
+var CARD_EXTENSION, RUNTIME_EXTENSION;
+var init_file_store_reconcile = __esm({
+  "packages/core/src/file-store-reconcile.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_card_runtime();
+    init_file_store_locks();
+    init_markdown_card_format();
+    CARD_EXTENSION = ".md";
+    RUNTIME_EXTENSION = ".json";
+  }
+});
+
+// packages/core/src/markdown-milestone-format.ts
+function buildTaskfoldMilestoneSectionJson(milestone) {
+  const payload = {
+    uuid: milestone.id,
+    boardId: milestone.boardId,
+    // 完整精度的排序值，同卡片的「决策 4」：frontmatter 的 ordinal 只是四舍五入的整数
+    // 投影，给人看/给未来的排序 UI 用；权威值存在这里。
+    position: milestone.position,
+    // 毫秒精度的创建时间，同卡片（markdown-card-format.ts 的 resolvePreciseTimestamp）。
+    createdAt: milestone.createdAt
+  };
+  if (milestone.color !== void 0) payload.color = milestone.color;
+  if (milestone.completedAt !== void 0) payload.completedAt = milestone.completedAt;
+  if (milestone.archivedAt !== void 0) payload.archivedAt = milestone.archivedAt;
+  return JSON.stringify(payload, null, 2);
+}
+function serializeMarkdownMilestone(doc) {
+  const { milestone, displayId } = doc;
+  const frontmatterEntries = [
+    ["id", formatCardFrontmatterId(displayId)],
+    ["title", milestone.title],
+    // state 不校验值域，照抄卡片格式层「决策 7」对 status 的做法。
+    ["state", milestone.state],
+    ["created_date", formatBacklogDateTime(milestone.createdAt)],
+    ["updated_date", formatBacklogDateTime(milestone.updatedAt)],
+    ["ordinal", Math.round(milestone.position)]
+  ];
+  const frontmatterText = stringifyFrontmatterBlock(frontmatterEntries);
+  const bodyParts = [];
+  bodyParts.push(
+    buildSentinelSectionBlock(
+      "Description",
+      "DESCRIPTION",
+      escapeTaskfoldBodyText(milestone.description ?? "")
+    )
+  );
+  if (doc.trailing.trim()) {
+    bodyParts.push(doc.trailing.trim());
+  }
+  bodyParts.push(buildSentinelSectionBlock("Taskfold", "TASKFOLD", buildTaskfoldMilestoneSectionJson(milestone)));
+  const body = bodyParts.filter((part) => part.length > 0).join("\n\n");
+  return `---
+${frontmatterText}
+---
+
+${body}
+`;
+}
+function parseMarkdownMilestone(markdown) {
+  const { frontmatter, body } = splitFrontmatter(markdown);
+  const fm = parseFrontmatterBlock(frontmatter);
+  const lines = body.split("\n");
+  const displayIdRaw = requiredString(fm, "id");
+  const displayId = parseCardFrontmatterId(displayIdRaw);
+  if (!displayId) {
+    throw new Error(`markdown-milestone-format: \u65E0\u6CD5\u89E3\u6790 frontmatter id "${displayIdRaw}"`);
+  }
+  const taskfoldBlock = findSectionFamilyBlock(lines, "Taskfold", "TASKFOLD");
+  if (!taskfoldBlock) {
+    throw new Error(
+      "markdown-milestone-format: \u7F3A\u5C11 <!-- SECTION:TASKFOLD:BEGIN/END --> \u533A\u5757\u2014\u2014\u8BE5\u6587\u4EF6\u5C1A\u672A\u88AB Taskfold \u5199\u5165\u8FC7\u3002\u628A\u4E00\u4EFD\u975E Taskfold \u5199\u5165\u7684\u6587\u4EF6\u6536\u7F16\u4E3A\u91CC\u7A0B\u7891\u6587\u4EF6\u4E0D\u5728\u683C\u5F0F\u5C42\u8303\u56F4\u5185\uFF0C\u672C\u51FD\u6570\u5BF9\u6B64\u76F4\u63A5\u629B\u9519\u3002"
+    );
+  }
+  const taskfoldJsonText = lines.slice(taskfoldBlock.beginLineIndex + 1, taskfoldBlock.endLineIndex).join("\n");
+  const payload = JSON.parse(taskfoldJsonText);
+  const title = requiredString(fm, "title");
+  const state = requiredString(fm, "state");
+  const createdAt = resolvePreciseTimestamp(
+    payload.createdAt,
+    parseBacklogDateTime(requiredString(fm, "created_date"))
+  );
+  const updatedDateRaw = stringValue(fm, "updated_date");
+  const updatedAt = updatedDateRaw ? parseBacklogDateTime(updatedDateRaw) : createdAt;
+  const positionFromPayload = typeof payload.position === "number" ? payload.position : void 0;
+  const ordinal = numberValue(fm, "ordinal");
+  const position = positionFromPayload ?? ordinal ?? 0;
+  const uuid = typeof payload.uuid === "string" && payload.uuid ? payload.uuid : displayIdRaw;
+  const boardId = typeof payload.boardId === "string" && payload.boardId ? payload.boardId : "default";
+  const descriptionBlock = findSectionFamilyBlock(lines, "Description", "DESCRIPTION");
+  const descriptionBody = descriptionBlock ? lines.slice(descriptionBlock.beginLineIndex + 1, descriptionBlock.endLineIndex).join("\n") : "";
+  const milestone = {
+    id: uuid,
+    boardId,
+    title,
+    ...descriptionBody !== "" ? { description: descriptionBody } : {},
+    position,
+    state,
+    createdAt,
+    updatedAt,
+    ...typeof payload.color === "string" ? { color: payload.color } : {},
+    ...typeof payload.completedAt === "number" ? { completedAt: payload.completedAt } : {},
+    ...typeof payload.archivedAt === "number" ? { archivedAt: payload.archivedAt } : {}
+  };
+  const consumedLineIndexes = /* @__PURE__ */ new Set();
+  const markConsumed = (block) => {
+    if (!block) return;
+    for (let i = block.headingLineIndex; i <= block.endLineIndex; i += 1) {
+      consumedLineIndexes.add(i);
+    }
+  };
+  markConsumed(descriptionBlock);
+  markConsumed(taskfoldBlock);
+  const trailing = lines.filter((_line, index) => !consumedLineIndexes.has(index)).join("\n").trim();
+  return { milestone, displayId, trailing };
+}
+var init_markdown_milestone_format = __esm({
+  "packages/core/src/markdown-milestone-format.ts"() {
+    "use strict";
+    init_markdown_card_format();
+  }
+});
+
+// packages/core/src/file-store-codec.ts
+function fallbackCardDisplayId(card) {
+  return parseCardFrontmatterId(card.id) ?? { prefix: "CARD", numericId: 0 };
+}
+function createMarkdownCardCodec() {
+  return {
+    serialize(card, previousContent, displayIdHint) {
+      const previous = previousContent === void 0 ? void 0 : parseMarkdownCard(previousContent);
+      const doc = {
+        card,
+        displayId: previous?.displayId ?? displayIdHint ?? fallbackCardDisplayId(card),
+        backlogOnly: previous?.backlogOnly ?? {},
+        descriptionBody: previous?.descriptionBody ?? "",
+        acceptanceCriteriaBody: previous?.acceptanceCriteriaBody,
+        definitionOfDoneBody: previous?.definitionOfDoneBody,
+        trailing: previous?.trailing ?? ""
+      };
+      return serializeMarkdownCard(doc);
+    },
+    parse(content) {
+      return parseMarkdownCard(content).card;
+    }
+  };
+}
+function fallbackMilestoneDisplayId(milestone) {
+  return parseCardFrontmatterId(milestone.id) ?? { prefix: "M", numericId: 0 };
+}
+function createMarkdownMilestoneCodec() {
+  return {
+    serialize(milestone, previousContent, displayIdHint) {
+      const previous = previousContent === void 0 ? void 0 : parseMarkdownMilestone(previousContent);
+      const doc = {
+        milestone,
+        displayId: previous?.displayId ?? displayIdHint ?? fallbackMilestoneDisplayId(milestone),
+        trailing: previous?.trailing ?? ""
+      };
+      return serializeMarkdownMilestone(doc);
+    },
+    parse(content) {
+      return parseMarkdownMilestone(content).milestone;
+    }
+  };
+}
+var init_file_store_codec = __esm({
+  "packages/core/src/file-store-codec.ts"() {
+    "use strict";
+    init_markdown_card_format();
+    init_markdown_milestone_format();
+  }
+});
+
+// packages/core/src/file-store-card-id.ts
+import path7 from "node:path";
+function allocateNextOrdinalId(options) {
+  const canonicalPrefix = options.prefix.toUpperCase();
+  let max = 0;
+  for (const dir of options.directories) {
+    for (const fileName of listFileNamesSafe(dir)) {
+      const stem = fileName.slice(0, fileName.length - path7.extname(fileName).length);
+      const parsed = parseCanonicalOrdinalId(filenameIdToken(stem));
+      if (parsed && parsed.prefix === canonicalPrefix) {
+        max = Math.max(max, parsed.number);
+      }
+    }
+  }
+  return `${canonicalPrefix}-${max + 1}`;
+}
+function allocateNextTaskfoldCardId(cardsDir, archiveCardsDir) {
+  return allocateNextOrdinalId({ prefix: "CARD", directories: [cardsDir, archiveCardsDir] });
+}
+function allocateNextTaskfoldMilestoneId(milestonesDir) {
+  return allocateNextOrdinalId({ prefix: "M", directories: [milestonesDir] });
+}
+var init_file_store_card_id = __esm({
+  "packages/core/src/file-store-card-id.ts"() {
+    "use strict";
+    init_file_store_atomic();
+  }
+});
+
+// packages/core/src/file-store-cards.ts
+import path8 from "node:path";
+function assertValidCardPayload(key, value) {
+  if (value.version !== 1 || value.card.id !== key) {
+    throw new Error("invalid taskfold card payload");
+  }
+}
+function cardFileName(displayId, title) {
+  return `${displayId.toLowerCase()} - ${sanitizeFilenameSegment(title)}${CARD_EXTENSION2}`;
+}
+function findCardFilePath(cardsDir, id) {
+  for (const fileName of listFileNamesSafe(cardsDir)) {
+    if (!fileName.endsWith(CARD_EXTENSION2)) {
+      continue;
+    }
+    const filePath = path8.join(cardsDir, fileName);
+    const content = readFileIfExists(filePath);
+    if (content === void 0) {
+      continue;
+    }
+    const uuid = extractTaskfoldSectionUuid(content);
+    if (uuid !== void 0 && sameEntityId(uuid, id)) {
+      return filePath;
+    }
+  }
+  return void 0;
+}
+function allocateNewCardFile(cardsDir, archiveCardsDir, card) {
+  const displayIdText = allocateNextTaskfoldCardId(cardsDir, archiveCardsDir);
+  const displayId = parseCardFrontmatterId(displayIdText);
+  if (!displayId) {
+    throw new Error(`taskfold file store: \u5206\u914D\u5668\u8FD4\u56DE\u4E86\u65E0\u6CD5\u89E3\u6790\u7684\u5C55\u793A ID "${displayIdText}"`);
+  }
+  return { path: path8.join(cardsDir, cardFileName(displayIdText, card.title)), displayId };
+}
+function readCardStateFromContent(content, codec, runtimeCardsDir, key) {
+  const parsed = codec.parse(content);
+  const stored = readCardRuntime(cardRuntimePath(runtimeCardsDir, key ?? parsed.id));
+  const { runtime, changed } = resolveCardRuntime(content, parsed, stored);
+  return {
+    content,
+    card: mergeCardRuntime(parsed, stored, runtime.revision),
+    runtime,
+    runtimeChanged: changed
+  };
+}
+function readCardState(filePath, codec, runtimeCardsDir, key) {
+  const content = readFileIfExists(filePath);
+  return content === void 0 ? void 0 : readCardStateFromContent(content, codec, runtimeCardsDir, key);
+}
+function writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, existingPath, guard, previousContent) {
+  const { mdCard, fields } = splitCardRuntime(value.card);
+  let written;
+  if (existingPath) {
+    const baseline = previousContent ?? readFileIfExists(existingPath);
+    const unchanged = baseline !== void 0 && codec.serialize({ ...mdCard, updatedAt: codec.parse(baseline).updatedAt }, baseline) === baseline;
+    if (unchanged) {
+      written = { path: existingPath, content: baseline };
+    } else {
+      const content = codec.serialize(mdCard, baseline);
+      writeFileAtomic(existingPath, content, void 0, guard.assertHeld);
+      written = { path: existingPath, content };
+    }
+  } else {
+    const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
+    const content = codec.serialize(mdCard, previousContent, displayId);
+    writeFileAtomic(newPath, content, void 0, guard.assertHeld);
+    written = { path: newPath, content };
+  }
+  writeCardRuntime(
+    cardRuntimePath(runtimeCardsDir, value.card.id),
+    {
+      version: 1,
+      revision: value.card.revision,
+      contentHash: hashCardFileContent(written.content),
+      updatedAt: value.card.updatedAt,
+      fields
+    },
+    guard.assertHeld
+  );
+  return written;
+}
+function createTaskfoldFileCardStore(options) {
+  const { cardsDir, archiveCardsDir, attachmentsDir, codec, locksDir, runtimeCardsDir } = options;
+  async function overwriteExistingCard(key, filePath, value) {
+    await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+      const current = readCardState(filePath, codec, runtimeCardsDir, key);
+      if (current) {
+        value.card.revision = Math.max(value.card.revision, current.runtime.revision + 1);
+      }
+      writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, filePath, guard, current?.content);
+    });
+  }
+  return {
+    async register(key, value) {
+      assertValidCardPayload(key, value);
+      const existingPath = findCardFilePath(cardsDir, key);
+      if (existingPath) {
+        await overwriteExistingCard(key, existingPath, value);
+        return;
+      }
+      const racedPath = await withTaskfoldGlobalLock(locksDir, (guard) => {
+        const raced = findCardFilePath(cardsDir, key);
+        if (raced) {
+          return raced;
+        }
+        writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, void 0, guard);
+        return void 0;
+      });
+      if (racedPath) {
+        await overwriteExistingCard(key, racedPath, value);
+      }
+    },
+    async lookup(key) {
+      const filePath = findCardFilePath(cardsDir, key);
+      if (!filePath) {
+        return void 0;
+      }
+      const state = readCardState(filePath, codec, runtimeCardsDir, key);
+      return state ? { version: 1, card: state.card } : void 0;
+    },
+    async delete(key) {
+      const filePath = findCardFilePath(cardsDir, key);
+      if (!filePath) {
+        return false;
+      }
+      const card = await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+        const current = readCardState(filePath, codec, runtimeCardsDir, key)?.card;
+        guard.assertHeld();
+        if (!removeFileIfExists(filePath)) {
+          return void 0;
+        }
+        removeCardRuntime(cardRuntimePath(runtimeCardsDir, key));
+        return { card: current };
+      });
+      if (!card) {
+        return false;
+      }
+      for (const attachment of card.card?.metadata?.attachments ?? []) {
+        removeFileIfExists(path8.join(attachmentsDir, attachment.id));
+      }
+      return true;
+    },
+    async entries() {
+      const results = [];
+      for (const fileName of listFileNamesSafe(cardsDir)) {
+        if (!fileName.endsWith(CARD_EXTENSION2)) {
+          continue;
+        }
+        const filePath = path8.join(cardsDir, fileName);
+        const content = readFileIfExists(filePath);
+        if (content === void 0) {
+          continue;
+        }
+        let card;
+        try {
+          card = readCardStateFromContent(content, codec, runtimeCardsDir).card;
+        } catch (error) {
+          console.warn(
+            `taskfold file store: \u8DF3\u8FC7\u65E0\u6CD5\u89E3\u6790\u7684\u5361\u7247\u6587\u4EF6 "${fileName}": ${error.message}`
+          );
+          continue;
+        }
+        results.push({ key: card.id, value: { version: 1, card } });
+      }
+      return results;
+    },
+    async compareAndSwap(key, expectedRevision, value, onReject) {
+      assertValidCardPayload(key, value);
+      const filePath = findCardFilePath(cardsDir, key);
+      if (!filePath) {
+        onReject?.("missing");
+        return false;
+      }
+      try {
+        return await withTaskfoldCardLock(locksDir, key, filePath, (guard) => {
+          const current = readCardState(filePath, codec, runtimeCardsDir, key);
+          if (current === void 0) {
+            onReject?.("missing");
+            return false;
+          }
+          if (current.runtimeChanged) {
+            writeCardRuntime(cardRuntimePath(runtimeCardsDir, key), current.runtime, guard.assertHeld);
+          }
+          if (current.runtime.revision !== expectedRevision) {
+            onReject?.("revision");
+            return false;
+          }
+          writeCard(cardsDir, archiveCardsDir, runtimeCardsDir, value, codec, filePath, guard, current.content);
+          return true;
+        });
+      } catch (error) {
+        if (isTaskfoldLockConflictError(error)) {
+          onReject?.(error instanceof TaskfoldLockTimeoutError ? "lock-timeout" : "lock-compromised");
+          return false;
+        }
+        throw error;
+      }
+    },
+    async registerIfAbsent(key, value) {
+      assertValidCardPayload(key, value);
+      if (findCardFilePath(cardsDir, key)) {
+        return false;
+      }
+      return await withTaskfoldGlobalLock(locksDir, (guard) => {
+        if (findCardFilePath(cardsDir, key)) {
+          return false;
+        }
+        const { path: newPath, displayId } = allocateNewCardFile(cardsDir, archiveCardsDir, value.card);
+        const { mdCard, fields } = splitCardRuntime(value.card);
+        const content = codec.serialize(mdCard, void 0, displayId);
+        guard.assertHeld();
+        const created = createFileExclusive(newPath, content);
+        if (created) {
+          writeCardRuntime(
+            cardRuntimePath(runtimeCardsDir, key),
+            {
+              version: 1,
+              revision: value.card.revision,
+              contentHash: hashCardFileContent(content),
+              updatedAt: value.card.updatedAt,
+              fields
+            },
+            guard.assertHeld
+          );
+        }
+        return created;
+      });
+    }
+  };
+}
+var CARD_EXTENSION2;
+var init_file_store_cards = __esm({
+  "packages/core/src/file-store-cards.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_card_id();
+    init_file_store_card_runtime();
+    init_file_store_locks();
+    init_markdown_card_format();
+    CARD_EXTENSION2 = ".md";
+  }
+});
+
+// packages/core/src/file-store-milestones.ts
+import path9 from "node:path";
+function assertValidMilestonePayload(key, value) {
+  if (value.version !== 1 || value.milestone.id !== key) {
+    throw new Error("invalid taskfold milestone payload");
+  }
+}
+function milestoneFileName(displayId, title) {
+  return `${displayId.toLowerCase()} - ${sanitizeFilenameSegment(title)}${MILESTONE_EXTENSION}`;
+}
+function findMilestoneFilePath(milestonesDir, id) {
+  for (const fileName of listFileNamesSafe(milestonesDir)) {
+    if (!fileName.endsWith(MILESTONE_EXTENSION)) {
+      continue;
+    }
+    const filePath = path9.join(milestonesDir, fileName);
+    const content = readFileIfExists(filePath);
+    if (content === void 0) {
+      continue;
+    }
+    const uuid = extractTaskfoldSectionUuid(content);
+    if (uuid !== void 0 && sameEntityId(uuid, id)) {
+      return filePath;
+    }
+  }
+  return void 0;
+}
+function allocateNewMilestoneFile(milestonesDir, milestone) {
+  const displayIdText = allocateNextTaskfoldMilestoneId(milestonesDir);
+  const displayId = parseCardFrontmatterId(displayIdText);
+  if (!displayId) {
+    throw new Error(`taskfold file store: \u5206\u914D\u5668\u8FD4\u56DE\u4E86\u65E0\u6CD5\u89E3\u6790\u7684\u5C55\u793A ID "${displayIdText}"`);
+  }
+  return { path: path9.join(milestonesDir, milestoneFileName(displayIdText, milestone.title)), displayId };
+}
+function readMilestoneAt(filePath, codec) {
+  const content = readFileIfExists(filePath);
+  return content === void 0 ? void 0 : codec.parse(content);
+}
+function writeMilestone(milestonesDir, value, codec, existingPath, guard) {
+  if (existingPath) {
+    const baseline = readFileIfExists(existingPath);
+    writeFileAtomic(existingPath, codec.serialize(value.milestone, baseline));
+    return;
+  }
+  const { path: newPath, displayId } = allocateNewMilestoneFile(milestonesDir, value.milestone);
+  writeFileAtomic(newPath, codec.serialize(value.milestone, void 0, displayId), void 0, guard?.assertHeld);
+}
+function createTaskfoldFileMilestoneStore(options) {
+  const { milestonesDir, codec, locksDir } = options;
+  return {
+    async register(key, value) {
+      assertValidMilestonePayload(key, value);
+      const existingPath = findMilestoneFilePath(milestonesDir, key);
+      if (existingPath) {
+        writeMilestone(milestonesDir, value, codec, existingPath);
+        return;
+      }
+      await withTaskfoldGlobalLock(locksDir, (guard) => {
+        writeMilestone(milestonesDir, value, codec, findMilestoneFilePath(milestonesDir, key), guard);
+      });
+    },
+    async lookup(key) {
+      const filePath = findMilestoneFilePath(milestonesDir, key);
+      if (!filePath) {
+        return void 0;
+      }
+      const milestone = readMilestoneAt(filePath, codec);
+      return milestone ? { version: 1, milestone } : void 0;
+    },
+    async delete(key) {
+      const filePath = findMilestoneFilePath(milestonesDir, key);
+      return filePath ? removeFileIfExists(filePath) : false;
+    },
+    async entries() {
+      const results = [];
+      for (const fileName of listFileNamesSafe(milestonesDir)) {
+        if (!fileName.endsWith(MILESTONE_EXTENSION)) {
+          continue;
+        }
+        const filePath = path9.join(milestonesDir, fileName);
+        const content = readFileIfExists(filePath);
+        if (content === void 0) {
+          continue;
+        }
+        let milestone;
+        try {
+          milestone = codec.parse(content);
+        } catch (error) {
+          console.warn(
+            `taskfold file store: \u8DF3\u8FC7\u65E0\u6CD5\u89E3\u6790\u7684\u91CC\u7A0B\u7891\u6587\u4EF6 "${fileName}": ${error.message}`
+          );
+          continue;
+        }
+        results.push({ key: milestone.id, value: { version: 1, milestone } });
+      }
+      return results;
+    }
+  };
+}
+var MILESTONE_EXTENSION;
+var init_file_store_milestones = __esm({
+  "packages/core/src/file-store-milestones.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_card_id();
+    init_file_store_locks();
+    init_markdown_card_format();
+    MILESTONE_EXTENSION = ".md";
+  }
+});
+
+// packages/core/src/file-store-documents.ts
+import path10 from "node:path";
+function assertValidDocumentPayload(key, value) {
+  if (value.version !== 1 || value.document.id !== key) {
+    throw new Error("invalid taskfold project document payload");
+  }
+}
+function documentFileName(document) {
+  return `${document.key}${DOCUMENT_EXTENSION}`;
+}
+function readDocumentAt(filePath) {
+  const content = readFileIfExists(filePath);
+  if (content === void 0) {
+    return void 0;
+  }
+  return JSON.parse(content);
+}
+function listDocumentFiles(documentsDir) {
+  return listFileNamesSafe(documentsDir).filter(
+    (fileName) => fileName.endsWith(DOCUMENT_EXTENSION)
+  );
+}
+function findDocumentFilePathById(documentsDir, id) {
+  for (const fileName of listDocumentFiles(documentsDir)) {
+    const filePath = path10.join(documentsDir, fileName);
+    if (readDocumentAt(filePath)?.id === id) {
+      return filePath;
+    }
+  }
+  return void 0;
+}
+function createTaskfoldFileDocumentStore(options) {
+  const { documentsDir } = options;
+  return {
+    async register(key, value) {
+      assertValidDocumentPayload(key, value);
+      const existingPath = findDocumentFilePathById(documentsDir, key);
+      const newPath = path10.join(documentsDir, documentFileName(value.document));
+      writeFileAtomic(newPath, JSON.stringify(value.document, null, 2));
+      if (existingPath && existingPath !== newPath) {
+        removeFileIfExists(existingPath);
+      }
+    },
+    async lookup(key) {
+      const filePath = findDocumentFilePathById(documentsDir, key);
+      if (!filePath) {
+        return void 0;
+      }
+      const document = readDocumentAt(filePath);
+      return document ? { version: 1, document } : void 0;
+    },
+    async delete(key) {
+      const filePath = findDocumentFilePathById(documentsDir, key);
+      return filePath ? removeFileIfExists(filePath) : false;
+    },
+    async entries() {
+      const results = [];
+      for (const fileName of listDocumentFiles(documentsDir)) {
+        const document = readDocumentAt(path10.join(documentsDir, fileName));
+        if (document) {
+          results.push({ key: document.id, value: { version: 1, document } });
+        }
+      }
+      return results;
+    }
+  };
+}
+var DOCUMENT_EXTENSION;
+var init_file_store_documents = __esm({
+  "packages/core/src/file-store-documents.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    DOCUMENT_EXTENSION = ".json";
+  }
+});
+
+// packages/core/src/file-store-subscriptions.ts
+import path11 from "node:path";
+function assertValidSubscriptionPayload(key, value) {
+  if (value.version !== 1 || value.subscription.id !== key) {
+    throw new Error("invalid taskfold notification subscription payload");
+  }
+}
+function subscriptionFilePath(subscriptionsDir, id) {
+  return path11.join(subscriptionsDir, `${id}${SUBSCRIPTION_EXTENSION}`);
+}
+function createTaskfoldFileSubscriptionStore(options) {
+  const { subscriptionsDir } = options;
+  return {
+    async register(key, value) {
+      assertValidSubscriptionPayload(key, value);
+      writeFileAtomic(
+        subscriptionFilePath(subscriptionsDir, key),
+        JSON.stringify(value.subscription, null, 2)
+      );
+    },
+    async lookup(key) {
+      const content = readFileIfExists(subscriptionFilePath(subscriptionsDir, key));
+      return content === void 0 ? void 0 : { version: 1, subscription: JSON.parse(content) };
+    },
+    async delete(key) {
+      return removeFileIfExists(subscriptionFilePath(subscriptionsDir, key));
+    },
+    async entries() {
+      const results = [];
+      for (const fileName of listFileNamesSafe(subscriptionsDir)) {
+        if (!fileName.endsWith(SUBSCRIPTION_EXTENSION)) {
+          continue;
+        }
+        const content = readFileIfExists(path11.join(subscriptionsDir, fileName));
+        if (content !== void 0) {
+          const subscription = JSON.parse(content);
+          results.push({ key: subscription.id, value: { version: 1, subscription } });
+        }
+      }
+      return results;
+    }
+  };
+}
+var SUBSCRIPTION_EXTENSION;
+var init_file_store_subscriptions = __esm({
+  "packages/core/src/file-store-subscriptions.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    SUBSCRIPTION_EXTENSION = ".json";
+  }
+});
+
+// packages/core/src/file-store-attachments.ts
+import path12 from "node:path";
+function assertValidAttachmentPayload(key, value) {
+  if (value.version !== 1 || value.attachment.id !== key) {
+    throw new Error("invalid taskfold attachment payload");
+  }
+}
+function findAttachmentMetadata(cardsDir, cardCodec, attachmentId) {
+  for (const fileName of listFileNamesSafe(cardsDir)) {
+    if (!fileName.endsWith(".md")) {
+      continue;
+    }
+    const content = readBufferIfExists(path12.join(cardsDir, fileName))?.toString("utf8");
+    if (content === void 0) {
+      continue;
+    }
+    let card;
+    try {
+      card = cardCodec.parse(content);
+    } catch {
+      continue;
+    }
+    const match = card.metadata?.attachments?.find((attachment) => attachment.id === attachmentId);
+    if (match) {
+      return match;
+    }
+  }
+  return void 0;
+}
+function createTaskfoldFileAttachmentStore(options) {
+  const { attachmentsDir, cardsDir, cardCodec } = options;
+  function blobPath(id) {
+    return path12.join(attachmentsDir, id);
+  }
+  function lookupJoined(id) {
+    const blob = readBufferIfExists(blobPath(id));
+    if (!blob) {
+      return void 0;
+    }
+    const attachment = findAttachmentMetadata(cardsDir, cardCodec, id);
+    if (!attachment) {
+      return void 0;
+    }
+    return { version: 1, attachment, contentBase64: blobToBase64(blob) };
+  }
+  return {
+    async register(key, value) {
+      assertValidAttachmentPayload(key, value);
+      writeFileAtomic(blobPath(key), asBlobContent(value.contentBase64));
+    },
+    async lookup(key) {
+      return lookupJoined(key);
+    },
+    async delete(key) {
+      return removeFileIfExists(blobPath(key));
+    },
+    async entries() {
+      const results = [];
+      for (const id of listFileNamesSafe(attachmentsDir)) {
+        const joined = lookupJoined(id);
+        if (joined) {
+          results.push({ key: id, value: joined });
+        }
+      }
+      return results;
+    }
+  };
+}
+var init_file_store_attachments = __esm({
+  "packages/core/src/file-store-attachments.ts"() {
+    "use strict";
+    init_file_store_atomic();
+  }
+});
+
+// packages/core/src/file-store-boards.ts
+function assertValidBoardPayload(key, value) {
+  if (value.version !== 1 || value.board.id !== key) {
+    throw new Error("invalid taskfold board payload");
+  }
+}
+function readRegistry(projectsJsonPath) {
+  const content = readFileIfExists(projectsJsonPath);
+  if (content === void 0) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function writeRegistry(projectsJsonPath, registry) {
+  writeFileAtomic(projectsJsonPath, JSON.stringify(registry, null, 2));
+}
+function createTaskfoldFileBoardStore(options) {
+  const { projectsJsonPath } = options;
+  return {
+    async register(key, value) {
+      assertValidBoardPayload(key, value);
+      const registry = readRegistry(projectsJsonPath);
+      registry[key] = value;
+      writeRegistry(projectsJsonPath, registry);
+    },
+    async lookup(key) {
+      return readRegistry(projectsJsonPath)[key];
+    },
+    async delete(key) {
+      const registry = readRegistry(projectsJsonPath);
+      if (!(key in registry)) {
+        return false;
+      }
+      delete registry[key];
+      writeRegistry(projectsJsonPath, registry);
+      return true;
+    },
+    async entries() {
+      return Object.entries(readRegistry(projectsJsonPath)).map(([key, value]) => ({
+        key,
+        value
+      }));
+    }
+  };
+}
+var init_file_store_boards = __esm({
+  "packages/core/src/file-store-boards.ts"() {
+    "use strict";
+    init_file_store_atomic();
+  }
+});
+
+// packages/core/src/file-store.ts
+function createTaskfoldFileStores(options) {
+  const layout = resolveTaskfoldFileStoreLayout({
+    dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
+    ...options.pluginDir === void 0 ? {} : { pluginDir: options.pluginDir }
+  });
+  const canWrite = () => isTaskfoldFormatWritable(layout.configPath);
+  const assertWritable = () => assertTaskfoldFormatWritable(layout.configPath);
+  const writableAtOpen = canWrite();
+  if (writableAtOpen) {
+    ensureTaskfoldDataDirectories(layout);
+    ensureTaskfoldFormatVersion(layout.configPath);
+  }
+  ensureTaskfoldPluginDirectories(layout);
+  const cardCodec = options.cardCodec ?? createMarkdownCardCodec();
+  const milestoneCodec = options.milestoneCodec ?? createMarkdownMilestoneCodec();
+  const externalChangeReconciler = createTaskfoldExternalChangeReconciler({
+    cardsDir: layout.cardsDir,
+    runtimeCardsDir: layout.runtimeCardsDir,
+    locksDir: layout.locksDir,
+    codec: cardCodec,
+    canWrite
+  });
+  const cards = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileCardStore({
+    cardsDir: layout.cardsDir,
+    archiveCardsDir: layout.archiveCardsDir,
+    attachmentsDir: layout.attachmentsDir,
+    codec: cardCodec,
+    locksDir: layout.locksDir,
+    runtimeCardsDir: layout.runtimeCardsDir
+  }));
+  const boards = layout.projectsJsonPath === void 0 ? createProcessLocalStore() : createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
+  const milestones = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileMilestoneStore({
+    milestonesDir: layout.milestonesDir,
+    codec: milestoneCodec,
+    locksDir: layout.locksDir
+  }));
+  const documents = rejectWritesUnlessFormatWritable(
+    assertWritable,
+    createTaskfoldFileDocumentStore({ documentsDir: layout.documentsDir })
+  );
+  const subscriptions = layout.subscriptionsDir === void 0 ? createProcessLocalStore() : createTaskfoldFileSubscriptionStore({ subscriptionsDir: layout.subscriptionsDir });
+  const attachments = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileAttachmentStore({
+    attachmentsDir: layout.attachmentsDir,
+    cardsDir: layout.cardsDir,
+    cardCodec
+  }));
+  const changeEpoch = ensureFileChangeEpoch(layout.changesLogPath, layout.locksDir, writableAtOpen);
+  const changeSource = createTaskfoldFileChangeSource({
+    changesLogPath: layout.changesLogPath,
+    locksDir: layout.locksDir,
+    dataVersion: externalChangeReconciler.dataVersion,
+    canWrite
+  });
+  return {
+    cards,
+    boards,
+    milestones,
+    documents,
+    subscriptions,
+    attachments,
+    dataVersion: externalChangeReconciler.dataVersion,
+    changeEpoch,
+    reserveChangeRevisions: (count) => {
+      assertWritable();
+      return reserveFileChangeRevisions(layout.changesLogPath, count, layout.locksDir);
+    },
+    changeSource,
+    // Nothing to release: this backend holds no open file descriptors or watchers
+    // between calls (every read/write in this skeleton opens and closes its own fd).
+    // Kept for shape parity with createTaskfoldSqliteStores, and as the seam a future
+    // fs.watch-based R3/R4 detector would close.
+    close: () => {
+    }
+  };
+}
+function createProcessLocalStore() {
+  const values = /* @__PURE__ */ new Map();
+  return {
+    register: async (key, value) => {
+      values.set(key, structuredClone(value));
+    },
+    lookup: async (key) => {
+      const value = values.get(key);
+      return value === void 0 ? void 0 : structuredClone(value);
+    },
+    delete: async (key) => values.delete(key),
+    entries: async () => [...values].map(([key, value]) => ({ key, value: structuredClone(value) }))
+  };
+}
+function rejectWritesUnlessFormatWritable(assertWritable, store) {
+  return {
+    register: async (key, value) => {
+      assertWritable();
+      await store.register(key, value);
+    },
+    lookup: async (key) => await store.lookup(key),
+    delete: async (key) => {
+      assertWritable();
+      return await store.delete(key);
+    },
+    entries: async () => await store.entries(),
+    ...store.compareAndSwap ? {
+      compareAndSwap: async (key, expectedRevision, value, onReject) => {
+        assertWritable();
+        return await store.compareAndSwap(key, expectedRevision, value, onReject);
+      }
+    } : {},
+    ...store.registerIfAbsent ? {
+      registerIfAbsent: async (key, value) => {
+        assertWritable();
+        return await store.registerIfAbsent(key, value);
+      }
+    } : {}
+  };
+}
+var init_file_store = __esm({
+  "packages/core/src/file-store.ts"() {
+    "use strict";
+    init_file_store_paths();
+    init_file_store_path_resolver();
+    init_file_store_format();
+    init_file_store_change_cursor();
+    init_file_store_reconcile();
+    init_file_store_codec();
+    init_file_store_cards();
+    init_file_store_milestones();
+    init_file_store_documents();
+    init_file_store_subscriptions();
+    init_file_store_attachments();
+    init_file_store_boards();
+    init_file_store_paths();
+    init_file_store_card_id();
+    init_file_store_path_resolver();
+    init_file_store_format();
+  }
+});
+
+// packages/core/src/card-redaction.ts
+function redactClaimToken(card) {
+  const claim = card.metadata?.claim;
+  if (!claim) {
+    return card;
+  }
+  return {
+    ...card,
+    metadata: {
+      ...card.metadata,
+      claim: {
+        ...claim,
+        token: "[redacted]"
+      }
+    }
+  };
+}
+var init_card_redaction = __esm({
+  "packages/core/src/card-redaction.ts"() {
+    "use strict";
+  }
+});
+
+// src/backend/src/sqlite-store.ts
+import { randomUUID as randomUUID8 } from "node:crypto";
+import fs9 from "node:fs";
+import path15 from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { configureSqliteConnectionPragmas } from "openclaw/plugin-sdk/plugin-state-runtime";
+import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
+function resolveTaskfoldSqlitePath(env = process.env) {
+  return path15.join(resolveStateDir(env), ...TASKFOLD_DB_RELATIVE_PATH);
+}
+function resolveLegacyFlowboardSqlitePath(env = process.env) {
+  return path15.join(resolveStateDir(env), ...LEGACY_FLOWBOARD_DB_RELATIVE_PATH);
+}
+function jsonValue(value) {
+  return value === void 0 ? null : JSON.stringify(value);
+}
+function parseJson(value) {
+  if (typeof value !== "string" || !value) {
+    return void 0;
+  }
+  return JSON.parse(value);
+}
+function stringValue2(row, key) {
+  const value = row[key];
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function numberValue2(row, key) {
+  const value = row[key];
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  return void 0;
+}
+function requiredString2(row, key) {
+  const value = stringValue2(row, key);
+  if (!value) {
+    throw new Error(`taskfold sqlite row missing ${key}`);
+  }
+  return value;
+}
+function requiredNumber(row, key) {
+  const value = numberValue2(row, key);
+  if (value === void 0) {
+    throw new Error(`taskfold sqlite row missing ${key}`);
+  }
+  return value;
+}
+function optional2(value) {
+  return Object.keys(value).length > 0 ? value : void 0;
+}
+function asBlobContent2(value) {
+  return Buffer.from(value, "base64");
+}
+function blobToBase642(value) {
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("base64");
+  }
+  if (typeof value === "string") {
+    return Buffer.from(value).toString("base64");
+  }
+  return "";
+}
+function runTransaction(db, run) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = run();
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+function quoteIdentifier(value) {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+function quoteSqlString(value) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+function tableColumns(db, tableName) {
+  return new Set(
+    db.prepare(`PRAGMA table_info(${tableName})`).all().flatMap(
+      (row) => typeof row.name === "string" ? [row.name] : []
+    )
+  );
+}
+function ensureColumn(db, tableName, columnName, definition) {
+  if (tableColumns(db, tableName).has(columnName)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+}
+function ensureTaskfoldSchema(db) {
+  db.exec(TASKFOLD_SCHEMA_SQL);
+  ensureColumn(
+    db,
+    "taskfold_cards",
+    "lifecycle_status_source_updated_at",
+    "lifecycle_status_source_updated_at INTEGER"
+  );
+  ensureColumn(db, "taskfold_cards", "milestone_id", "milestone_id TEXT");
+  ensureColumn(db, "taskfold_card_events", "from_milestone_id", "from_milestone_id TEXT");
+  ensureColumn(db, "taskfold_card_events", "to_milestone_id", "to_milestone_id TEXT");
+  ensureColumn(db, "taskfold_boards", "position", "position REAL");
+  ensureColumn(db, "taskfold_boards", "version", "version TEXT");
+  ensureColumn(db, "taskfold_boards", "current_objective", "current_objective TEXT");
+  ensureColumn(db, "taskfold_boards", "core_value", "core_value TEXT");
+  ensureColumn(db, "taskfold_boards", "source_of_truth", "source_of_truth TEXT");
+  ensureColumn(db, "taskfold_boards", "repository_url", "repository_url TEXT");
+  ensureColumn(db, "taskfold_boards", "planning_path", "planning_path TEXT");
+  ensureColumn(db, "taskfold_boards", "homepage_url", "homepage_url TEXT");
+  ensureColumn(db, "taskfold_boards", "board_view_json", "board_view_json TEXT");
+  ensureColumn(db, "taskfold_cards", "card_kind", "card_kind TEXT");
+  ensureColumn(
+    db,
+    "taskfold_project_documents",
+    "source",
+    "source TEXT NOT NULL DEFAULT 'project'"
+  );
+  ensureColumn(db, "taskfold_cards", "revision", "revision INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "taskfold_cards", "claim_owner_id", "claim_owner_id TEXT");
+  ensureColumn(db, "taskfold_card_attempts", "prompt_version", "prompt_version INTEGER");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS taskfold_cards_board_milestone_position_idx
+      ON taskfold_cards(board_id, milestone_id, position);
+    CREATE INDEX IF NOT EXISTS taskfold_cards_claim_owner_idx
+      ON taskfold_cards(claim_owner_id, status);
+    CREATE INDEX IF NOT EXISTS taskfold_card_events_card_idx
+      ON taskfold_card_events(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_attempts_card_idx
+      ON taskfold_card_attempts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_comments_card_idx
+      ON taskfold_card_comments(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_links_card_idx
+      ON taskfold_card_links(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_proof_card_idx
+      ON taskfold_card_proof(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_artifacts_card_idx
+      ON taskfold_card_artifacts(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_card_notifications_card_idx
+      ON taskfold_card_notifications(card_id, ordinal);
+    CREATE INDEX IF NOT EXISTS taskfold_worker_logs_card_idx
+      ON taskfold_worker_logs(card_id, ordinal);
+  `);
+  const migrationId = `schema-${SCHEMA_VERSION}`;
+  const current = db.prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?").get(migrationId);
+  if (!current) {
+    db.prepare(
+      "INSERT OR IGNORE INTO taskfold_schema_migrations (id, applied_at) VALUES (?, ?)"
+    ).run(migrationId, Date.now());
+  }
+}
+function ensureChangeEpoch(db) {
+  const existing = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
+  const current = existing ? stringValue2(existing, "value") : void 0;
+  if (current) {
+    return current;
+  }
+  const epoch = randomUUID8();
+  db.prepare("INSERT OR IGNORE INTO taskfold_meta (key, value) VALUES ('change_epoch', ?)").run(
+    epoch
+  );
+  const stored = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
+  return (stored ? stringValue2(stored, "value") : void 0) ?? epoch;
+}
+function reserveChangeRevisions(db, count) {
+  return runTransaction(db, () => {
+    const row = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_revision'").get();
+    const stored = Number.parseInt(row ? stringValue2(row, "value") ?? "" : "", 10);
+    const base = Number.isSafeInteger(stored) && stored > 0 ? stored : 0;
+    db.prepare(
+      `
+        INSERT INTO taskfold_meta (key, value) VALUES ('change_revision', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `
+    ).run(String(base + count));
+    return base;
+  });
+}
+function chmodIfExists2(targetPath, mode) {
+  try {
+    fs9.chmodSync(targetPath, mode);
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+  }
+}
+function copyLegacyFlowboardDatabase(dbPath, legacyDbPath) {
+  if (!legacyDbPath || path15.resolve(legacyDbPath) === path15.resolve(dbPath) || fs9.existsSync(dbPath) || !fs9.existsSync(legacyDbPath)) {
+    return;
+  }
+  const source = new DatabaseSync(legacyDbPath);
+  try {
+    source.exec(`VACUUM INTO ${quoteSqlString(dbPath)}`);
+  } finally {
+    source.close();
+  }
+}
+function migrateLegacyFlowboardTables(db) {
+  const legacyTables = db.prepare(
+    `
+          SELECT name
+          FROM sqlite_master
+          WHERE type = 'table' AND name LIKE 'flowboard!_%' ESCAPE '!'
+          ORDER BY name ASC
+        `
+  ).all().flatMap((row) => {
+    const name = stringValue2(row, "name");
+    return name ? [name] : [];
+  });
+  if (legacyTables.length === 0) {
+    return;
+  }
+  const taskfoldTables = new Set(
+    db.prepare(
+      `
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name LIKE 'taskfold!_%' ESCAPE '!'
+          `
+    ).all().flatMap((row) => {
+      const name = stringValue2(row, "name");
+      return name ? [name] : [];
+    })
+  );
+  const conflicts = legacyTables.map((name) => name.replace(/^flowboard_/, "taskfold_")).filter((name) => taskfoldTables.has(name));
+  if (conflicts.length > 0) {
+    throw new Error(
+      `cannot migrate legacy Flowboard database because Taskfold tables already exist: ${conflicts.join(", ")}`
+    );
+  }
+  runTransaction(db, () => {
+    for (const legacyTable of legacyTables) {
+      const taskfoldTable = legacyTable.replace(/^flowboard_/, "taskfold_");
+      db.exec(
+        `ALTER TABLE ${quoteIdentifier(legacyTable)} RENAME TO ${quoteIdentifier(taskfoldTable)}`
+      );
+    }
+    const legacyIndexes = db.prepare(
+      `
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'index' AND name LIKE 'flowboard!_%' ESCAPE '!'
+            ORDER BY name ASC
+          `
+    ).all().flatMap((row) => {
+      const name = stringValue2(row, "name");
+      return name ? [name] : [];
+    });
+    for (const legacyIndex of legacyIndexes) {
+      db.exec(`DROP INDEX ${quoteIdentifier(legacyIndex)}`);
+    }
+  });
+}
+function hardenTaskfoldDatabaseFiles(dbPath) {
+  fs9.chmodSync(path15.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
+  chmodIfExists2(dbPath, TASKFOLD_SQLITE_FILE_MODE);
+  chmodIfExists2(`${dbPath}-wal`, TASKFOLD_SQLITE_FILE_MODE);
+  chmodIfExists2(`${dbPath}-shm`, TASKFOLD_SQLITE_FILE_MODE);
+  chmodIfExists2(`${dbPath}-journal`, TASKFOLD_SQLITE_FILE_MODE);
+}
+function createDatabase(dbPath, legacyDbPath) {
+  fs9.mkdirSync(path15.dirname(dbPath), { recursive: true, mode: TASKFOLD_SQLITE_DIR_MODE });
+  chmodIfExists2(path15.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
+  copyLegacyFlowboardDatabase(dbPath, legacyDbPath);
+  if (!fs9.existsSync(dbPath)) {
+    fs9.closeSync(fs9.openSync(dbPath, "a", TASKFOLD_SQLITE_FILE_MODE));
+  }
+  const db = new DatabaseSync(dbPath);
+  let maintenance;
+  try {
+    maintenance = configureSqliteConnectionPragmas(db, {
+      busyTimeoutMs: TASKFOLD_SQLITE_BUSY_TIMEOUT_MS,
+      checkpointIntervalMs: 0,
+      databaseLabel: "taskfold database",
+      databasePath: dbPath,
+      foreignKeys: true,
+      synchronous: "NORMAL"
+    });
+    migrateLegacyFlowboardTables(db);
+    ensureTaskfoldSchema(db);
+    hardenTaskfoldDatabaseFiles(dbPath);
+    return { db, maintenance };
+  } catch (error) {
+    try {
+      maintenance?.close();
+    } finally {
+      db.close();
+    }
+    throw error;
+  }
+}
+function childRows(db, table, cardId) {
+  return db.prepare(`SELECT * FROM ${table} WHERE card_id = ? ORDER BY ordinal ASC`).all(cardId);
+}
+function readLabels(db, cardId) {
+  return childRows(db, "taskfold_card_labels", cardId).flatMap((row) => {
+    const label = stringValue2(row, "label");
+    return label ? [label] : [];
+  });
+}
+function readEvents(db, cardId) {
+  const events = childRows(db, "taskfold_card_events", cardId).map((row) => {
+    const event = {
+      id: requiredString2(row, "id"),
+      kind: requiredString2(row, "kind"),
+      at: requiredNumber(row, "at")
+    };
+    const fromStatus = stringValue2(row, "from_status");
+    const toStatus = stringValue2(row, "to_status");
+    const fromMilestoneId = stringValue2(row, "from_milestone_id");
+    const toMilestoneId = stringValue2(row, "to_milestone_id");
+    const sessionKey = stringValue2(row, "session_key");
+    const runId = stringValue2(row, "run_id");
+    if (fromStatus) {
+      event.fromStatus = fromStatus;
+    }
+    if (toStatus) {
+      event.toStatus = toStatus;
+    }
+    if (fromMilestoneId) {
+      event.fromMilestoneId = fromMilestoneId;
+    }
+    if (toMilestoneId) {
+      event.toMilestoneId = toMilestoneId;
+    }
+    if (sessionKey) {
+      event.sessionKey = sessionKey;
+    }
+    if (runId) {
+      event.runId = runId;
+    }
+    return event;
+  });
+  return events.length > 0 ? events : void 0;
+}
+function readExecution(row) {
+  const id = stringValue2(row, "execution_id");
+  if (!id) {
+    return void 0;
+  }
+  return {
+    id,
+    kind: "agent-session",
+    mode: requiredString2(row, "execution_mode"),
+    status: requiredString2(row, "execution_status"),
+    ...stringValue2(row, "execution_engine") ? { engine: stringValue2(row, "execution_engine") } : {},
+    ...stringValue2(row, "execution_model") ? { model: stringValue2(row, "execution_model") } : {},
+    ...stringValue2(row, "execution_session_key") ? { sessionKey: stringValue2(row, "execution_session_key") } : {},
+    ...stringValue2(row, "execution_run_id") ? { runId: stringValue2(row, "execution_run_id") } : {},
+    startedAt: requiredNumber(row, "execution_started_at"),
+    updatedAt: requiredNumber(row, "execution_updated_at")
+  };
+}
+function readMetadata(db, row) {
+  const cardId = requiredString2(row, "id");
+  const attempts = childRows(db, "taskfold_card_attempts", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      status: requiredString2(child, "status"),
+      startedAt: requiredNumber(child, "started_at")
+    };
+    const endedAt = numberValue2(child, "ended_at");
+    const engine = stringValue2(child, "engine");
+    const mode = stringValue2(child, "mode");
+    const model = stringValue2(child, "model");
+    const sessionKey = stringValue2(child, "session_key");
+    const runId = stringValue2(child, "run_id");
+    const error = stringValue2(child, "error");
+    const promptVersion = numberValue2(child, "prompt_version");
+    if (promptVersion !== void 0) {
+      entry.promptVersion = promptVersion;
+    }
+    if (endedAt !== void 0) {
+      entry.endedAt = endedAt;
+    }
+    if (engine) {
+      entry.engine = engine;
+    }
+    if (mode) {
+      entry.mode = mode;
+    }
+    if (model) {
+      entry.model = model;
+    }
+    if (sessionKey) {
+      entry.sessionKey = sessionKey;
+    }
+    if (runId) {
+      entry.runId = runId;
+    }
+    if (error) {
+      entry.error = error;
+    }
+    return entry;
+  });
+  const comments = childRows(db, "taskfold_card_comments", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      body: requiredString2(child, "body"),
+      createdAt: requiredNumber(child, "created_at")
+    };
+    const updatedAt = numberValue2(child, "updated_at");
+    if (updatedAt !== void 0) {
+      entry.updatedAt = updatedAt;
+    }
+    return entry;
+  });
+  const links = childRows(db, "taskfold_card_links", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      type: requiredString2(child, "type"),
+      createdAt: requiredNumber(child, "created_at")
+    };
+    const targetCardId = stringValue2(child, "target_card_id");
+    const title = stringValue2(child, "title");
+    const url = stringValue2(child, "url");
+    if (targetCardId) {
+      entry.targetCardId = targetCardId;
+    }
+    if (title) {
+      entry.title = title;
+    }
+    if (url) {
+      entry.url = url;
+    }
+    return entry;
+  });
+  const proof = childRows(db, "taskfold_card_proof", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      status: requiredString2(child, "status"),
+      createdAt: requiredNumber(child, "created_at")
+    };
+    const label = stringValue2(child, "label");
+    const command = stringValue2(child, "command");
+    const url = stringValue2(child, "url");
+    const note = stringValue2(child, "note");
+    if (label) {
+      entry.label = label;
+    }
+    if (command) {
+      entry.command = command;
+    }
+    if (url) {
+      entry.url = url;
+    }
+    if (note) {
+      entry.note = note;
+    }
+    return entry;
+  });
+  const artifacts = childRows(db, "taskfold_card_artifacts", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      createdAt: requiredNumber(child, "created_at")
+    };
+    const label = stringValue2(child, "label");
+    const url = stringValue2(child, "url");
+    const artifactPath = stringValue2(child, "path");
+    const mimeType = stringValue2(child, "mime_type");
+    if (label) {
+      entry.label = label;
+    }
+    if (url) {
+      entry.url = url;
+    }
+    if (artifactPath) {
+      entry.path = artifactPath;
+    }
+    if (mimeType) {
+      entry.mimeType = mimeType;
+    }
+    return entry;
+  });
+  const attachments = childRows(db, "taskfold_card_attachments", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      cardId: requiredString2(child, "card_id"),
+      createdAt: requiredNumber(child, "created_at"),
+      fileName: requiredString2(child, "file_name"),
+      byteSize: requiredNumber(child, "byte_size")
+    };
+    const mimeType = stringValue2(child, "mime_type");
+    const note = stringValue2(child, "note");
+    if (mimeType) {
+      entry.mimeType = mimeType;
+    }
+    if (note) {
+      entry.note = note;
+    }
+    return entry;
+  });
+  const workerLogs = childRows(db, "taskfold_worker_logs", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      createdAt: requiredNumber(child, "created_at"),
+      level: requiredString2(child, "level"),
+      message: requiredString2(child, "message")
+    };
+    const sessionKey = stringValue2(child, "session_key");
+    const runId = stringValue2(child, "run_id");
+    if (sessionKey) {
+      entry.sessionKey = sessionKey;
+    }
+    if (runId) {
+      entry.runId = runId;
+    }
+    return entry;
+  });
+  const diagnostics = childRows(db, "taskfold_card_diagnostics", cardId).map((child) => ({
+    kind: requiredString2(child, "kind"),
+    severity: requiredString2(child, "severity"),
+    title: requiredString2(child, "title"),
+    detail: requiredString2(child, "detail"),
+    firstSeenAt: requiredNumber(child, "first_seen_at"),
+    lastSeenAt: requiredNumber(child, "last_seen_at"),
+    count: requiredNumber(child, "count"),
+    actions: parseJson(child.actions_json) ?? []
+  }));
+  const notifications = childRows(db, "taskfold_card_notifications", cardId).map((child) => {
+    const entry = {
+      id: requiredString2(child, "id"),
+      kind: requiredString2(child, "kind"),
+      createdAt: requiredNumber(child, "created_at"),
+      message: requiredString2(child, "message")
+    };
+    const sequence = numberValue2(child, "sequence");
+    const sessionKey = stringValue2(child, "session_key");
+    const runId = stringValue2(child, "run_id");
+    if (sequence !== void 0) {
+      entry.sequence = sequence;
+    }
+    if (sessionKey) {
+      entry.sessionKey = sessionKey;
+    }
+    if (runId) {
+      entry.runId = runId;
+    }
+    return entry;
+  });
+  const protocol = db.prepare("SELECT * FROM taskfold_worker_protocol WHERE card_id = ?").get(cardId);
+  const automation = parseJson(row.automation_json);
+  const claim = parseJson(row.claim_json);
+  const stale = parseJson(row.stale_json);
+  const lifecycleStatusSourceUpdatedAt = numberValue2(row, "lifecycle_status_source_updated_at");
+  return optional2({
+    ...attempts.length > 0 ? { attempts } : {},
+    ...comments.length > 0 ? { comments } : {},
+    ...links.length > 0 ? { links } : {},
+    ...proof.length > 0 ? { proof } : {},
+    ...artifacts.length > 0 ? { artifacts } : {},
+    ...attachments.length > 0 ? { attachments } : {},
+    ...workerLogs.length > 0 ? { workerLogs } : {},
+    ...protocol ? {
+      workerProtocol: {
+        state: requiredString2(protocol, "state"),
+        updatedAt: requiredNumber(protocol, "updated_at"),
+        ...stringValue2(protocol, "detail") ? { detail: stringValue2(protocol, "detail") } : {}
+      }
+    } : {},
+    ...automation ? { automation } : {},
+    ...claim ? { claim } : {},
+    ...diagnostics.length > 0 ? { diagnostics } : {},
+    ...notifications.length > 0 ? { notifications } : {},
+    ...stringValue2(row, "template_id") ? { templateId: stringValue2(row, "template_id") } : {},
+    ...numberValue2(row, "archived_at") !== void 0 ? { archivedAt: numberValue2(row, "archived_at") } : {},
+    ...stale ? { stale } : {},
+    ...lifecycleStatusSourceUpdatedAt !== void 0 ? { lifecycleStatusSourceUpdatedAt } : {},
+    ...numberValue2(row, "failure_count") !== void 0 ? { failureCount: numberValue2(row, "failure_count") } : {}
+  });
+}
+function readDelivery(db, cardId) {
+  const row = db.prepare("SELECT * FROM taskfold_card_delivery WHERE card_id = ?").get(cardId);
+  if (!row) {
+    return void 0;
+  }
+  const delivery = {
+    updatedAt: requiredNumber(row, "updated_at")
+  };
+  const objective = stringValue2(row, "objective");
+  const deliverySummary = stringValue2(row, "delivery_summary");
+  const openItems = stringValue2(row, "open_items");
+  const implementationState = stringValue2(row, "implementation_state");
+  const verificationState = stringValue2(row, "verification_state");
+  const releaseState = stringValue2(row, "release_state");
+  if (objective) {
+    delivery.objective = objective;
+  }
+  if (deliverySummary) {
+    delivery.deliverySummary = deliverySummary;
+  }
+  if (openItems) {
+    delivery.openItems = openItems;
+  }
+  if (implementationState) {
+    delivery.implementationState = implementationState;
+  }
+  if (verificationState) {
+    delivery.verificationState = verificationState;
+  }
+  if (releaseState) {
+    delivery.releaseState = releaseState;
+  }
+  return delivery;
+}
+function readSourceReferences(db, cardId) {
+  return childRows(db, "taskfold_card_source_references", cardId).map((child) => {
+    const reference = {
+      id: requiredString2(child, "id"),
+      label: requiredString2(child, "label"),
+      target: requiredString2(child, "target"),
+      position: requiredNumber(child, "position"),
+      createdAt: requiredNumber(child, "created_at"),
+      updatedAt: requiredNumber(child, "updated_at")
+    };
+    const note = stringValue2(child, "note");
+    if (note) {
+      reference.note = note;
+    }
+    return reference;
+  });
+}
+function readCard(db, row) {
+  const card = {
+    id: requiredString2(row, "id"),
+    title: requiredString2(row, "title"),
+    status: requiredString2(row, "status"),
+    priority: requiredString2(row, "priority"),
+    labels: readLabels(db, requiredString2(row, "id")),
+    position: requiredNumber(row, "position"),
+    createdAt: requiredNumber(row, "created_at"),
+    updatedAt: requiredNumber(row, "updated_at"),
+    revision: numberValue2(row, "revision") ?? 0
+  };
+  const metadata = readMetadata(db, row);
+  const delivery = readDelivery(db, card.id);
+  const sourceReferences = readSourceReferences(db, card.id);
+  return {
+    ...card,
+    ...stringValue2(row, "card_kind") ? { kind: stringValue2(row, "card_kind") } : {},
+    ...stringValue2(row, "notes") ? { notes: stringValue2(row, "notes") } : {},
+    ...stringValue2(row, "agent_id") ? { agentId: stringValue2(row, "agent_id") } : {},
+    ...stringValue2(row, "session_key") ? { sessionKey: stringValue2(row, "session_key") } : {},
+    ...stringValue2(row, "run_id") ? { runId: stringValue2(row, "run_id") } : {},
+    ...stringValue2(row, "task_id") ? { taskId: stringValue2(row, "task_id") } : {},
+    ...stringValue2(row, "source_url") ? { sourceUrl: stringValue2(row, "source_url") } : {},
+    ...stringValue2(row, "milestone_id") ? { milestoneId: stringValue2(row, "milestone_id") } : {},
+    ...readExecution(row) ? { execution: readExecution(row) } : {},
+    ...delivery ? { delivery } : {},
+    ...sourceReferences.length ? { sourceReferences } : {},
+    ...numberValue2(row, "started_at") !== void 0 ? { startedAt: numberValue2(row, "started_at") } : {},
+    ...numberValue2(row, "completed_at") !== void 0 ? { completedAt: numberValue2(row, "completed_at") } : {},
+    ...readEvents(db, card.id) ? { events: readEvents(db, card.id) } : {},
+    ...metadata ? { metadata } : {}
+  };
+}
+function cardBoardId2(card) {
+  return card.metadata?.automation?.boardId ?? "default";
+}
+function bindNull(value) {
+  if (value === void 0 || value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint" || value instanceof Uint8Array) {
+    return value ?? null;
+  }
+  return JSON.stringify(value);
+}
+function insertChildren(db, table, cardId, entries, insert) {
+  db.prepare(`DELETE FROM ${table} WHERE card_id = ?`).run(cardId);
+  entries?.forEach(insert);
+}
+function insertCard(db, card) {
+  const execution = card.execution;
+  const metadata = card.metadata;
+  db.prepare(
+    `
+      INSERT INTO taskfold_cards (
+        id, board_id, title, notes, status, priority, card_kind, agent_id, session_key, run_id, task_id,
+        source_url, milestone_id, position, created_at, updated_at, started_at, completed_at,
+        execution_id, execution_kind, execution_engine, execution_mode, execution_status,
+        execution_model, execution_session_key, execution_run_id, execution_started_at,
+        execution_updated_at, automation_json, claim_json, template_id, archived_at, stale_json,
+        lifecycle_status_source_updated_at, failure_count, revision, claim_owner_id
+      ) VALUES (
+        @id, @board_id, @title, @notes, @status, @priority, @card_kind, @agent_id, @session_key, @run_id,
+        @task_id, @source_url, @milestone_id, @position, @created_at, @updated_at, @started_at, @completed_at,
+        @execution_id, @execution_kind, @execution_engine, @execution_mode, @execution_status,
+        @execution_model, @execution_session_key, @execution_run_id, @execution_started_at,
+        @execution_updated_at, @automation_json, @claim_json, @template_id, @archived_at,
+        @stale_json, @lifecycle_status_source_updated_at, @failure_count, @revision, @claim_owner_id
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        board_id = excluded.board_id,
+        title = excluded.title,
+        notes = excluded.notes,
+        status = excluded.status,
+        priority = excluded.priority,
+        card_kind = excluded.card_kind,
+        agent_id = excluded.agent_id,
+        session_key = excluded.session_key,
+        run_id = excluded.run_id,
+        task_id = excluded.task_id,
+        source_url = excluded.source_url,
+        milestone_id = excluded.milestone_id,
+        position = excluded.position,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        started_at = excluded.started_at,
+        completed_at = excluded.completed_at,
+        execution_id = excluded.execution_id,
+        execution_kind = excluded.execution_kind,
+        execution_engine = excluded.execution_engine,
+        execution_mode = excluded.execution_mode,
+        execution_status = excluded.execution_status,
+        execution_model = excluded.execution_model,
+        execution_session_key = excluded.execution_session_key,
+        execution_run_id = excluded.execution_run_id,
+        execution_started_at = excluded.execution_started_at,
+        execution_updated_at = excluded.execution_updated_at,
+        automation_json = excluded.automation_json,
+        claim_json = excluded.claim_json,
+        template_id = excluded.template_id,
+        archived_at = excluded.archived_at,
+        stale_json = excluded.stale_json,
+        lifecycle_status_source_updated_at = excluded.lifecycle_status_source_updated_at,
+        failure_count = excluded.failure_count,
+        revision = excluded.revision,
+        claim_owner_id = excluded.claim_owner_id
+    `
+  ).run({
+    id: card.id,
+    board_id: cardBoardId2(card),
+    title: card.title,
+    notes: bindNull(card.notes),
+    status: card.status,
+    priority: card.priority,
+    card_kind: bindNull(card.kind),
+    agent_id: bindNull(card.agentId),
+    session_key: bindNull(card.sessionKey),
+    run_id: bindNull(card.runId),
+    task_id: bindNull(card.taskId),
+    source_url: bindNull(card.sourceUrl),
+    milestone_id: bindNull(card.milestoneId),
+    position: card.position,
+    created_at: card.createdAt,
+    updated_at: card.updatedAt,
+    started_at: bindNull(card.startedAt),
+    completed_at: bindNull(card.completedAt),
+    execution_id: bindNull(execution?.id),
+    execution_kind: bindNull(execution?.kind),
+    execution_engine: bindNull(execution?.engine),
+    execution_mode: bindNull(execution?.mode),
+    execution_status: bindNull(execution?.status),
+    execution_model: bindNull(execution?.model),
+    execution_session_key: bindNull(execution?.sessionKey),
+    execution_run_id: bindNull(execution?.runId),
+    execution_started_at: bindNull(execution?.startedAt),
+    execution_updated_at: bindNull(execution?.updatedAt),
+    automation_json: jsonValue(metadata?.automation),
+    claim_json: jsonValue(metadata?.claim),
+    template_id: bindNull(metadata?.templateId),
+    archived_at: bindNull(metadata?.archivedAt),
+    stale_json: jsonValue(metadata?.stale),
+    lifecycle_status_source_updated_at: bindNull(metadata?.lifecycleStatusSourceUpdatedAt),
+    failure_count: bindNull(metadata?.failureCount),
+    revision: card.revision,
+    claim_owner_id: bindNull(metadata?.claim?.ownerId)
+  });
+  insertChildren(db, "taskfold_card_labels", card.id, card.labels, (label, ordinal) => {
+    db.prepare("INSERT INTO taskfold_card_labels (card_id, ordinal, label) VALUES (?, ?, ?)").run(
+      card.id,
+      ordinal,
+      label
+    );
+  });
+  insertChildren(db, "taskfold_card_events", card.id, card.events, (event, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_events
+          (id, card_id, ordinal, kind, at, from_status, to_status, from_milestone_id, to_milestone_id, session_key, run_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      event.id,
+      card.id,
+      ordinal,
+      event.kind,
+      event.at,
+      bindNull(event.fromStatus),
+      bindNull(event.toStatus),
+      bindNull(event.fromMilestoneId),
+      bindNull(event.toMilestoneId),
+      bindNull(event.sessionKey),
+      bindNull(event.runId)
+    );
+  });
+  insertChildren(db, "taskfold_card_attempts", card.id, metadata?.attempts, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_attempts
+          (id, card_id, ordinal, status, started_at, ended_at, engine, mode, model, session_key, run_id, error, prompt_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      entry.id,
+      card.id,
+      ordinal,
+      entry.status,
+      entry.startedAt,
+      bindNull(entry.endedAt),
+      bindNull(entry.engine),
+      bindNull(entry.mode),
+      bindNull(entry.model),
+      bindNull(entry.sessionKey),
+      bindNull(entry.runId),
+      bindNull(entry.error),
+      bindNull(entry.promptVersion)
+    );
+  });
+  insertChildren(db, "taskfold_card_comments", card.id, metadata?.comments, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_comments (id, card_id, ordinal, body, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `
+    ).run(entry.id, card.id, ordinal, entry.body, entry.createdAt, bindNull(entry.updatedAt));
+  });
+  insertChildren(db, "taskfold_card_links", card.id, metadata?.links, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_links
+          (id, card_id, ordinal, type, target_card_id, title, url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      entry.id,
+      card.id,
+      ordinal,
+      entry.type,
+      bindNull(entry.targetCardId),
+      bindNull(entry.title),
+      bindNull(entry.url),
+      entry.createdAt
+    );
+  });
+  insertChildren(db, "taskfold_card_proof", card.id, metadata?.proof, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_proof
+          (id, card_id, ordinal, status, label, command, url, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      entry.id,
+      card.id,
+      ordinal,
+      entry.status,
+      bindNull(entry.label),
+      bindNull(entry.command),
+      bindNull(entry.url),
+      bindNull(entry.note),
+      entry.createdAt
+    );
+  });
+  insertChildren(db, "taskfold_card_artifacts", card.id, metadata?.artifacts, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_artifacts
+          (id, card_id, ordinal, label, url, path, mime_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      entry.id,
+      card.id,
+      ordinal,
+      bindNull(entry.label),
+      bindNull(entry.url),
+      bindNull(entry.path),
+      bindNull(entry.mimeType),
+      entry.createdAt
+    );
+  });
+  db.prepare("DELETE FROM taskfold_card_delivery WHERE card_id = ?").run(card.id);
+  if (card.delivery) {
+    db.prepare(
+      `
+        INSERT INTO taskfold_card_delivery
+          (card_id, objective, delivery_summary, open_items, implementation_state,
+           verification_state, release_state, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      card.id,
+      bindNull(card.delivery.objective),
+      bindNull(card.delivery.deliverySummary),
+      bindNull(card.delivery.openItems),
+      bindNull(card.delivery.implementationState),
+      bindNull(card.delivery.verificationState),
+      bindNull(card.delivery.releaseState),
+      card.delivery.updatedAt
+    );
+  }
+  insertChildren(
+    db,
+    "taskfold_card_source_references",
+    card.id,
+    card.sourceReferences,
+    (entry, ordinal) => {
+      db.prepare(
+        `
+          INSERT INTO taskfold_card_source_references
+            (id, card_id, ordinal, label, target, note, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `
+      ).run(
+        entry.id,
+        card.id,
+        ordinal,
+        entry.label,
+        entry.target,
+        bindNull(entry.note),
+        entry.position,
+        entry.createdAt,
+        entry.updatedAt
+      );
+    }
+  );
+  insertChildren(
+    db,
+    "taskfold_card_attachments",
+    card.id,
+    metadata?.attachments,
+    (entry, ordinal) => {
+      db.prepare(
+        `
+          INSERT INTO taskfold_card_attachments
+            (id, card_id, ordinal, file_name, byte_size, mime_type, note, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `
+      ).run(
+        entry.id,
+        entry.cardId,
+        ordinal,
+        entry.fileName,
+        entry.byteSize,
+        bindNull(entry.mimeType),
+        bindNull(entry.note),
+        entry.createdAt
+      );
+    }
+  );
+  insertChildren(
+    db,
+    "taskfold_card_diagnostics",
+    card.id,
+    metadata?.diagnostics,
+    (entry, ordinal) => {
+      db.prepare(
+        `
+          INSERT INTO taskfold_card_diagnostics
+            (card_id, ordinal, kind, severity, title, detail, first_seen_at, last_seen_at, count, actions_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `
+      ).run(
+        card.id,
+        ordinal,
+        entry.kind,
+        entry.severity,
+        entry.title,
+        entry.detail,
+        entry.firstSeenAt,
+        entry.lastSeenAt,
+        entry.count,
+        JSON.stringify(entry.actions)
+      );
+    }
+  );
+  insertChildren(
+    db,
+    "taskfold_card_notifications",
+    card.id,
+    metadata?.notifications,
+    (entry, ordinal) => {
+      db.prepare(
+        `
+          INSERT INTO taskfold_card_notifications
+            (id, card_id, ordinal, kind, message, created_at, sequence, session_key, run_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `
+      ).run(
+        entry.id,
+        card.id,
+        ordinal,
+        entry.kind,
+        entry.message,
+        entry.createdAt,
+        bindNull(entry.sequence),
+        bindNull(entry.sessionKey),
+        bindNull(entry.runId)
+      );
+    }
+  );
+  insertChildren(db, "taskfold_worker_logs", card.id, metadata?.workerLogs, (entry, ordinal) => {
+    db.prepare(
+      `
+        INSERT INTO taskfold_worker_logs
+          (id, card_id, ordinal, level, message, created_at, session_key, run_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      entry.id,
+      card.id,
+      ordinal,
+      entry.level,
+      entry.message,
+      entry.createdAt,
+      bindNull(entry.sessionKey),
+      bindNull(entry.runId)
+    );
+  });
+  db.prepare("DELETE FROM taskfold_worker_protocol WHERE card_id = ?").run(card.id);
+  if (metadata?.workerProtocol) {
+    db.prepare(
+      `
+        INSERT INTO taskfold_worker_protocol (card_id, state, updated_at, detail)
+        VALUES (?, ?, ?, ?)
+      `
+    ).run(
+      card.id,
+      metadata.workerProtocol.state,
+      metadata.workerProtocol.updatedAt,
+      bindNull(metadata.workerProtocol.detail)
+    );
+  }
+}
+function readMilestone(row) {
+  return {
+    id: requiredString2(row, "id"),
+    boardId: requiredString2(row, "board_id"),
+    title: requiredString2(row, "title"),
+    position: requiredNumber(row, "position"),
+    state: requiredString2(row, "state"),
+    createdAt: requiredNumber(row, "created_at"),
+    updatedAt: requiredNumber(row, "updated_at"),
+    ...stringValue2(row, "description") ? { description: stringValue2(row, "description") } : {},
+    ...stringValue2(row, "color") ? { color: stringValue2(row, "color") } : {},
+    ...numberValue2(row, "completed_at") !== void 0 ? { completedAt: numberValue2(row, "completed_at") } : {},
+    ...numberValue2(row, "archived_at") !== void 0 ? { archivedAt: numberValue2(row, "archived_at") } : {}
+  };
+}
+function readProjectDocument(row) {
+  return {
+    id: requiredString2(row, "id"),
+    boardId: requiredString2(row, "board_id"),
+    key: requiredString2(row, "document_key"),
+    section: requiredString2(row, "section"),
+    source: stringValue2(row, "source") ?? "project",
+    type: requiredString2(row, "type"),
+    title: requiredString2(row, "title"),
+    position: requiredNumber(row, "position"),
+    createdAt: requiredNumber(row, "created_at"),
+    updatedAt: requiredNumber(row, "updated_at"),
+    ...stringValue2(row, "summary") ? { summary: stringValue2(row, "summary") } : {},
+    ...stringValue2(row, "target") ? { target: stringValue2(row, "target") } : {},
+    ...stringValue2(row, "content") ? { content: stringValue2(row, "content") } : {},
+    ...numberValue2(row, "hidden_at") !== void 0 ? { hiddenAt: numberValue2(row, "hidden_at") } : {},
+    ...numberValue2(row, "system") === 1 ? { system: true } : {}
+  };
+}
+function openTaskfoldSqliteStoresReadOnly(dbPath) {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  return {
+    db,
+    cards: new TaskfoldSqliteCardStore(db),
+    boards: new TaskfoldSqliteBoardStore(db),
+    milestones: new TaskfoldSqliteMilestoneStore(db),
+    documents: new TaskfoldSqliteProjectDocumentStore(db),
+    subscriptions: new TaskfoldSqliteSubscriptionStore(db),
+    attachments: new TaskfoldSqliteAttachmentStore(db),
+    close: () => db.close()
+  };
+}
+function createTaskfoldSqliteStores(options = {}) {
+  const dbPath = options.dbPath ?? resolveTaskfoldSqlitePath(options.env);
+  const { db, maintenance } = createDatabase(
+    dbPath,
+    options.legacyDbPath ?? (options.dbPath ? void 0 : resolveLegacyFlowboardSqlitePath(options.env))
+  );
+  return {
+    cards: new TaskfoldSqliteCardStore(db),
+    boards: new TaskfoldSqliteBoardStore(db),
+    milestones: new TaskfoldSqliteMilestoneStore(db),
+    documents: new TaskfoldSqliteProjectDocumentStore(db),
+    subscriptions: new TaskfoldSqliteSubscriptionStore(db),
+    attachments: new TaskfoldSqliteAttachmentStore(db),
+    // This connection-local primitive changes only after another connection commits.
+    dataVersion: () => requiredNumber(db.prepare("PRAGMA data_version").get(), "data_version"),
+    changeEpoch: ensureChangeEpoch(db),
+    reserveChangeRevisions: (count) => reserveChangeRevisions(db, count),
+    close: () => {
+      maintenance.close();
+      db.close();
+    }
+  };
+}
+var TASKFOLD_DB_RELATIVE_PATH, LEGACY_FLOWBOARD_DB_RELATIVE_PATH, SCHEMA_VERSION, TASKFOLD_SQLITE_BUSY_TIMEOUT_MS, TASKFOLD_SQLITE_DIR_MODE, TASKFOLD_SQLITE_FILE_MODE, TASKFOLD_SCHEMA_SQL, TaskfoldSqliteCardStore, TaskfoldSqliteBoardStore, TaskfoldSqliteMilestoneStore, TaskfoldSqliteProjectDocumentStore, TaskfoldSqliteSubscriptionStore, TaskfoldSqliteAttachmentStore;
+var init_sqlite_store = __esm({
+  "src/backend/src/sqlite-store.ts"() {
+    "use strict";
+    TASKFOLD_DB_RELATIVE_PATH = ["plugins", "taskfold", "taskfold.sqlite"];
+    LEGACY_FLOWBOARD_DB_RELATIVE_PATH = ["plugins", "flowboard", "flowboard.sqlite"];
+    SCHEMA_VERSION = 8;
+    TASKFOLD_SQLITE_BUSY_TIMEOUT_MS = 5e3;
+    TASKFOLD_SQLITE_DIR_MODE = 448;
+    TASKFOLD_SQLITE_FILE_MODE = 384;
+    TASKFOLD_SCHEMA_SQL = `
+    CREATE TABLE IF NOT EXISTS taskfold_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS taskfold_schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_boards (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      description TEXT,
+      icon TEXT,
+      color TEXT,
+      position REAL,
+      version TEXT,
+      current_objective TEXT,
+      core_value TEXT,
+      source_of_truth TEXT,
+      repository_url TEXT,
+      planning_path TEXT,
+      homepage_url TEXT,
+      default_workspace_json TEXT,
+      orchestration_json TEXT,
+      board_view_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      archived_at INTEGER
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_cards (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      notes TEXT,
+      status TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      card_kind TEXT,
+      agent_id TEXT,
+      session_key TEXT,
+      run_id TEXT,
+      task_id TEXT,
+      source_url TEXT,
+      milestone_id TEXT,
+      position REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      started_at INTEGER,
+      completed_at INTEGER,
+      execution_id TEXT,
+      execution_kind TEXT,
+      execution_engine TEXT,
+      execution_mode TEXT,
+      execution_status TEXT,
+      execution_model TEXT,
+      execution_session_key TEXT,
+      execution_run_id TEXT,
+      execution_started_at INTEGER,
+      execution_updated_at INTEGER,
+      automation_json TEXT,
+      claim_json TEXT,
+      template_id TEXT,
+      archived_at INTEGER,
+      stale_json TEXT,
+      lifecycle_status_source_updated_at INTEGER,
+      failure_count INTEGER
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS taskfold_cards_board_status_idx
+      ON taskfold_cards(board_id, status, position);
+    CREATE INDEX IF NOT EXISTS taskfold_cards_session_idx
+      ON taskfold_cards(session_key, run_id);
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_labels (
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      PRIMARY KEY(card_id, ordinal)
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_events (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      at INTEGER NOT NULL,
+      from_status TEXT,
+      to_status TEXT,
+      from_milestone_id TEXT,
+      to_milestone_id TEXT,
+      session_key TEXT,
+      run_id TEXT
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_attempts (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      engine TEXT,
+      mode TEXT,
+      model TEXT,
+      session_key TEXT,
+      run_id TEXT,
+      error TEXT
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_comments (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_links (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      target_card_id TEXT,
+      title TEXT,
+      url TEXT,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_proof (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      label TEXT,
+      command TEXT,
+      url TEXT,
+      note TEXT,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_artifacts (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      label TEXT,
+      url TEXT,
+      path TEXT,
+      mime_type TEXT,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_delivery (
+      card_id TEXT PRIMARY KEY REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      objective TEXT,
+      delivery_summary TEXT,
+      open_items TEXT,
+      implementation_state TEXT,
+      verification_state TEXT,
+      release_state TEXT,
+      updated_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_source_references (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      target TEXT NOT NULL,
+      note TEXT,
+      position REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS taskfold_card_source_references_card_position_idx
+      ON taskfold_card_source_references(card_id, position);
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_diagnostics (
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      title TEXT NOT NULL,
+      detail TEXT NOT NULL,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      count INTEGER NOT NULL,
+      actions_json TEXT NOT NULL,
+      PRIMARY KEY(card_id, ordinal)
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_notifications (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      sequence INTEGER,
+      session_key TEXT,
+      run_id TEXT
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_worker_logs (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      level TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      session_key TEXT,
+      run_id TEXT
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_worker_protocol (
+      card_id TEXT PRIMARY KEY REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      state TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      detail TEXT
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_card_attachments (
+      id TEXT PRIMARY KEY,
+      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      file_name TEXT NOT NULL,
+      byte_size INTEGER NOT NULL,
+      mime_type TEXT,
+      note TEXT,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS taskfold_card_attachments_card_idx
+      ON taskfold_card_attachments(card_id, ordinal);
+
+    CREATE TABLE IF NOT EXISTS taskfold_attachment_blobs (
+      attachment_id TEXT PRIMARY KEY,
+      content BLOB NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_notification_subscriptions (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      card_id TEXT,
+      session_key TEXT,
+      run_id TEXT,
+      target TEXT,
+      event_kinds_json TEXT,
+      last_event_at INTEGER,
+      last_event_id TEXT,
+      last_event_sequence INTEGER,
+      delivered_event_ids_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS taskfold_milestones (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      color TEXT,
+      position REAL NOT NULL,
+      state TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      archived_at INTEGER
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS taskfold_milestones_board_position_idx
+      ON taskfold_milestones(board_id, position);
+
+    CREATE TABLE IF NOT EXISTS taskfold_project_documents (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      document_key TEXT NOT NULL,
+      section TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'project',
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT,
+      target TEXT,
+      content TEXT,
+      position REAL NOT NULL,
+      hidden_at INTEGER,
+      system INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(board_id, document_key)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS taskfold_project_documents_board_section_position_idx
+      ON taskfold_project_documents(board_id, section, position);
+  `;
+    TaskfoldSqliteCardStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.card.id !== key) {
+          throw new Error("invalid taskfold card payload");
+        }
+        runTransaction(this.db, () => insertCard(this.db, value.card));
+      }
+      async compareAndSwap(key, expectedRevision, value) {
+        if (value.version !== 1 || value.card.id !== key) {
+          throw new Error("invalid taskfold card payload");
+        }
+        return runTransaction(this.db, () => {
+          const row = this.db.prepare("SELECT revision FROM taskfold_cards WHERE id = ?").get(key);
+          if (!row || (numberValue2(row, "revision") ?? 0) !== expectedRevision) {
+            return false;
+          }
+          insertCard(this.db, value.card);
+          return true;
+        });
+      }
+      async registerIfAbsent(key, value) {
+        if (value.version !== 1 || value.card.id !== key) {
+          throw new Error("invalid taskfold card payload");
+        }
+        return runTransaction(this.db, () => {
+          const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
+          if (row) {
+            return false;
+          }
+          insertCard(this.db, value.card);
+          return true;
+        });
+      }
+      async lookup(key) {
+        const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key);
+        return row ? { version: 1, card: readCard(this.db, row) } : void 0;
+      }
+      async delete(key) {
+        const result = runTransaction(this.db, () => {
+          this.db.prepare(
+            `
+            DELETE FROM taskfold_attachment_blobs
+            WHERE attachment_id IN (
+              SELECT id FROM taskfold_card_attachments WHERE card_id = ?
+            )
+          `
+          ).run(key);
+          return this.db.prepare("DELETE FROM taskfold_cards WHERE id = ?").run(key);
+        });
+        return result.changes > 0;
+      }
+      async entries() {
+        return this.db.prepare("SELECT * FROM taskfold_cards ORDER BY created_at ASC, id ASC").all().map((row) => ({
+          key: requiredString2(row, "id"),
+          value: { version: 1, card: readCard(this.db, row) }
+        }));
+      }
+    };
+    TaskfoldSqliteBoardStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.board.id !== key) {
+          throw new Error("invalid taskfold board payload");
+        }
+        const board = value.board;
+        this.db.prepare(
+          `
+          INSERT INTO taskfold_boards (
+            id, name, description, icon, color, position, version, current_objective, core_value,
+            source_of_truth, repository_url, planning_path, homepage_url,
+            default_workspace_json, orchestration_json, board_view_json,
+            created_at, updated_at, archived_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            icon = excluded.icon,
+            color = excluded.color,
+            position = excluded.position,
+            version = excluded.version,
+            current_objective = excluded.current_objective,
+            core_value = excluded.core_value,
+            source_of_truth = excluded.source_of_truth,
+            repository_url = excluded.repository_url,
+            planning_path = excluded.planning_path,
+            homepage_url = excluded.homepage_url,
+            default_workspace_json = excluded.default_workspace_json,
+            orchestration_json = excluded.orchestration_json,
+            board_view_json = excluded.board_view_json,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            archived_at = excluded.archived_at
+        `
+        ).run(
+          board.id,
+          bindNull(board.name),
+          bindNull(board.description),
+          bindNull(board.icon),
+          bindNull(board.color),
+          bindNull(board.position),
+          bindNull(board.version),
+          bindNull(board.currentObjective),
+          bindNull(board.coreValue),
+          bindNull(board.sourceOfTruth),
+          bindNull(board.repositoryUrl),
+          bindNull(board.planningPath),
+          bindNull(board.homepageUrl),
+          jsonValue(board.defaultWorkspace),
+          jsonValue(board.orchestration),
+          jsonValue(board.boardView),
+          board.createdAt,
+          board.updatedAt,
+          bindNull(board.archivedAt)
+        );
+      }
+      async lookup(key) {
+        const row = this.db.prepare("SELECT * FROM taskfold_boards WHERE id = ?").get(key);
+        if (!row) {
+          return void 0;
+        }
+        const defaultWorkspace = parseJson(row.default_workspace_json);
+        const orchestration = parseJson(row.orchestration_json);
+        const boardView = parseJson(row.board_view_json);
+        return {
+          version: 1,
+          board: {
+            id: requiredString2(row, "id"),
+            ...stringValue2(row, "name") ? { name: stringValue2(row, "name") } : {},
+            ...stringValue2(row, "description") ? { description: stringValue2(row, "description") } : {},
+            ...stringValue2(row, "icon") ? { icon: stringValue2(row, "icon") } : {},
+            ...stringValue2(row, "color") ? { color: stringValue2(row, "color") } : {},
+            ...numberValue2(row, "position") !== void 0 ? { position: numberValue2(row, "position") } : {},
+            ...stringValue2(row, "version") ? { version: stringValue2(row, "version") } : {},
+            ...stringValue2(row, "current_objective") ? { currentObjective: stringValue2(row, "current_objective") } : {},
+            ...stringValue2(row, "core_value") ? { coreValue: stringValue2(row, "core_value") } : {},
+            ...stringValue2(row, "source_of_truth") ? { sourceOfTruth: stringValue2(row, "source_of_truth") } : {},
+            ...stringValue2(row, "repository_url") ? { repositoryUrl: stringValue2(row, "repository_url") } : {},
+            ...stringValue2(row, "planning_path") ? { planningPath: stringValue2(row, "planning_path") } : {},
+            ...stringValue2(row, "homepage_url") ? { homepageUrl: stringValue2(row, "homepage_url") } : {},
+            ...defaultWorkspace ? { defaultWorkspace } : {},
+            ...orchestration ? { orchestration } : {},
+            ...boardView ? { boardView } : {},
+            createdAt: requiredNumber(row, "created_at"),
+            updatedAt: requiredNumber(row, "updated_at"),
+            ...numberValue2(row, "archived_at") !== void 0 ? { archivedAt: numberValue2(row, "archived_at") } : {}
+          }
+        };
+      }
+      async delete(key) {
+        const result = this.db.prepare("DELETE FROM taskfold_boards WHERE id = ?").run(key);
+        return result.changes > 0;
+      }
+      async entries() {
+        const rows = this.db.prepare("SELECT id FROM taskfold_boards ORDER BY id ASC").all();
+        const entries = [];
+        for (const row of rows) {
+          const key = requiredString2(row, "id");
+          const value = await this.lookup(key);
+          if (value) {
+            entries.push({ key, value });
+          }
+        }
+        return entries;
+      }
+    };
+    TaskfoldSqliteMilestoneStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.milestone.id !== key) {
+          throw new Error("invalid taskfold milestone payload");
+        }
+        const milestone = value.milestone;
+        this.db.prepare(
+          `
+          INSERT INTO taskfold_milestones (
+            id, board_id, title, description, color, position, state, created_at, updated_at,
+            completed_at, archived_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            board_id = excluded.board_id,
+            title = excluded.title,
+            description = excluded.description,
+            color = excluded.color,
+            position = excluded.position,
+            state = excluded.state,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            completed_at = excluded.completed_at,
+            archived_at = excluded.archived_at
+        `
+        ).run(
+          milestone.id,
+          milestone.boardId,
+          milestone.title,
+          bindNull(milestone.description),
+          bindNull(milestone.color),
+          milestone.position,
+          milestone.state,
+          milestone.createdAt,
+          milestone.updatedAt,
+          bindNull(milestone.completedAt),
+          bindNull(milestone.archivedAt)
+        );
+      }
+      async lookup(key) {
+        const row = this.db.prepare("SELECT * FROM taskfold_milestones WHERE id = ?").get(key);
+        return row ? { version: 1, milestone: readMilestone(row) } : void 0;
+      }
+      async delete(key) {
+        const result = this.db.prepare("DELETE FROM taskfold_milestones WHERE id = ?").run(key);
+        return result.changes > 0;
+      }
+      async entries() {
+        return this.db.prepare("SELECT * FROM taskfold_milestones ORDER BY board_id ASC, position ASC, id ASC").all().map((row) => ({
+          key: requiredString2(row, "id"),
+          value: { version: 1, milestone: readMilestone(row) }
+        }));
+      }
+    };
+    TaskfoldSqliteProjectDocumentStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.document.id !== key) {
+          throw new Error("invalid taskfold project document payload");
+        }
+        const document = value.document;
+        this.db.prepare(
+          `
+          INSERT INTO taskfold_project_documents (
+            id, board_id, document_key, section, source, type, title, summary, target, content,
+            position, hidden_at, system, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            board_id = excluded.board_id,
+            document_key = excluded.document_key,
+            section = excluded.section,
+            source = excluded.source,
+            type = excluded.type,
+            title = excluded.title,
+            summary = excluded.summary,
+            target = excluded.target,
+            content = excluded.content,
+            position = excluded.position,
+            hidden_at = excluded.hidden_at,
+            system = excluded.system,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at
+        `
+        ).run(
+          document.id,
+          document.boardId,
+          document.key,
+          document.section,
+          document.source,
+          document.type,
+          document.title,
+          bindNull(document.summary),
+          bindNull(document.target),
+          bindNull(document.content),
+          document.position,
+          bindNull(document.hiddenAt),
+          document.system ? 1 : 0,
+          document.createdAt,
+          document.updatedAt
+        );
+      }
+      async lookup(key) {
+        const row = this.db.prepare("SELECT * FROM taskfold_project_documents WHERE id = ?").get(key);
+        return row ? { version: 1, document: readProjectDocument(row) } : void 0;
+      }
+      async delete(key) {
+        const result = this.db.prepare("DELETE FROM taskfold_project_documents WHERE id = ?").run(key);
+        return result.changes > 0;
+      }
+      async entries() {
+        return this.db.prepare(
+          "SELECT * FROM taskfold_project_documents ORDER BY board_id ASC, section ASC, position ASC, id ASC"
+        ).all().map((row) => ({
+          key: requiredString2(row, "id"),
+          value: { version: 1, document: readProjectDocument(row) }
+        }));
+      }
+    };
+    TaskfoldSqliteSubscriptionStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.subscription.id !== key) {
+          throw new Error("invalid taskfold notification subscription payload");
+        }
+        const subscription = value.subscription;
+        this.db.prepare(
+          `
+          INSERT INTO taskfold_notification_subscriptions (
+            id, board_id, card_id, session_key, run_id, target, event_kinds_json,
+            last_event_at, last_event_id, last_event_sequence, delivered_event_ids_json,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            board_id = excluded.board_id,
+            card_id = excluded.card_id,
+            session_key = excluded.session_key,
+            run_id = excluded.run_id,
+            target = excluded.target,
+            event_kinds_json = excluded.event_kinds_json,
+            last_event_at = excluded.last_event_at,
+            last_event_id = excluded.last_event_id,
+            last_event_sequence = excluded.last_event_sequence,
+            delivered_event_ids_json = excluded.delivered_event_ids_json,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at
+        `
+        ).run(
+          subscription.id,
+          subscription.boardId,
+          bindNull(subscription.cardId),
+          bindNull(subscription.sessionKey),
+          bindNull(subscription.runId),
+          bindNull(subscription.target),
+          jsonValue(subscription.eventKinds),
+          bindNull(subscription.lastEventAt),
+          bindNull(subscription.lastEventId),
+          bindNull(subscription.lastEventSequence),
+          jsonValue(subscription.deliveredEventIds),
+          subscription.createdAt,
+          subscription.updatedAt
+        );
+      }
+      async lookup(key) {
+        const row = this.db.prepare("SELECT * FROM taskfold_notification_subscriptions WHERE id = ?").get(key);
+        if (!row) {
+          return void 0;
+        }
+        const eventKinds = parseJson(row.event_kinds_json);
+        const deliveredEventIds = parseJson(row.delivered_event_ids_json);
+        return {
+          version: 1,
+          subscription: {
+            id: requiredString2(row, "id"),
+            boardId: requiredString2(row, "board_id"),
+            ...stringValue2(row, "card_id") ? { cardId: stringValue2(row, "card_id") } : {},
+            ...stringValue2(row, "session_key") ? { sessionKey: stringValue2(row, "session_key") } : {},
+            ...stringValue2(row, "run_id") ? { runId: stringValue2(row, "run_id") } : {},
+            ...stringValue2(row, "target") ? { target: stringValue2(row, "target") } : {},
+            ...eventKinds ? { eventKinds } : {},
+            ...numberValue2(row, "last_event_at") !== void 0 ? { lastEventAt: numberValue2(row, "last_event_at") } : {},
+            ...stringValue2(row, "last_event_id") ? { lastEventId: stringValue2(row, "last_event_id") } : {},
+            ...numberValue2(row, "last_event_sequence") !== void 0 ? { lastEventSequence: numberValue2(row, "last_event_sequence") } : {},
+            ...deliveredEventIds ? { deliveredEventIds } : {},
+            createdAt: requiredNumber(row, "created_at"),
+            updatedAt: requiredNumber(row, "updated_at")
+          }
+        };
+      }
+      async delete(key) {
+        const result = this.db.prepare("DELETE FROM taskfold_notification_subscriptions WHERE id = ?").run(key);
+        return result.changes > 0;
+      }
+      async entries() {
+        const rows = this.db.prepare(
+          "SELECT id FROM taskfold_notification_subscriptions ORDER BY created_at ASC, id ASC"
+        ).all();
+        const entries = [];
+        for (const row of rows) {
+          const key = requiredString2(row, "id");
+          const value = await this.lookup(key);
+          if (value) {
+            entries.push({ key, value });
+          }
+        }
+        return entries;
+      }
+    };
+    TaskfoldSqliteAttachmentStore = class {
+      constructor(db) {
+        this.db = db;
+      }
+      async register(key, value) {
+        if (value.version !== 1 || value.attachment.id !== key) {
+          throw new Error("invalid taskfold attachment payload");
+        }
+        const attachment = value.attachment;
+        this.db.prepare(
+          `
+          INSERT INTO taskfold_attachment_blobs (attachment_id, content)
+          VALUES (?, ?)
+          ON CONFLICT(attachment_id) DO UPDATE SET content = excluded.content
+        `
+        ).run(attachment.id, asBlobContent2(value.contentBase64));
+      }
+      async lookup(key) {
+        const row = this.db.prepare(
+          `
+          SELECT a.*, b.content
+          FROM taskfold_card_attachments a
+          JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
+          WHERE a.id = ?
+        `
+        ).get(key);
+        if (!row) {
+          return void 0;
+        }
+        return {
+          version: 1,
+          attachment: {
+            id: requiredString2(row, "id"),
+            cardId: requiredString2(row, "card_id"),
+            createdAt: requiredNumber(row, "created_at"),
+            fileName: requiredString2(row, "file_name"),
+            byteSize: requiredNumber(row, "byte_size"),
+            ...stringValue2(row, "mime_type") ? { mimeType: stringValue2(row, "mime_type") } : {},
+            ...stringValue2(row, "note") ? { note: stringValue2(row, "note") } : {}
+          },
+          contentBase64: blobToBase642(row.content)
+        };
+      }
+      async delete(key) {
+        const deleted = runTransaction(this.db, () => {
+          this.db.prepare("DELETE FROM taskfold_attachment_blobs WHERE attachment_id = ?").run(key);
+          return this.db.prepare("DELETE FROM taskfold_card_attachments WHERE id = ?").run(key);
+        });
+        return deleted.changes > 0;
+      }
+      async entries() {
+        const rows = this.db.prepare(
+          `
+          SELECT a.id
+          FROM taskfold_card_attachments a
+          JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
+          ORDER BY a.created_at ASC, a.id ASC
+        `
+        ).all();
+        const entries = [];
+        for (const row of rows) {
+          const key = requiredString2(row, "id");
+          const value = await this.lookup(key);
+          if (value) {
+            entries.push({ key, value });
+          }
+        }
+        return entries;
+      }
+    };
+  }
+});
+
 // packages/core/src/card-lookup.ts
 function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   const exact = cards.find((card2) => card2.id === id);
@@ -179,6 +6321,975 @@ function resolveTaskfoldCardByIdOrPrefix(cards, id) {
 var init_card_lookup = __esm({
   "packages/core/src/card-lookup.ts"() {
     "use strict";
+  }
+});
+
+// src/backend/src/change-aggregator.ts
+import { randomUUID as randomUUID14 } from "node:crypto";
+var TaskfoldAggregatedChangeSource;
+var init_change_aggregator = __esm({
+  "src/backend/src/change-aggregator.ts"() {
+    "use strict";
+    TaskfoldAggregatedChangeSource = class {
+      /**
+       * @param discover 找出新出现的项目目录并打开（组合 store 给出）；返回是否打开了新项目。
+       *   poll 是同步契约，这里只把它发起、不等它：新项目在下一次 poll 时算作一次变化。
+       */
+      constructor(discover, warn) {
+        this.discover = discover;
+        this.warn = warn;
+      }
+      epoch = randomUUID14();
+      revision = 0;
+      projects = /* @__PURE__ */ new Set();
+      dirty = /* @__PURE__ */ new Set();
+      discovering = false;
+      discovered = false;
+      addProject(source) {
+        this.projects.add(source);
+      }
+      /** 本进程刚往这个项目写过：下一次 record() 在它的 changes.log 里记一笔。 */
+      markDirty(source) {
+        this.dirty.add(source);
+      }
+      announce() {
+        this.startDiscovery();
+        return this.next();
+      }
+      async record() {
+        const dirty = [...this.dirty];
+        this.dirty.clear();
+        for (const source of dirty) {
+          await source.record();
+        }
+        return this.next();
+      }
+      poll() {
+        let changed = this.discovered;
+        this.discovered = false;
+        for (const source of this.projects) {
+          changed = source.poll() !== void 0 || changed;
+        }
+        this.startDiscovery();
+        return changed ? this.next() : void 0;
+      }
+      startDiscovery() {
+        if (!this.discover || this.discovering) {
+          return;
+        }
+        this.discovering = true;
+        this.discover().then(
+          (found) => {
+            this.discovering = false;
+            this.discovered ||= found;
+          },
+          (error) => {
+            this.discovering = false;
+            this.warn?.(`taskfold: project discovery failed: ${String(error)}`);
+          }
+        );
+      }
+      next() {
+        this.revision += 1;
+        return { epoch: this.epoch, revision: this.revision };
+      }
+    };
+  }
+});
+
+// src/backend/src/project-routed-stores.ts
+import fs11 from "node:fs";
+import path17 from "node:path";
+function taskfoldPluginProjectDataDir(pluginDir, boardId) {
+  return path17.join(pluginDir, "projects", boardId);
+}
+function taskfoldProjectDataDir(pluginDir, boardId, board) {
+  const workspace = board?.defaultWorkspace;
+  if (workspace && (workspace.kind === "dir" || workspace.kind === "worktree") && (workspace.sourcePath ?? workspace.path)) {
+    return resolveTaskfoldDataDir(workspace);
+  }
+  return taskfoldPluginProjectDataDir(pluginDir, boardId);
+}
+function isDirectory(target) {
+  try {
+    return fs11.statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function listDirectoryNames(dir) {
+  try {
+    return fs11.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+function cardBoardId3(value) {
+  return value.card.metadata?.automation?.boardId ?? "default";
+}
+function createTaskfoldProjectRoutedStores(options) {
+  const pluginDir = path17.resolve(options.pluginDir);
+  const warn = options.warn ?? ((message) => console.warn(message));
+  const projectsRootDir = path17.join(pluginDir, "projects");
+  const pluginLayout = resolveTaskfoldFileStoreLayout({ dataDir: projectsRootDir, pluginDir });
+  const ensurePluginDir = () => ensureTaskfoldPluginDirectories(pluginLayout);
+  const rawBoards = createTaskfoldFileBoardStore({ projectsJsonPath: pluginLayout.projectsJsonPath });
+  const rawSubscriptions = createTaskfoldFileSubscriptionStore({ subscriptionsDir: pluginLayout.subscriptionsDir });
+  const roots = /* @__PURE__ */ new Map();
+  const mainCheckoutCache = /* @__PURE__ */ new Map();
+  const warned = /* @__PURE__ */ new Set();
+  const changeSource = new TaskfoldAggregatedChangeSource(discoverRoots, warn);
+  function mainCheckout(dataDir) {
+    let resolved = mainCheckoutCache.get(dataDir);
+    if (resolved === void 0) {
+      resolved = resolveTaskfoldMainCheckoutPath(dataDir);
+      mainCheckoutCache.set(dataDir, resolved);
+    }
+    return resolved;
+  }
+  async function dataDirForBoardId(boardId) {
+    const board = await rawBoards.lookup(boardId);
+    return mainCheckout(taskfoldProjectDataDir(pluginDir, boardId, board?.version === 1 ? board.board : void 0));
+  }
+  async function knownDataDirs() {
+    const dirs = new Set(roots.keys());
+    for (const { value } of await rawBoards.entries()) {
+      if (value?.version === 1 && value.board?.id) {
+        dirs.add(mainCheckout(taskfoldProjectDataDir(pluginDir, value.board.id, value.board)));
+      }
+    }
+    for (const name of listDirectoryNames(projectsRootDir)) {
+      if (BOARD_DIR_NAME.test(name)) {
+        dirs.add(path17.join(projectsRootDir, name));
+      }
+    }
+    return [...dirs];
+  }
+  function openRoot(dataDir, create) {
+    const existing = roots.get(dataDir);
+    if (existing) {
+      return existing;
+    }
+    if (!create && !isDirectory(dataDir)) {
+      return void 0;
+    }
+    if (dataDir.startsWith(`${projectsRootDir}${path17.sep}`)) {
+      ensurePluginDir();
+    }
+    const stores = createTaskfoldFileStores({ dataDir });
+    const root = {
+      dataDir,
+      attachmentsDir: resolveTaskfoldFileStoreLayout({ dataDir }).attachmentsDir,
+      stores
+    };
+    roots.set(dataDir, root);
+    changeSource.addProject(stores.changeSource);
+    return root;
+  }
+  async function openRoots() {
+    for (const dataDir of await knownDataDirs()) {
+      openRoot(dataDir, false);
+    }
+    return [...roots.values()];
+  }
+  async function discoverRoots() {
+    let opened = false;
+    for (const dataDir of await knownDataDirs()) {
+      if (!roots.has(dataDir) && openRoot(dataDir, false)) {
+        opened = true;
+      }
+    }
+    return opened;
+  }
+  async function targetRoot(boardId) {
+    return openRoot(await dataDirForBoardId(boardId), true);
+  }
+  function markDirty(root) {
+    changeSource.markDirty(root.stores.changeSource);
+  }
+  async function locate(spec, key) {
+    const found = [];
+    for (const root of await openRoots()) {
+      const value = await spec.pick(root.stores).lookup(key);
+      if (value !== void 0) {
+        found.push({ root, value });
+      }
+    }
+    return found;
+  }
+  async function choose(spec, key, found) {
+    if (found.length === 1) {
+      return found[0];
+    }
+    const scored = await Promise.all(
+      found.map(async (candidate, index) => ({
+        candidate,
+        index,
+        revision: spec.revisionOf?.(candidate.value) ?? 0,
+        home: await dataDirForBoardId(spec.boardOf(candidate.value)) === candidate.root.dataDir
+      }))
+    );
+    scored.sort((a, b) => b.revision - a.revision || Number(b.home) - Number(a.home) || a.index - b.index);
+    const chosen = scored[0].candidate;
+    const places = scored.map(({ candidate, revision }) => `${candidate.root.dataDir}${spec.revisionOf ? ` (revision ${revision})` : ""}`).join(", ");
+    const signature = `${spec.label}:${key}:${places}`;
+    if (!warned.has(signature)) {
+      warned.add(signature);
+      warn(
+        `taskfold: ${spec.label} ${key} exists in ${found.length} project data roots: ${places}; using the copy in ${chosen.root.dataDir}. Remove the other copy once you have checked it.`
+      );
+    }
+    return chosen;
+  }
+  async function removeOtherCopies(spec, key, found, keep) {
+    for (const { root } of found) {
+      if (root === keep) {
+        continue;
+      }
+      try {
+        if (await spec.pick(root.stores).delete(key)) {
+          markDirty(root);
+        }
+      } catch (error) {
+        warn(
+          `taskfold: ${spec.label} ${key} was written to ${keep.dataDir}, but its old copy in ${root.dataDir} could not be removed (${String(error)}); both copies exist until it is removed by hand.`
+        );
+      }
+    }
+  }
+  function copyAttachmentBlobs(card, from, to) {
+    for (const attachment of card.metadata?.attachments ?? []) {
+      const target = path17.join(to.attachmentsDir, attachment.id);
+      const content = readBufferIfExists(path17.join(from.attachmentsDir, attachment.id));
+      if (content !== void 0 && !fs11.existsSync(target)) {
+        writeFileAtomic(target, content);
+      }
+    }
+  }
+  async function writeTarget(spec, current, value) {
+    if (current && spec.boardOf(current.value) === spec.boardOf(value)) {
+      return current.root;
+    }
+    return await targetRoot(spec.boardOf(value));
+  }
+  function routedEntityStore(spec) {
+    return {
+      async register(key, value) {
+        const found = await locate(spec, key);
+        const current = found.length > 0 ? await choose(spec, key, found) : void 0;
+        const target = await writeTarget(spec, current, value);
+        await spec.pick(target.stores).register(key, value);
+        markDirty(target);
+        await removeOtherCopies(spec, key, found, target);
+      },
+      async lookup(key) {
+        const found = await locate(spec, key);
+        return found.length > 0 ? (await choose(spec, key, found)).value : void 0;
+      },
+      async delete(key) {
+        let deleted = false;
+        for (const { root } of await locate(spec, key)) {
+          if (await spec.pick(root.stores).delete(key)) {
+            deleted = true;
+            markDirty(root);
+          }
+        }
+        return deleted;
+      },
+      async entries() {
+        const byKey = /* @__PURE__ */ new Map();
+        for (const root of await openRoots()) {
+          for (const { key, value } of await spec.pick(root.stores).entries()) {
+            const list = byKey.get(key) ?? [];
+            list.push({ root, value });
+            byKey.set(key, list);
+          }
+        }
+        const result = [];
+        for (const [key, found] of byKey) {
+          result.push({ key, value: (await choose(spec, key, found)).value });
+        }
+        return result;
+      }
+    };
+  }
+  const cardSpec = {
+    label: "card",
+    pick: (stores) => stores.cards,
+    boardOf: cardBoardId3,
+    revisionOf: (value) => value.card.revision
+  };
+  const routedCards = routedEntityStore(cardSpec);
+  const cards = {
+    ...routedCards,
+    async register(key, value) {
+      const found = await locate(cardSpec, key);
+      const current = found.length > 0 ? await choose(cardSpec, key, found) : void 0;
+      const target = await writeTarget(cardSpec, current, value);
+      if (current && target !== current.root) {
+        copyAttachmentBlobs(value.card, current.root, target);
+      }
+      await target.stores.cards.register(key, value);
+      markDirty(target);
+      await removeOtherCopies(cardSpec, key, found, target);
+    },
+    async compareAndSwap(key, expectedRevision, value, onReject) {
+      const found = await locate(cardSpec, key);
+      if (found.length === 0) {
+        onReject?.("missing");
+        return false;
+      }
+      const current = await choose(cardSpec, key, found);
+      const target = await writeTarget(cardSpec, current, value);
+      if (target === current.root) {
+        const swapped = await current.root.stores.cards.compareAndSwap(key, expectedRevision, value, onReject);
+        if (swapped) {
+          markDirty(current.root);
+          await removeOtherCopies(cardSpec, key, found, current.root);
+        }
+        return swapped;
+      }
+      if (current.value.card.revision !== expectedRevision) {
+        onReject?.("revision");
+        return false;
+      }
+      copyAttachmentBlobs(value.card, current.root, target);
+      await target.stores.cards.register(key, value);
+      markDirty(target);
+      await removeOtherCopies(cardSpec, key, found, target);
+      return true;
+    },
+    async registerIfAbsent(key, value) {
+      if ((await locate(cardSpec, key)).length > 0) {
+        return false;
+      }
+      const target = await targetRoot(cardBoardId3(value));
+      const inserted = await target.stores.cards.registerIfAbsent(key, value);
+      if (inserted) {
+        markDirty(target);
+      }
+      return inserted;
+    }
+  };
+  const milestones = routedEntityStore({
+    label: "milestone",
+    pick: (stores) => stores.milestones,
+    boardOf: (value) => value.milestone.boardId
+  });
+  const documents = routedEntityStore({
+    label: "project document",
+    pick: (stores) => stores.documents,
+    boardOf: (value) => value.document.boardId
+  });
+  const attachments = {
+    async register(key, value) {
+      const owners = await locate(cardSpec, value.attachment.cardId);
+      if (owners.length === 0) {
+        throw new Error(`taskfold: card ${value.attachment.cardId} not found for attachment ${key}`);
+      }
+      const owner = await choose(cardSpec, value.attachment.cardId, owners);
+      await owner.root.stores.attachments.register(key, value);
+    },
+    async lookup(key) {
+      for (const root of await openRoots()) {
+        const value = await root.stores.attachments.lookup(key);
+        if (value !== void 0) {
+          return value;
+        }
+      }
+      return void 0;
+    },
+    async delete(key) {
+      let deleted = false;
+      for (const root of await openRoots()) {
+        deleted = await root.stores.attachments.delete(key) || deleted;
+      }
+      return deleted;
+    },
+    async entries() {
+      const seen = /* @__PURE__ */ new Set();
+      const result = [];
+      for (const root of await openRoots()) {
+        for (const entry of await root.stores.attachments.entries()) {
+          if (!seen.has(entry.key)) {
+            seen.add(entry.key);
+            result.push(entry);
+          }
+        }
+      }
+      return result;
+    }
+  };
+  const boards = {
+    ...rawBoards,
+    async register(key, value) {
+      ensurePluginDir();
+      await rawBoards.register(key, value);
+    }
+  };
+  const subscriptions = {
+    ...rawSubscriptions,
+    async register(key, value) {
+      ensurePluginDir();
+      await rawSubscriptions.register(key, value);
+    }
+  };
+  return { cards, boards, milestones, documents, subscriptions, attachments, changeSource };
+}
+var BOARD_DIR_NAME;
+var init_project_routed_stores = __esm({
+  "src/backend/src/project-routed-stores.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_boards();
+    init_file_store();
+    init_file_store_paths();
+    init_file_store_subscriptions();
+    init_change_aggregator();
+    BOARD_DIR_NAME = /^[a-z0-9][a-z0-9._-]{0,79}$/;
+  }
+});
+
+// src/backend/src/sqlite-migration.ts
+var sqlite_migration_exports = {};
+__export(sqlite_migration_exports, {
+  TASKFOLD_SQLITE_MIGRATION_MARKER: () => TASKFOLD_SQLITE_MIGRATION_MARKER,
+  TaskfoldSqliteMigrationError: () => TaskfoldSqliteMigrationError,
+  formatTaskfoldSqliteMigrationReport: () => formatTaskfoldSqliteMigrationReport,
+  runTaskfoldSqliteMigration: () => runTaskfoldSqliteMigration
+});
+import fs13 from "node:fs";
+import os from "node:os";
+import path19 from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
+function zeroCounts() {
+  return Object.fromEntries(COUNT_KEYS.map((key) => [key, 0]));
+}
+function cardBoardId4(card) {
+  return card.metadata?.automation?.boardId ?? "default";
+}
+function isAbsolutePath(value) {
+  return typeof value === "string" && path19.isAbsolute(value);
+}
+function countCards(cards, counts) {
+  for (const card of cards) {
+    const metadata = card.metadata;
+    counts.cards += 1;
+    counts.archivedCards += metadata?.archivedAt ? 1 : 0;
+    counts.labels += card.labels.length;
+    counts.events += card.events?.length ?? 0;
+    counts.delivery += card.delivery ? 1 : 0;
+    counts.sourceReferences += card.sourceReferences?.length ?? 0;
+    counts.attempts += metadata?.attempts?.length ?? 0;
+    counts.comments += metadata?.comments?.length ?? 0;
+    counts.links += metadata?.links?.length ?? 0;
+    counts.proof += metadata?.proof?.length ?? 0;
+    counts.artifacts += metadata?.artifacts?.length ?? 0;
+    counts.attachments += metadata?.attachments?.length ?? 0;
+    counts.diagnostics += metadata?.diagnostics?.length ?? 0;
+    counts.notifications += metadata?.notifications?.length ?? 0;
+    counts.workerLogs += metadata?.workerLogs?.length ?? 0;
+    counts.workerProtocol += metadata?.workerProtocol ? 1 : 0;
+  }
+}
+function localTimestamp(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+function fileSignature(file) {
+  try {
+    const stat2 = fs13.statSync(file);
+    return `${stat2.size}:${stat2.mtimeMs}`;
+  } catch {
+    return "missing";
+  }
+}
+function copySqliteFiles(sqlitePath, destDir, baseName) {
+  fs13.mkdirSync(destDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+  const watched = [sqlitePath, `${sqlitePath}-wal`];
+  const before = watched.map(fileSignature);
+  const copied = [];
+  try {
+    for (const suffix of SQLITE_SUFFIXES) {
+      const source = `${sqlitePath}${suffix}`;
+      if (!fs13.existsSync(source)) {
+        continue;
+      }
+      const target = path19.join(destDir, `${baseName}.sqlite${suffix}`);
+      fs13.copyFileSync(source, target, fs13.constants.COPYFILE_EXCL);
+      copied.push(target);
+      fs13.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
+    }
+    if (!isDeepStrictEqual3(watched.map(fileSignature), before)) {
+      throw new TaskfoldSqliteMigrationError(
+        `${sqlitePath} changed while it was being copied; stop whatever is writing it (an older Taskfold Gateway) and retry.`
+      );
+    }
+    return copied;
+  } catch (error) {
+    for (const file of copied) {
+      fs13.rmSync(file, { force: true });
+    }
+    throw error;
+  }
+}
+function normalized(value) {
+  return value === void 0 ? void 0 : JSON.parse(JSON.stringify(value));
+}
+function floorToMinute(epochMs) {
+  return Math.floor(epochMs / 6e4) * 6e4;
+}
+async function readSource(snapshotPath) {
+  const sqlite = openTaskfoldSqliteStoresReadOnly(snapshotPath);
+  try {
+    const boards = new Map(
+      (await sqlite.boards.entries()).filter((entry) => entry.value?.version === 1).map((entry) => [entry.key, entry.value])
+    );
+    const counts = /* @__PURE__ */ new Map();
+    const countsFor = (boardId) => {
+      let value = counts.get(boardId);
+      if (!value) {
+        value = zeroCounts();
+        counts.set(boardId, value);
+      }
+      return value;
+    };
+    const rows = (sql) => sqlite.db.prepare(sql).all();
+    for (const row of rows(
+      "SELECT board_id, COUNT(*) AS n, SUM(archived_at IS NOT NULL) AS archived FROM taskfold_cards GROUP BY board_id"
+    )) {
+      countsFor(row.board_id).cards = Number(row.n);
+      countsFor(row.board_id).archivedCards = Number(row.archived ?? 0);
+    }
+    for (const [table, key] of CARD_CHILD_TABLES) {
+      for (const row of rows(
+        `SELECT c.board_id AS board_id, COUNT(*) AS n FROM ${table} x JOIN taskfold_cards c ON c.id = x.card_id GROUP BY c.board_id`
+      )) {
+        countsFor(row.board_id)[key] = Number(row.n);
+      }
+    }
+    for (const row of rows(
+      `SELECT c.board_id AS board_id, COUNT(*) AS n FROM taskfold_attachment_blobs b
+         JOIN taskfold_card_attachments a ON a.id = b.attachment_id
+         JOIN taskfold_cards c ON c.id = a.card_id GROUP BY c.board_id`
+    )) {
+      countsFor(row.board_id).attachmentBlobs = Number(row.n);
+    }
+    for (const row of rows("SELECT board_id, COUNT(*) AS n FROM taskfold_milestones GROUP BY board_id")) {
+      countsFor(row.board_id).milestones = Number(row.n);
+    }
+    for (const row of rows("SELECT board_id, COUNT(*) AS n FROM taskfold_project_documents GROUP BY board_id")) {
+      countsFor(row.board_id).documents = Number(row.n);
+    }
+    return {
+      boards,
+      cards: (await sqlite.cards.entries()).map((entry) => entry.value.card),
+      milestones: (await sqlite.milestones.entries()).map((entry) => entry.value.milestone),
+      documents: (await sqlite.documents.entries()).map((entry) => entry.value.document),
+      attachments: (await sqlite.attachments.entries()).map((entry) => entry.value),
+      subscriptions: await sqlite.subscriptions.entries(),
+      counts
+    };
+  } finally {
+    sqlite.close();
+  }
+}
+function byCreatedThenId(a, b) {
+  return a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+function byPositionThenId(a, b) {
+  return a.position - b.position || byCreatedThenId(a, b);
+}
+async function writeAndVerifyRoot(plan, stagingDir) {
+  const target = createTaskfoldFileStores({ dataDir: stagingDir });
+  for (const milestone of plan.milestones.toSorted(byPositionThenId)) {
+    await target.milestones.register(milestone.id, { version: 1, milestone });
+  }
+  for (const card of plan.cards.toSorted(byCreatedThenId)) {
+    await target.cards.register(card.id, { version: 1, card: structuredClone(card) });
+  }
+  for (const document of plan.documents.toSorted(byPositionThenId)) {
+    await target.documents.register(document.id, { version: 1, document });
+  }
+  for (const attachment of plan.attachments) {
+    await target.attachments.register(attachment.attachment.id, attachment);
+  }
+  const reread = createTaskfoldFileStores({ dataDir: stagingDir });
+  const mismatches = [];
+  for (const card of plan.cards) {
+    const stored = await reread.cards.lookup(card.id);
+    if (!isDeepStrictEqual3(normalized(stored?.card), normalized(card))) {
+      mismatches.push(`card ${card.id}`);
+    }
+  }
+  let milestoneUpdatedAtTruncated = 0;
+  for (const milestone of plan.milestones) {
+    const stored = (await reread.milestones.lookup(milestone.id))?.milestone;
+    const expected = { ...milestone, updatedAt: floorToMinute(milestone.updatedAt) };
+    if (!isDeepStrictEqual3(normalized(stored), normalized(expected))) {
+      mismatches.push(`milestone ${milestone.id}`);
+    }
+    milestoneUpdatedAtTruncated += expected.updatedAt === milestone.updatedAt ? 0 : 1;
+  }
+  for (const document of plan.documents) {
+    const stored = (await reread.documents.lookup(document.id))?.document;
+    if (!isDeepStrictEqual3(normalized(stored), normalized(document))) {
+      mismatches.push(`document ${document.id}`);
+    }
+  }
+  const blobBoards = /* @__PURE__ */ new Map();
+  for (const attachment of plan.attachments) {
+    const stored = await reread.attachments.lookup(attachment.attachment.id);
+    if (!isDeepStrictEqual3(normalized(stored), normalized(attachment))) {
+      mismatches.push(`attachment ${attachment.attachment.id}`);
+      continue;
+    }
+    const owner = plan.cards.find((card) => card.id === attachment.attachment.cardId);
+    const boardId = owner ? cardBoardId4(owner) : "default";
+    blobBoards.set(boardId, (blobBoards.get(boardId) ?? 0) + 1);
+  }
+  if (mismatches.length > 0) {
+    throw new TaskfoldSqliteMigrationError(
+      `read-back check failed for ${mismatches.length} entities in ${stagingDir}: ${mismatches.slice(0, 10).join(", ")}`
+    );
+  }
+  const storedCards = (await reread.cards.entries()).map((entry) => entry.value.card);
+  const storedMilestones = (await reread.milestones.entries()).map((entry) => entry.value.milestone);
+  const storedDocuments = (await reread.documents.entries()).map((entry) => entry.value.document);
+  const written = /* @__PURE__ */ new Map();
+  const displayIds = /* @__PURE__ */ new Map();
+  for (const boardId of plan.boardIds) {
+    const counts = zeroCounts();
+    countCards(storedCards.filter((card) => cardBoardId4(card) === boardId), counts);
+    counts.milestones = storedMilestones.filter((milestone) => milestone.boardId === boardId).length;
+    counts.documents = storedDocuments.filter((document) => document.boardId === boardId).length;
+    counts.attachmentBlobs = blobBoards.get(boardId) ?? 0;
+    written.set(boardId, counts);
+  }
+  const cardsDir = path19.join(stagingDir, "cards");
+  const files = fs13.existsSync(cardsDir) ? fs13.readdirSync(cardsDir).filter((name) => name.endsWith(".md")) : [];
+  const idOf = (name) => name.split(" - ")[0];
+  const numberOf = (name) => Number.parseInt(idOf(name).replace(/^\D+-/, ""), 10);
+  for (const boardId of plan.boardIds) {
+    const own = new Set(storedCards.filter((card) => cardBoardId4(card) === boardId).map((card) => card.id));
+    const mine = files.filter((name) => {
+      const content = fs13.readFileSync(path19.join(cardsDir, name), "utf8");
+      return [...own].some((id) => content.includes(`"uuid": ${JSON.stringify(id)}`));
+    }).toSorted((a, b) => numberOf(a) - numberOf(b));
+    if (mine.length > 0) {
+      displayIds.set(boardId, { first: idOf(mine[0]), last: idOf(mine.at(-1)) });
+    }
+  }
+  return { written, displayIds, milestoneUpdatedAtTruncated };
+}
+function stagingPathFor(dataDir, stamp) {
+  return path19.join(path19.dirname(dataDir), `.${path19.basename(dataDir).replace(/^\./, "")}.migrating-${stamp}`);
+}
+async function runTaskfoldSqliteMigration(options) {
+  const pluginDir = path19.resolve(options.pluginDir);
+  const { mode } = options;
+  const stamp = localTimestamp(options.now ?? /* @__PURE__ */ new Date());
+  const sqlitePath = path19.join(pluginDir, "taskfold.sqlite");
+  const projectsJsonPath = path19.join(pluginDir, "projects.json");
+  const markerPath = path19.join(pluginDir, TASKFOLD_SQLITE_MIGRATION_MARKER);
+  const projectsRootDir = path19.join(pluginDir, "projects");
+  if (!fs13.existsSync(sqlitePath)) {
+    throw new TaskfoldSqliteMigrationError(`no SQLite database at ${sqlitePath}; nothing to migrate.`);
+  }
+  const blockers = [];
+  if (fs13.existsSync(markerPath)) {
+    blockers.push(`${markerPath} already exists (this state directory was already migrated)`);
+  }
+  if (fs13.existsSync(projectsJsonPath)) {
+    blockers.push(`${projectsJsonPath} already exists`);
+  }
+  const workDir = fs13.mkdtempSync(path19.join(os.tmpdir(), "taskfold-migrate-sqlite-"));
+  const created = [];
+  let applied = false;
+  try {
+    const pristine = copySqliteFiles(sqlitePath, path19.join(workDir, "pristine"), "taskfold");
+    const readDir = path19.join(workDir, "read");
+    fs13.mkdirSync(readDir);
+    for (const file of pristine) {
+      fs13.copyFileSync(file, path19.join(readDir, path19.basename(file)));
+    }
+    const source = await readSource(path19.join(readDir, "taskfold.sqlite"));
+    const mainCheckoutCache = /* @__PURE__ */ new Map();
+    const dataDirOf = (boardId) => {
+      const board = source.boards.get(boardId)?.board;
+      const raw = taskfoldProjectDataDir(pluginDir, boardId, board);
+      let resolved = mainCheckoutCache.get(raw);
+      if (resolved === void 0) {
+        resolved = resolveTaskfoldMainCheckoutPath(raw);
+        mainCheckoutCache.set(raw, resolved);
+      }
+      return resolved;
+    };
+    const boardIds = /* @__PURE__ */ new Set([
+      ...source.boards.keys(),
+      ...source.cards.map(cardBoardId4),
+      ...source.milestones.map((milestone) => milestone.boardId),
+      ...source.documents.map((document) => document.boardId)
+    ]);
+    const position = (boardId) => source.boards.get(boardId)?.board.position ?? Number.MAX_SAFE_INTEGER;
+    const orderedBoardIds = [...boardIds].toSorted((a, b) => position(a) - position(b) || a.localeCompare(b));
+    const cardBoard = new Map(source.cards.map((card) => [card.id, cardBoardId4(card)]));
+    const plans = /* @__PURE__ */ new Map();
+    const projects = [];
+    for (const boardId of orderedBoardIds) {
+      const board = source.boards.get(boardId)?.board;
+      const dataDir = dataDirOf(boardId);
+      const cards = source.cards.filter((card) => cardBoardId4(card) === boardId);
+      const milestones = source.milestones.filter((milestone) => milestone.boardId === boardId);
+      const documents = source.documents.filter((document) => document.boardId === boardId);
+      const attachments = source.attachments.filter(
+        (attachment) => cardBoard.get(attachment.attachment.cardId) === boardId
+      );
+      const skipped = cards.length + milestones.length + documents.length + attachments.length === 0;
+      projects.push({
+        boardId,
+        ...board?.name ? { name: board.name } : {},
+        archived: Boolean(board?.archivedAt),
+        dataDir,
+        location: dataDir.startsWith(`${projectsRootDir}${path19.sep}`) ? "plugin" : "repository",
+        skipped,
+        source: source.counts.get(boardId) ?? zeroCounts(),
+        absolutePaths: {
+          documentTargets: documents.filter((document) => isAbsolutePath(document.target)).length,
+          cardWorkspaces: cards.filter((card) => {
+            const workspace = card.metadata?.automation?.workspace;
+            return isAbsolutePath(workspace?.path) || isAbsolutePath(workspace?.sourcePath);
+          }).length,
+          sourceReferences: cards.reduce(
+            (total, card) => total + (card.sourceReferences ?? []).filter((reference) => isAbsolutePath(reference.target)).length,
+            0
+          )
+        }
+      });
+      if (skipped) {
+        continue;
+      }
+      const plan = plans.get(dataDir) ?? { dataDir, boardIds: [], cards: [], milestones: [], documents: [], attachments: [] };
+      plan.boardIds.push(boardId);
+      plan.cards.push(...cards);
+      plan.milestones.push(...milestones);
+      plan.documents.push(...documents);
+      plan.attachments.push(...attachments);
+      plans.set(dataDir, plan);
+    }
+    for (const plan of plans.values()) {
+      if (fs13.existsSync(plan.dataDir)) {
+        blockers.push(`${plan.dataDir} already exists`);
+      }
+    }
+    const report = {
+      mode,
+      sqlitePath,
+      backupFiles: [],
+      projectsJsonPath,
+      boards: source.boards.size,
+      subscriptions: source.subscriptions.length,
+      projects,
+      blockers,
+      milestoneUpdatedAtTruncated: 0,
+      applied: false
+    };
+    if (mode === "apply" && blockers.length > 0) {
+      throw new TaskfoldSqliteMigrationError(`refusing to migrate: ${blockers.join("; ")}`, report);
+    }
+    if (mode === "apply") {
+      const backupDir = path19.join(pluginDir, "backup");
+      fs13.mkdirSync(backupDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+      for (const file of pristine) {
+        const target = path19.join(backupDir, path19.basename(file).replace(/^taskfold\./, `taskfold-premigrate-${stamp}.`));
+        fs13.copyFileSync(file, target, fs13.constants.COPYFILE_EXCL);
+        fs13.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
+        report.backupFiles.push(target);
+      }
+    }
+    const staged = [];
+    const projectsRootExisted = fs13.existsSync(projectsRootDir);
+    let index = 0;
+    for (const plan of plans.values()) {
+      index += 1;
+      const stagingDir = mode === "apply" ? stagingPathFor(plan.dataDir, stamp) : path19.join(workDir, "stage", String(index), ".taskfold");
+      if (mode === "apply") {
+        if (!projectsRootExisted && plan.dataDir.startsWith(`${projectsRootDir}${path19.sep}`) && !created.includes(projectsRootDir)) {
+          created.push(projectsRootDir);
+        }
+        created.push(stagingDir);
+      }
+      const result = await writeAndVerifyRoot(plan, stagingDir);
+      report.milestoneUpdatedAtTruncated += result.milestoneUpdatedAtTruncated;
+      for (const project of projects) {
+        if (plan.boardIds.includes(project.boardId)) {
+          project.written = result.written.get(project.boardId);
+          const displayIds = result.displayIds.get(project.boardId);
+          if (displayIds) {
+            project.cardDisplayIds = displayIds;
+          }
+        }
+      }
+      staged.push({ plan, stagingDir });
+    }
+    for (const project of projects) {
+      if (!project.skipped && !isDeepStrictEqual3(project.written, project.source)) {
+        throw new TaskfoldSqliteMigrationError(
+          `count check failed for project ${project.boardId}: SQLite ${JSON.stringify(project.source)} vs files ${JSON.stringify(project.written)}`,
+          report
+        );
+      }
+    }
+    if (mode === "apply") {
+      for (const { plan, stagingDir } of staged) {
+        if (fs13.existsSync(plan.dataDir)) {
+          throw new TaskfoldSqliteMigrationError(`${plan.dataDir} appeared during the migration; nothing was committed.`);
+        }
+        fs13.renameSync(stagingDir, plan.dataDir);
+        created[created.indexOf(stagingDir)] = plan.dataDir;
+      }
+      fs13.mkdirSync(pluginDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+      created.push(projectsJsonPath);
+      writeFileAtomic(projectsJsonPath, JSON.stringify(Object.fromEntries(source.boards), null, 2));
+      if (source.subscriptions.length > 0) {
+        const subscriptionsDir = path19.join(pluginDir, "subscriptions");
+        if (!fs13.existsSync(subscriptionsDir)) {
+          created.push(subscriptionsDir);
+        }
+        const subscriptions = createTaskfoldFileSubscriptionStore({ subscriptionsDir });
+        for (const { key, value } of source.subscriptions) {
+          await subscriptions.register(key, value);
+        }
+      }
+      created.push(markerPath);
+      writeFileAtomic(
+        markerPath,
+        JSON.stringify(
+          {
+            migratedAt: (/* @__PURE__ */ new Date()).toISOString(),
+            source: sqlitePath,
+            backupFiles: report.backupFiles,
+            projects: projects.map(({ boardId, dataDir, skipped, written }) => ({ boardId, dataDir, skipped, written }))
+          },
+          null,
+          2
+        )
+      );
+      applied = true;
+      report.applied = true;
+    }
+    return report;
+  } catch (error) {
+    if (!applied) {
+      for (const target of created.toReversed()) {
+        fs13.rmSync(target, { recursive: true, force: true });
+      }
+    }
+    throw error;
+  } finally {
+    fs13.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+function formatCounts(counts) {
+  if (!counts) {
+    return "-";
+  }
+  return COUNT_KEYS.filter((key) => counts[key] > 0).map((key) => `${key} ${counts[key]}`).join(", ") || "empty";
+}
+function formatTaskfoldSqliteMigrationReport(report) {
+  const lines = [
+    `Taskfold SQLite \u2192 files migration (${report.mode})`,
+    `source: ${report.sqlitePath} (read from a read-only snapshot; never written)`
+  ];
+  if (report.backupFiles.length > 0) {
+    lines.push(`backup: ${report.backupFiles.join(", ")}`);
+  }
+  lines.push(`registry: ${report.boards} projects \u2192 ${report.projectsJsonPath}; subscriptions ${report.subscriptions}`);
+  for (const project of report.projects) {
+    const label = `${project.boardId}${project.name ? ` "${project.name}"` : ""}${project.archived ? " (archived)" : ""}`;
+    if (project.skipped) {
+      lines.push(`- ${label}: no data; ${project.dataDir} is created on the first write`);
+      continue;
+    }
+    const same = isDeepStrictEqual3(project.source, project.written);
+    lines.push(`- ${label} \u2192 ${project.dataDir} [${project.location}]`);
+    lines.push(`    SQLite: ${formatCounts(project.source)}`);
+    lines.push(`    files:  ${same ? "identical" : formatCounts(project.written)}`);
+    if (project.cardDisplayIds) {
+      lines.push(`    card ids: ${project.cardDisplayIds.first} \u2026 ${project.cardDisplayIds.last}`);
+    }
+    const { documentTargets, cardWorkspaces, sourceReferences } = project.absolutePaths;
+    if (documentTargets + cardWorkspaces + sourceReferences > 0) {
+      lines.push(
+        `    absolute paths kept as-is: document targets ${documentTargets}, card workspaces ${cardWorkspaces}, source references ${sourceReferences}`
+      );
+    }
+  }
+  if (report.milestoneUpdatedAtTruncated > 0) {
+    lines.push(`note: ${report.milestoneUpdatedAtTruncated} milestone updatedAt values keep minute precision only`);
+  }
+  lines.push(report.blockers.length > 0 ? `blockers: ${report.blockers.join("; ")}` : "blockers: none");
+  lines.push(
+    report.applied ? "result: applied and verified" : report.blockers.length > 0 ? "result: verified in a temporary directory; --apply would be refused" : "result: verified in a temporary directory; nothing written (run with --apply to migrate)"
+  );
+  return lines.join("\n");
+}
+var TASKFOLD_SQLITE_MIGRATION_MARKER, TaskfoldSqliteMigrationError, COUNT_KEYS, CARD_CHILD_TABLES, SQLITE_SUFFIXES;
+var init_sqlite_migration = __esm({
+  "src/backend/src/sqlite-migration.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store();
+    init_file_store_subscriptions();
+    init_file_store_paths();
+    init_project_routed_stores();
+    init_sqlite_store();
+    TASKFOLD_SQLITE_MIGRATION_MARKER = "migrated-from-sqlite.json";
+    TaskfoldSqliteMigrationError = class extends Error {
+      constructor(message, report) {
+        super(message);
+        this.report = report;
+        this.name = "TaskfoldSqliteMigrationError";
+      }
+    };
+    COUNT_KEYS = [
+      "cards",
+      "archivedCards",
+      "milestones",
+      "documents",
+      "attachments",
+      "attachmentBlobs",
+      "labels",
+      "events",
+      "attempts",
+      "comments",
+      "links",
+      "proof",
+      "artifacts",
+      "delivery",
+      "sourceReferences",
+      "diagnostics",
+      "notifications",
+      "workerLogs",
+      "workerProtocol"
+    ];
+    CARD_CHILD_TABLES = [
+      ["taskfold_card_labels", "labels"],
+      ["taskfold_card_events", "events"],
+      ["taskfold_card_attempts", "attempts"],
+      ["taskfold_card_comments", "comments"],
+      ["taskfold_card_links", "links"],
+      ["taskfold_card_proof", "proof"],
+      ["taskfold_card_artifacts", "artifacts"],
+      ["taskfold_card_delivery", "delivery"],
+      ["taskfold_card_source_references", "sourceReferences"],
+      ["taskfold_card_diagnostics", "diagnostics"],
+      ["taskfold_card_notifications", "notifications"],
+      ["taskfold_worker_logs", "workerLogs"],
+      ["taskfold_worker_protocol", "workerProtocol"],
+      ["taskfold_card_attachments", "attachments"]
+    ];
+    SQLITE_SUFFIXES = ["", "-wal", "-shm"];
   }
 });
 
@@ -279,6 +7390,28 @@ function hasConfiguredRemoteGatewayTarget() {
 }
 function registerTaskfoldCli(params) {
   const taskfold = params.program.command("taskfold").description("Manage Taskfold cards and worker dispatch");
+  taskfold.command("migrate-sqlite").description("Migrate data from the old SQLite store (taskfold.sqlite) to Taskfold's file store").option("--dry-run", "Verify the migration in a temporary directory and print counts; write nothing").option("--apply", "Back up taskfold.sqlite, then write every project's data to files").option("--json", "Print JSON", false).action(async (options) => {
+    if (Boolean(options.dryRun) === Boolean(options.apply)) {
+      throw invalidCliArgument("pass exactly one of --dry-run or --apply.");
+    }
+    const { formatTaskfoldSqliteMigrationReport: formatTaskfoldSqliteMigrationReport2, runTaskfoldSqliteMigration: runTaskfoldSqliteMigration2, TaskfoldSqliteMigrationError: TaskfoldSqliteMigrationError2 } = await Promise.resolve().then(() => (init_sqlite_migration(), sqlite_migration_exports));
+    try {
+      const report = await runTaskfoldSqliteMigration2({
+        pluginDir: params.pluginDir,
+        mode: options.apply ? "apply" : "dry-run"
+      });
+      if (options.json) {
+        writeJson(report);
+      } else {
+        writeLine(formatTaskfoldSqliteMigrationReport2(report));
+      }
+    } catch (error) {
+      if (error instanceof TaskfoldSqliteMigrationError2 && error.report && !options.json) {
+        writeLine(formatTaskfoldSqliteMigrationReport2(error.report));
+      }
+      throw error;
+    }
+  });
   taskfold.command("list").description("List Taskfold cards").option("--board <id>", "Board id").option("--status <status>", "Filter by status").option("--include-archived", "Include archived cards (default false)").option("--json", "Print JSON", false).action(
     async (options) => {
       let cards = await params.store.list({ boardId: options.board });
@@ -474,6 +7607,10 @@ var init_cli = __esm({
   }
 });
 
+// src/backend/index.ts
+init_file_store();
+import { resolveStateDir as resolveStateDir2 } from "openclaw/plugin-sdk/state-paths";
+
 // src/backend/api.ts
 import {
   definePluginEntry
@@ -494,164 +7631,14 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2
 
 // packages/core/src/store-card-helpers.ts
 init_contract();
-import { randomUUID as randomUUID2 } from "node:crypto";
-
-// packages/core/src/sdk-utils.ts
-import { timingSafeEqual } from "node:crypto";
-var MAX_DATE_TIMESTAMP_MS = 864e13;
-function asFiniteNumber(value) {
-  return Number.isFinite(value) ? value : void 0;
-}
-function asDateTimestampMs(value) {
-  const number = asFiniteNumber(value);
-  if (number === void 0 || number < -MAX_DATE_TIMESTAMP_MS || number > MAX_DATE_TIMESTAMP_MS) {
-    return void 0;
-  }
-  return number;
-}
-function asPositiveSafeInteger(value) {
-  return Number.isSafeInteger(value) && value > 0 ? value : void 0;
-}
-function isDateRepresentable(value) {
-  return asDateTimestampMs(value) !== void 0;
-}
-function isFutureDateTimestampMs(value, opts = {}) {
-  const timestampMs = asDateTimestampMs(value);
-  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
-  return timestampMs !== void 0 && nowMs !== void 0 && timestampMs > nowMs;
-}
-function resolveExpiresAtMsFromDurationMs(value, opts = {}) {
-  const durationMs = asPositiveSafeInteger(value);
-  if (durationMs === void 0) {
-    return void 0;
-  }
-  const nowMs = asDateTimestampMs(opts.nowMs ?? Date.now());
-  const bufferMs = asFiniteNumber(opts.bufferMs ?? 0);
-  if (nowMs === void 0 || bufferMs === void 0) {
-    return void 0;
-  }
-  const expiresAt = nowMs + durationMs - bufferMs;
-  if (!Number.isSafeInteger(expiresAt) || !isDateRepresentable(expiresAt)) {
-    return void 0;
-  }
-  const minRemainingMs = opts.minRemainingMs;
-  if (minRemainingMs === void 0) {
-    return expiresAt;
-  }
-  const minExpiresAt = nowMs + minRemainingMs;
-  if (!Number.isSafeInteger(minExpiresAt) || !isDateRepresentable(minExpiresAt)) {
-    return expiresAt;
-  }
-  return Math.max(expiresAt, minExpiresAt);
-}
-function padSecretBytes(bytes, length) {
-  if (bytes.length === length) {
-    return bytes;
-  }
-  const padded = Buffer.alloc(length);
-  bytes.copy(padded);
-  return padded;
-}
-function safeEqualSecret(provided, expected) {
-  if (typeof provided !== "string" || typeof expected !== "string") {
-    return false;
-  }
-  const providedBytes = Buffer.from(provided, "utf8");
-  const expectedBytes = Buffer.from(expected, "utf8");
-  const byteLength = Math.max(providedBytes.length, expectedBytes.length);
-  if (byteLength === 0) {
-    return true;
-  }
-  return timingSafeEqual(
-    padSecretBytes(providedBytes, byteLength),
-    padSecretBytes(expectedBytes, byteLength)
-  ) && providedBytes.length === expectedBytes.length;
-}
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function isHighSurrogate(codeUnit) {
-  return codeUnit >= 55296 && codeUnit <= 56319;
-}
-function isLowSurrogate(codeUnit) {
-  return codeUnit >= 56320 && codeUnit <= 57343;
-}
-function sliceUtf16Safe(input, start, end) {
-  const len = input.length;
-  let from = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
-  let to = end === void 0 ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
-  if (to <= from) {
-    return "";
-  }
-  if (from > 0 && from < len) {
-    if (isLowSurrogate(input.charCodeAt(from)) && isHighSurrogate(input.charCodeAt(from - 1))) {
-      from += 1;
-    }
-  }
-  if (to > 0 && to < len) {
-    if (isHighSurrogate(input.charCodeAt(to - 1)) && isLowSurrogate(input.charCodeAt(to))) {
-      to -= 1;
-    }
-  }
-  return input.slice(from, to);
-}
-function truncateUtf16Safe(input, maxLen) {
-  const limit = Math.max(0, Math.floor(maxLen));
-  if (input.length <= limit) {
-    return input;
-  }
-  return sliceUtf16Safe(input, 0, limit);
-}
-function resolveGlobalSingleton(key, create) {
-  const globalStore = globalThis;
-  if (Object.hasOwn(globalStore, key)) {
-    return globalStore[key];
-  }
-  const value = create();
-  globalStore[key] = value;
-  return value;
-}
-
-// packages/core/src/store-constants.ts
-var POSITION_STEP = 1e3;
-var MAX_CARDS = 2e3;
-var MAX_CARD_EVENTS = 50;
-var MAX_CARD_ATTEMPTS = 30;
-var MAX_CARD_COMMENTS = 50;
-var MAX_CARD_LINKS = 50;
-var MAX_CARD_PROOF = 40;
-var MAX_CARD_ARTIFACTS = 40;
-var MAX_CARD_ATTACHMENTS = 20;
-var MAX_ATTACHMENT_ENTRIES = MAX_CARDS * (MAX_CARD_ATTACHMENTS + 1);
-var MAX_CARD_WORKER_LOGS = 40;
-var MAX_ATTACHMENT_BYTES = 256 * 1024;
-var MAX_CARD_DIAGNOSTICS = 12;
-var MAX_CARD_NOTIFICATIONS = 20;
-var MAX_CARD_METADATA_BYTES = 24 * 1024;
-var DEFAULT_CLAIM_TTL_MS = 30 * 60 * 1e3;
-var READY_STRANDED_MS = 60 * 60 * 1e3;
-var RUNNING_HEARTBEAT_STALE_MS = 20 * 60 * 1e3;
-var BLOCKED_TOO_LONG_MS = 24 * 60 * 60 * 1e3;
-var CLAIM_RECLAIM_MS = 5 * 60 * 1e3;
-var TASKFOLD_INITIAL_CARD_REVISION = 1;
-var TASKFOLD_PROMPT_VERSION = 1;
-function nextTaskfoldCardRevision(current) {
-  return Number.isSafeInteger(current) && current > 0 ? current + 1 : TASKFOLD_INITIAL_CARD_REVISION;
-}
-function isTaskfoldClaimReclaimable(claim, now) {
-  return Boolean(claim?.expiresAt && now - claim.expiresAt > CLAIM_RECLAIM_MS);
-}
-function secondsToDurationMs(seconds) {
-  const ms = Math.trunc(seconds) * 1e3;
-  return Number.isFinite(ms) ? Math.min(MAX_DATE_TIMESTAMP_MS, Math.max(1, ms)) : MAX_DATE_TIMESTAMP_MS;
-}
-function addTaskfoldDurationMs(now, durationMs) {
-  return resolveExpiresAtMsFromDurationMs(durationMs, { nowMs: now }) ?? MAX_DATE_TIMESTAMP_MS;
-}
+init_sdk_utils();
+init_store_constants();
+import { randomUUID as randomUUID4 } from "node:crypto";
 
 // packages/core/src/store-normalizers.ts
 init_contract();
-import { randomUUID } from "node:crypto";
+init_store_constants();
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // packages/core/src/workspace-path.ts
 function isAbsoluteWorkspacePath(value) {
@@ -829,7 +7816,7 @@ function normalizeNotificationSubscription(input, fallback, now = Date.now()) {
     }
   }
   return {
-    id: fallback?.id ?? randomUUID(),
+    id: fallback?.id ?? randomUUID3(),
     boardId,
     ...cardId ? { cardId } : {},
     ...sessionKey ? { sessionKey } : {},
@@ -862,14 +7849,14 @@ function normalizeNotes(value) {
   return notes;
 }
 function normalizeOptionalBoundedString(value, maxLength, fieldName) {
-  const normalized = normalizeOptionalString(value);
-  if (!normalized) {
+  const normalized2 = normalizeOptionalString(value);
+  if (!normalized2) {
     return void 0;
   }
-  if (normalized.length > maxLength) {
+  if (normalized2.length > maxLength) {
     throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
   }
-  return normalized;
+  return normalized2;
 }
 function normalizeDeliveryState(value, allowed, fieldName) {
   if (typeof value !== "string" || !value.trim()) {
@@ -915,23 +7902,23 @@ function normalizeDelivery(value, fallback, now = Date.now()) {
   return Object.keys(delivery).length ? { ...delivery, updatedAt: now } : void 0;
 }
 function normalizeBoundedString(value, fallback, maxLength, fieldName) {
-  const normalized = normalizeOptionalString(value);
-  if (!normalized) {
+  const normalized2 = normalizeOptionalString(value);
+  if (!normalized2) {
     return fallback;
   }
-  if (normalized.length > maxLength) {
+  if (normalized2.length > maxLength) {
     throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
   }
-  return normalized;
+  return normalized2;
 }
 function normalizeExternalUrl(value, fallback, fieldName) {
-  const normalized = normalizeBoundedString(value, fallback, 2e3, fieldName);
-  if (!normalized) {
+  const normalized2 = normalizeBoundedString(value, fallback, 2e3, fieldName);
+  if (!normalized2) {
     return void 0;
   }
   let parsed;
   try {
-    parsed = new URL(normalized);
+    parsed = new URL(normalized2);
   } catch {
     throw new Error(`${fieldName} must be a valid http or https URL.`);
   }
@@ -1004,9 +7991,9 @@ function normalizeStringList(value, fieldName, maxLength = 80) {
     if (Array.isArray(value) && typeof entry !== "string") {
       throw new Error(`${fieldName} entries must be strings.`);
     }
-    const normalized = normalizeBoundedString(entry, void 0, maxLength, fieldName);
-    if (normalized && !values.includes(normalized)) {
-      values.push(normalized);
+    const normalized2 = normalizeBoundedString(entry, void 0, maxLength, fieldName);
+    if (normalized2 && !values.includes(normalized2)) {
+      values.push(normalized2);
     }
     if (values.length > 20) {
       throw new Error(`${fieldName} supports at most 20 entries.`);
@@ -1121,8 +8108,8 @@ function normalizeLaunchTimestamp(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : void 0;
 }
 function normalizeLaunchString(value, maxLength) {
-  const normalized = normalizeOptionalString(value);
-  return normalized && normalized.length <= maxLength ? normalized : void 0;
+  const normalized2 = normalizeOptionalString(value);
+  return normalized2 && normalized2.length <= maxLength ? normalized2 : void 0;
 }
 function normalizeLaunchState(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1349,7 +8336,7 @@ function normalizeArtifact(value) {
     return null;
   }
   const record = value;
-  const id = normalizeOptionalString(record.id) ?? randomUUID();
+  const id = normalizeOptionalString(record.id) ?? randomUUID3();
   const createdAt = normalizeTimestamp(record.createdAt, Date.now());
   const label = normalizeBoundedString(record.label, void 0, 160, "artifact label");
   const url = normalizeBoundedString(record.url, void 0, 2e3, "artifact URL");
@@ -1455,7 +8442,7 @@ function normalizeAttachmentInput(cardId, input, now) {
   const mimeType = normalizeBoundedString(input.mimeType, void 0, 160, "attachment MIME type");
   const note = normalizeBoundedString(input.note, void 0, 400, "attachment note");
   const attachment = {
-    id: randomUUID(),
+    id: randomUUID3(),
     cardId,
     createdAt: now,
     fileName,
@@ -1530,7 +8517,7 @@ function normalizeNotification(value) {
     return null;
   }
   const record = value;
-  const id = normalizeOptionalString(record.id) ?? randomUUID();
+  const id = normalizeOptionalString(record.id) ?? randomUUID3();
   const kind = TASKFOLD_NOTIFICATION_KINDS.includes(record.kind) ? record.kind : void 0;
   const createdAt = normalizeTimestamp(record.createdAt, Date.now());
   const sequence = normalizeTimestamp(record.sequence, 0) || void 0;
@@ -1556,7 +8543,7 @@ function normalizeProofInput(input, now) {
   const url = normalizeBoundedString(input.url, void 0, 2e3, "proof URL");
   const note = normalizeBoundedString(input.note, void 0, 2e3, "proof note");
   return {
-    id: randomUUID(),
+    id: randomUUID3(),
     status: normalizeProofStatus(input.status, "unknown"),
     createdAt: now,
     ...label ? { label } : {},
@@ -1613,7 +8600,7 @@ function normalizeMetadata(value, fallback = {}, options = {}) {
       ...ordinaryCapacity > 0 ? links.filter((link) => !isDependencyLink(link)).slice(-ordinaryCapacity) : []
     ];
   })() : links.slice(-MAX_CARD_LINKS);
-  const normalized = {
+  const normalized2 = {
     attempts: Array.isArray(record.attempts) ? record.attempts.map(normalizeAttempt).filter((attempt) => attempt !== null).slice(-MAX_CARD_ATTEMPTS) : fallback.attempts,
     comments: Array.isArray(record.comments) ? record.comments.map(normalizeComment).filter((comment) => comment !== null).slice(-MAX_CARD_COMMENTS) : fallback.comments,
     links: normalizedLinks,
@@ -1640,7 +8627,7 @@ function normalizeMetadata(value, fallback = {}, options = {}) {
     lifecycleStatusSourceUpdatedAt: hasLifecycleStatusSourceUpdatedAt ? normalizeTimestamp(record.lifecycleStatusSourceUpdatedAt, 0) : fallback.lifecycleStatusSourceUpdatedAt,
     failureCount: typeof record.failureCount === "number" && Number.isFinite(record.failureCount) ? Math.max(0, Math.trunc(record.failureCount)) : fallback.failureCount
   };
-  return trimMetadataToBudget(normalized, options);
+  return trimMetadataToBudget(normalized2, options);
 }
 function normalizeExecution(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1656,7 +8643,7 @@ function normalizeExecution(value) {
   if (!normalizedId && !engine && !model && !sessionKey && !runId) {
     return void 0;
   }
-  const id = normalizedId ?? randomUUID();
+  const id = normalizedId ?? randomUUID3();
   const startedAt = normalizeTimestamp(record.startedAt, now);
   const updatedAt = normalizeTimestamp(record.updatedAt, startedAt);
   return {
@@ -1864,7 +8851,10 @@ function compareCards(left, right) {
   if (left.position !== right.position) {
     return left.position - right.position;
   }
-  return left.createdAt - right.createdAt;
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt - right.createdAt;
+  }
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 function cardSessionKey(card) {
   return card.sessionKey ?? card.execution?.sessionKey;
@@ -1928,7 +8918,7 @@ function appendEvent(card, event, at = Date.now()) {
   return [
     ...normalizeEvents(card.events),
     {
-      id: randomUUID2(),
+      id: randomUUID4(),
       at,
       ...event
     }
@@ -2721,12 +9711,13 @@ async function assertRestrictedTaskfoldTarget(params) {
 }
 
 // src/backend/src/dispatcher.ts
-import path from "node:path";
+import path13 from "node:path";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
 
 // packages/core/src/worker-prompt.ts
+init_store_constants();
 var RECENT_ATTEMPTS = 8;
 var FAILED_ATTEMPT_DETAIL = 3;
 function cardResultSummary(card) {
@@ -2909,6 +9900,7 @@ function buildWorkerPrompt(params) {
 }
 
 // src/backend/src/dispatcher.ts
+init_store_constants();
 var DEFAULT_DISPATCH_MAX_STARTS = 3;
 var DEFAULT_DISPATCH_OWNER = "taskfold-dispatcher";
 async function createManagedTaskfoldWorktree(params) {
@@ -2939,7 +9931,7 @@ async function materializeWorkspace(params) {
   }
   const sourcePath = workspace.sourcePath ?? workspace.path;
   const sourceBranch = workspace.sourcePath ? workspace.sourceBranch : workspace.branch;
-  if (!sourcePath || !path.isAbsolute(sourcePath)) {
+  if (!sourcePath || !path13.isAbsolute(sourcePath)) {
     throw new Error("worktree workspace path must be an absolute git checkout path");
   }
   const canonicalSourcePath = await assertTaskfoldWorkspaceSourceAccess(
@@ -3323,15 +10315,15 @@ function readOptionalString(value, maxLength = 4e3) {
   if (typeof value !== "string") {
     return void 0;
   }
-  const normalized = value.trim();
-  return normalized && normalized.length <= maxLength ? normalized : void 0;
+  const normalized2 = value.trim();
+  return normalized2 && normalized2.length <= maxLength ? normalized2 : void 0;
 }
 function activeExecution(card) {
   return card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
-async function gitCheckout(path5) {
+async function gitCheckout(path20) {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", path5, "rev-parse", "--show-toplevel"], {
+    const { stdout } = await execFileAsync("git", ["-C", path20, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       maxBuffer: 16 * 1024
     });
@@ -3854,7 +10846,7 @@ function createTaskfoldDispatchHandler(params) {
 }
 
 // packages/core/src/store-core.ts
-import { createHash, randomUUID as randomUUID4 } from "node:crypto";
+import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
 
 // packages/core/src/store-automation.ts
 function normalizeTrustedWorkspaceAccess(value, fallback) {
@@ -3916,16 +10908,16 @@ function normalizeAutomationPatch(patch, current) {
 }
 
 // packages/core/src/store-change-tracker.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { randomUUID as randomUUID5 } from "node:crypto";
 var CHANGE_REVISION_BLOCK = 1e4;
 function createTaskfoldReservedChangeSource(options = {}) {
   const { dataVersion } = options;
-  const epoch = options.epoch ?? randomUUID3();
+  const epoch = options.epoch ?? randomUUID5();
   const reserveRevisions = options.reserveRevisions ?? (() => 0);
   let revision = reserveRevisions(CHANGE_REVISION_BLOCK);
   let revisionCeiling = revision + CHANGE_REVISION_BLOCK;
   let externalDataVersion = dataVersion?.();
-  const record = () => {
+  const next = () => {
     if (revision + 1 >= revisionCeiling) {
       const base = Math.max(reserveRevisions(CHANGE_REVISION_BLOCK), revision);
       revision = base;
@@ -3934,8 +10926,8 @@ function createTaskfoldReservedChangeSource(options = {}) {
     return { epoch, revision: ++revision };
   };
   return {
-    announce: record,
-    record,
+    announce: next,
+    record: async () => next(),
     poll() {
       if (!dataVersion) {
         return void 0;
@@ -3945,7 +10937,7 @@ function createTaskfoldReservedChangeSource(options = {}) {
         return void 0;
       }
       externalDataVersion = current;
-      return record();
+      return next();
     }
   };
 }
@@ -3999,9 +10991,9 @@ var TaskfoldChangeTracker = class {
   announceEpoch() {
     this.publish(this.source.announce());
   }
-  /** 记一次变化并广播（给不经 {@link track} 的调用方用，例如 OpenClaw 适配层的聚合游标）。 */
-  recordChange() {
-    this.publish(this.source.record());
+  /** 记一次变化并广播（给不经 {@link track} 的调用方用）。 */
+  async recordChange() {
+    this.publish(await this.source.record());
   }
   current() {
     return this.latestChange;
@@ -4020,7 +11012,7 @@ var TaskfoldChangeTracker = class {
       return await run();
     } finally {
       if (this.mutationRevision !== initialRevision) {
-        this.publish(this.source.record());
+        this.publish(await this.source.record());
       }
     }
   }
@@ -4060,6 +11052,7 @@ var TaskfoldChangeTracker = class {
 };
 
 // packages/core/src/store-compensation.ts
+init_sdk_utils();
 import { isDeepStrictEqual } from "node:util";
 var ABSENT = Symbol("taskfold-compensation-absent");
 function recordValue(record, key) {
@@ -4204,6 +11197,7 @@ function invertTaskfoldWorkspaceMutation(before, after, current) {
 }
 
 // packages/core/src/store-core.ts
+init_store_constants();
 var TaskfoldRevisionConflictError = class extends Error {
   constructor(cardId, expectedRevision, reason = "revision") {
     super(`card ${cardId} changed since revision ${expectedRevision}.`);
@@ -4233,7 +11227,7 @@ function stampCardRevisions(store) {
   };
 }
 function sessionCaptureCardId(sessionKey) {
-  const digest = createHash("sha256").update("openclaw.taskfold.session-capture.v1\0").update(sessionKey).digest();
+  const digest = createHash2("sha256").update("openclaw.taskfold.session-capture.v1\0").update(sessionKey).digest();
   digest.writeUInt8(digest.readUInt8(6) & 15 | 128, 6);
   digest.writeUInt8(digest.readUInt8(8) & 63 | 128, 8);
   const hex = digest.toString("hex", 0, 16);
@@ -4566,7 +11560,7 @@ var TaskfoldCoreStore = class {
       ).map((card2) => card2.position)
     ) + POSITION_STEP;
     let card = {
-      id: options.cardId ?? randomUUID4(),
+      id: options.cardId ?? randomUUID6(),
       title: normalizeTitle(input.title),
       ...kind === "requirement" ? { kind } : {},
       status,
@@ -4580,7 +11574,7 @@ var TaskfoldCoreStore = class {
       revision: 0,
       events: [
         {
-          id: randomUUID4(),
+          id: randomUUID6(),
           kind: "created",
           at: now,
           toStatus: status,
@@ -4940,7 +11934,7 @@ var TaskfoldCoreStore = class {
     if (!body) {
       throw new Error("comment body is required.");
     }
-    const comment = { id: randomUUID4(), body, createdAt: now };
+    const comment = { id: randomUUID6(), body, createdAt: now };
     return await this.updateMetadata(id, (existing) => {
       assertCanMutateClaimedCard(existing, scope);
       return {
@@ -4960,7 +11954,7 @@ var TaskfoldCoreStore = class {
     return await this.mutateSourceReferences(id, (references) => [
       ...references,
       {
-        id: randomUUID4(),
+        id: randomUUID6(),
         label,
         target,
         position: Math.max(0, ...references.map((reference) => reference.position)) + POSITION_STEP,
@@ -5091,7 +12085,7 @@ var TaskfoldCoreStore = class {
       throw new Error("requirement hierarchy links must use setCardRequirement.");
     }
     const link = {
-      id: randomUUID4(),
+      id: randomUUID6(),
       type,
       createdAt: now,
       ...targetCardId ? { targetCardId } : {},
@@ -5183,7 +12177,7 @@ var TaskfoldCoreStore = class {
     const nextRequirementLinks = requirementLinks.some(
       (link) => link.type === "contains" && link.targetCardId === child.id
     ) ? requirementLinks : appendLinkPreservingDependencies(requirementLinks, {
-      id: randomUUID4(),
+      id: randomUUID6(),
       type: "contains",
       targetCardId: child.id,
       createdAt: now
@@ -5191,7 +12185,7 @@ var TaskfoldCoreStore = class {
     const nextChildLinks = [
       ...childLinks.filter((link) => link.type !== "contained_by"),
       {
-        id: randomUUID4(),
+        id: randomUUID6(),
         type: "contained_by",
         targetCardId: requirement.id,
         createdAt: now
@@ -5241,7 +12235,7 @@ var TaskfoldCoreStore = class {
     const nextParentLinks = parentLinks.some(
       (link) => link.type === "child" && link.targetCardId === child.id
     ) ? parentLinks : appendLinkPreservingDependencies(parentLinks, {
-      id: randomUUID4(),
+      id: randomUUID6(),
       type: "child",
       targetCardId: child.id,
       createdAt: now
@@ -5249,7 +12243,7 @@ var TaskfoldCoreStore = class {
     const nextChildLinks = childLinks.some(
       (link) => link.type === "parent" && link.targetCardId === parent.id
     ) ? childLinks : appendLinkPreservingDependencies(childLinks, {
-      id: randomUUID4(),
+      id: randomUUID6(),
       type: "parent",
       targetCardId: parent.id,
       createdAt: now
@@ -5345,7 +12339,7 @@ var TaskfoldCoreStore = class {
       workerLogs: [
         ...card.metadata?.workerLogs ?? [],
         {
-          id: randomUUID4(),
+          id: randomUUID6(),
           level: "info",
           message: "Auto orchestration marked this triage card for specification or decomposition.",
           createdAt: now
@@ -5561,13 +12555,13 @@ function registerTaskfoldWorkspaceWorkflowMethods(params) {
 }
 
 // src/backend/src/project-document-reader.ts
-import { createHash as createHash2, randomUUID as randomUUID5 } from "node:crypto";
-import fs from "node:fs/promises";
-import path2 from "node:path";
+import { createHash as createHash3, randomUUID as randomUUID7 } from "node:crypto";
+import fs8 from "node:fs/promises";
+import path14 from "node:path";
 var MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;
 var MARKDOWN_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown"]);
 function documentRevision(bytes) {
-  return createHash2("sha256").update(bytes).digest("hex");
+  return createHash3("sha256").update(bytes).digest("hex");
 }
 function decodeUtf8(bytes) {
   let content;
@@ -5598,11 +12592,11 @@ function assertMarkdownPath(document) {
   if (document.type !== "path" || !document.target) {
     throw new Error("only Markdown documents and Markdown file paths can be previewed.");
   }
-  const fileName = path2.basename(document.target).toLowerCase();
+  const fileName = path14.basename(document.target).toLowerCase();
   if (fileName === ".env" || fileName.startsWith(".env.")) {
     throw new Error("environment files cannot be previewed as project documents.");
   }
-  if (!MARKDOWN_EXTENSIONS.has(path2.extname(document.target).toLowerCase())) {
+  if (!MARKDOWN_EXTENSIONS.has(path14.extname(document.target).toLowerCase())) {
     throw new Error("project document paths must reference a Markdown file.");
   }
   return document.target;
@@ -5611,14 +12605,14 @@ async function resolveProjectDocumentFile(params) {
   const target = assertMarkdownPath(params.document);
   let resolvedPath;
   try {
-    resolvedPath = await fs.realpath(target);
+    resolvedPath = await fs8.realpath(target);
   } catch {
     throw new Error("project document file does not exist.");
   }
   await assertTaskfoldWorkspaceSourceAccess({ kind: "dir", path: resolvedPath }, params.access);
   let stat2;
   try {
-    stat2 = await fs.stat(resolvedPath);
+    stat2 = await fs8.stat(resolvedPath);
   } catch {
     throw new Error("project document file cannot be read.");
   }
@@ -5630,7 +12624,7 @@ async function resolveProjectDocumentFile(params) {
   }
   let bytes;
   try {
-    bytes = await fs.readFile(resolvedPath);
+    bytes = await fs8.readFile(resolvedPath);
   } catch {
     throw new Error("project document file cannot be read.");
   }
@@ -5669,24 +12663,24 @@ async function writeTaskfoldProjectDocumentPath(params) {
   if (documentRevision(current.bytes) !== params.expectedRevision) {
     throw new Error("project document changed on disk; reload it before saving.");
   }
-  const directory = path2.dirname(current.path);
-  const temporaryPath = path2.join(
+  const directory = path14.dirname(current.path);
+  const temporaryPath = path14.join(
     directory,
-    `.${path2.basename(current.path)}.taskfold-${randomUUID5()}.tmp`
+    `.${path14.basename(current.path)}.taskfold-${randomUUID7()}.tmp`
   );
   const originalMode = Number(current.stat.mode) & 4095;
   try {
-    const handle = await fs.open(temporaryPath, "wx", originalMode);
+    const handle = await fs8.open(temporaryPath, "wx", originalMode);
     try {
       await handle.writeFile(content);
       await handle.sync();
     } finally {
       await handle.close();
     }
-    await fs.chmod(temporaryPath, originalMode);
-    await fs.rename(temporaryPath, current.path);
+    await fs8.chmod(temporaryPath, originalMode);
+    await fs8.rename(temporaryPath, current.path);
   } catch (error) {
-    await fs.rm(temporaryPath, { force: true }).catch(() => void 0);
+    await fs8.rm(temporaryPath, { force: true }).catch(() => void 0);
     throw error;
   }
   return await readTaskfoldProjectDocument({
@@ -6126,1871 +13120,32 @@ function registerTaskfoldProjectGatewayMethods(params) {
   );
 }
 
-// src/backend/src/sqlite-store.ts
-import { randomUUID as randomUUID6 } from "node:crypto";
-import fs2 from "node:fs";
-import path3 from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { configureSqliteConnectionPragmas } from "openclaw/plugin-sdk/plugin-state-runtime";
-import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
-var TASKFOLD_DB_RELATIVE_PATH = ["plugins", "taskfold", "taskfold.sqlite"];
-var LEGACY_FLOWBOARD_DB_RELATIVE_PATH = ["plugins", "flowboard", "flowboard.sqlite"];
-var SCHEMA_VERSION = 8;
-var TASKFOLD_SQLITE_BUSY_TIMEOUT_MS = 5e3;
-var TASKFOLD_SQLITE_DIR_MODE = 448;
-var TASKFOLD_SQLITE_FILE_MODE = 384;
-function resolveTaskfoldSqlitePath(env = process.env) {
-  return path3.join(resolveStateDir(env), ...TASKFOLD_DB_RELATIVE_PATH);
-}
-function resolveLegacyFlowboardSqlitePath(env = process.env) {
-  return path3.join(resolveStateDir(env), ...LEGACY_FLOWBOARD_DB_RELATIVE_PATH);
-}
-function jsonValue(value) {
-  return value === void 0 ? null : JSON.stringify(value);
-}
-function parseJson(value) {
-  if (typeof value !== "string" || !value) {
-    return void 0;
-  }
-  return JSON.parse(value);
-}
-function stringValue(row, key) {
-  const value = row[key];
-  return typeof value === "string" && value.length > 0 ? value : void 0;
-}
-function numberValue(row, key) {
-  const value = row[key];
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-  return void 0;
-}
-function requiredString(row, key) {
-  const value = stringValue(row, key);
-  if (!value) {
-    throw new Error(`taskfold sqlite row missing ${key}`);
-  }
-  return value;
-}
-function requiredNumber(row, key) {
-  const value = numberValue(row, key);
-  if (value === void 0) {
-    throw new Error(`taskfold sqlite row missing ${key}`);
-  }
-  return value;
-}
-function optional(value) {
-  return Object.keys(value).length > 0 ? value : void 0;
-}
-function asBlobContent(value) {
-  return Buffer.from(value, "base64");
-}
-function blobToBase64(value) {
-  if (value instanceof Uint8Array) {
-    return Buffer.from(value).toString("base64");
-  }
-  if (typeof value === "string") {
-    return Buffer.from(value).toString("base64");
-  }
-  return "";
-}
-function runTransaction(db, run) {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = run();
-    db.exec("COMMIT");
-    return result;
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-}
-function quoteIdentifier(value) {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-function quoteSqlString(value) {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-function tableColumns(db, tableName) {
-  return new Set(
-    db.prepare(`PRAGMA table_info(${tableName})`).all().flatMap(
-      (row) => typeof row.name === "string" ? [row.name] : []
-    )
-  );
-}
-function ensureColumn(db, tableName, columnName, definition) {
-  if (tableColumns(db, tableName).has(columnName)) {
-    return;
-  }
-  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
-}
-var TASKFOLD_SCHEMA_SQL = `
-    CREATE TABLE IF NOT EXISTS taskfold_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS taskfold_schema_migrations (
-      id TEXT PRIMARY KEY,
-      applied_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_boards (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      description TEXT,
-      icon TEXT,
-      color TEXT,
-      position REAL,
-      version TEXT,
-      current_objective TEXT,
-      core_value TEXT,
-      source_of_truth TEXT,
-      repository_url TEXT,
-      planning_path TEXT,
-      homepage_url TEXT,
-      default_workspace_json TEXT,
-      orchestration_json TEXT,
-      board_view_json TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      archived_at INTEGER
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_cards (
-      id TEXT PRIMARY KEY,
-      board_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      notes TEXT,
-      status TEXT NOT NULL,
-      priority TEXT NOT NULL,
-      card_kind TEXT,
-      agent_id TEXT,
-      session_key TEXT,
-      run_id TEXT,
-      task_id TEXT,
-      source_url TEXT,
-      milestone_id TEXT,
-      position REAL NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      started_at INTEGER,
-      completed_at INTEGER,
-      execution_id TEXT,
-      execution_kind TEXT,
-      execution_engine TEXT,
-      execution_mode TEXT,
-      execution_status TEXT,
-      execution_model TEXT,
-      execution_session_key TEXT,
-      execution_run_id TEXT,
-      execution_started_at INTEGER,
-      execution_updated_at INTEGER,
-      automation_json TEXT,
-      claim_json TEXT,
-      template_id TEXT,
-      archived_at INTEGER,
-      stale_json TEXT,
-      lifecycle_status_source_updated_at INTEGER,
-      failure_count INTEGER
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS taskfold_cards_board_status_idx
-      ON taskfold_cards(board_id, status, position);
-    CREATE INDEX IF NOT EXISTS taskfold_cards_session_idx
-      ON taskfold_cards(session_key, run_id);
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_labels (
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      label TEXT NOT NULL,
-      PRIMARY KEY(card_id, ordinal)
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_events (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      at INTEGER NOT NULL,
-      from_status TEXT,
-      to_status TEXT,
-      from_milestone_id TEXT,
-      to_milestone_id TEXT,
-      session_key TEXT,
-      run_id TEXT
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_attempts (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      started_at INTEGER NOT NULL,
-      ended_at INTEGER,
-      engine TEXT,
-      mode TEXT,
-      model TEXT,
-      session_key TEXT,
-      run_id TEXT,
-      error TEXT
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_comments (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      body TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_links (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      target_card_id TEXT,
-      title TEXT,
-      url TEXT,
-      created_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_proof (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      label TEXT,
-      command TEXT,
-      url TEXT,
-      note TEXT,
-      created_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_artifacts (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      label TEXT,
-      url TEXT,
-      path TEXT,
-      mime_type TEXT,
-      created_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_delivery (
-      card_id TEXT PRIMARY KEY REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      objective TEXT,
-      delivery_summary TEXT,
-      open_items TEXT,
-      implementation_state TEXT,
-      verification_state TEXT,
-      release_state TEXT,
-      updated_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_source_references (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      label TEXT NOT NULL,
-      target TEXT NOT NULL,
-      note TEXT,
-      position REAL NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS taskfold_card_source_references_card_position_idx
-      ON taskfold_card_source_references(card_id, position);
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_diagnostics (
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      severity TEXT NOT NULL,
-      title TEXT NOT NULL,
-      detail TEXT NOT NULL,
-      first_seen_at INTEGER NOT NULL,
-      last_seen_at INTEGER NOT NULL,
-      count INTEGER NOT NULL,
-      actions_json TEXT NOT NULL,
-      PRIMARY KEY(card_id, ordinal)
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_notifications (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      message TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      sequence INTEGER,
-      session_key TEXT,
-      run_id TEXT
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_worker_logs (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      level TEXT NOT NULL,
-      message TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      session_key TEXT,
-      run_id TEXT
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_worker_protocol (
-      card_id TEXT PRIMARY KEY REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      state TEXT NOT NULL,
-      updated_at INTEGER NOT NULL,
-      detail TEXT
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_card_attachments (
-      id TEXT PRIMARY KEY,
-      card_id TEXT NOT NULL REFERENCES taskfold_cards(id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      file_name TEXT NOT NULL,
-      byte_size INTEGER NOT NULL,
-      mime_type TEXT,
-      note TEXT,
-      created_at INTEGER NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS taskfold_card_attachments_card_idx
-      ON taskfold_card_attachments(card_id, ordinal);
-
-    CREATE TABLE IF NOT EXISTS taskfold_attachment_blobs (
-      attachment_id TEXT PRIMARY KEY,
-      content BLOB NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_notification_subscriptions (
-      id TEXT PRIMARY KEY,
-      board_id TEXT NOT NULL,
-      card_id TEXT,
-      session_key TEXT,
-      run_id TEXT,
-      target TEXT,
-      event_kinds_json TEXT,
-      last_event_at INTEGER,
-      last_event_id TEXT,
-      last_event_sequence INTEGER,
-      delivered_event_ids_json TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    ) STRICT;
-
-    CREATE TABLE IF NOT EXISTS taskfold_milestones (
-      id TEXT PRIMARY KEY,
-      board_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      color TEXT,
-      position REAL NOT NULL,
-      state TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      completed_at INTEGER,
-      archived_at INTEGER
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS taskfold_milestones_board_position_idx
-      ON taskfold_milestones(board_id, position);
-
-    CREATE TABLE IF NOT EXISTS taskfold_project_documents (
-      id TEXT PRIMARY KEY,
-      board_id TEXT NOT NULL,
-      document_key TEXT NOT NULL,
-      section TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'project',
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      summary TEXT,
-      target TEXT,
-      content TEXT,
-      position REAL NOT NULL,
-      hidden_at INTEGER,
-      system INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(board_id, document_key)
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS taskfold_project_documents_board_section_position_idx
-      ON taskfold_project_documents(board_id, section, position);
-  `;
-function ensureTaskfoldSchema(db) {
-  db.exec(TASKFOLD_SCHEMA_SQL);
-  ensureColumn(
-    db,
-    "taskfold_cards",
-    "lifecycle_status_source_updated_at",
-    "lifecycle_status_source_updated_at INTEGER"
-  );
-  ensureColumn(db, "taskfold_cards", "milestone_id", "milestone_id TEXT");
-  ensureColumn(db, "taskfold_card_events", "from_milestone_id", "from_milestone_id TEXT");
-  ensureColumn(db, "taskfold_card_events", "to_milestone_id", "to_milestone_id TEXT");
-  ensureColumn(db, "taskfold_boards", "position", "position REAL");
-  ensureColumn(db, "taskfold_boards", "version", "version TEXT");
-  ensureColumn(db, "taskfold_boards", "current_objective", "current_objective TEXT");
-  ensureColumn(db, "taskfold_boards", "core_value", "core_value TEXT");
-  ensureColumn(db, "taskfold_boards", "source_of_truth", "source_of_truth TEXT");
-  ensureColumn(db, "taskfold_boards", "repository_url", "repository_url TEXT");
-  ensureColumn(db, "taskfold_boards", "planning_path", "planning_path TEXT");
-  ensureColumn(db, "taskfold_boards", "homepage_url", "homepage_url TEXT");
-  ensureColumn(db, "taskfold_boards", "board_view_json", "board_view_json TEXT");
-  ensureColumn(db, "taskfold_cards", "card_kind", "card_kind TEXT");
-  ensureColumn(
-    db,
-    "taskfold_project_documents",
-    "source",
-    "source TEXT NOT NULL DEFAULT 'project'"
-  );
-  ensureColumn(db, "taskfold_cards", "revision", "revision INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "taskfold_cards", "claim_owner_id", "claim_owner_id TEXT");
-  ensureColumn(db, "taskfold_card_attempts", "prompt_version", "prompt_version INTEGER");
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS taskfold_cards_board_milestone_position_idx
-      ON taskfold_cards(board_id, milestone_id, position);
-    CREATE INDEX IF NOT EXISTS taskfold_cards_claim_owner_idx
-      ON taskfold_cards(claim_owner_id, status);
-    CREATE INDEX IF NOT EXISTS taskfold_card_events_card_idx
-      ON taskfold_card_events(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_attempts_card_idx
-      ON taskfold_card_attempts(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_comments_card_idx
-      ON taskfold_card_comments(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_links_card_idx
-      ON taskfold_card_links(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_proof_card_idx
-      ON taskfold_card_proof(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_artifacts_card_idx
-      ON taskfold_card_artifacts(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_card_notifications_card_idx
-      ON taskfold_card_notifications(card_id, ordinal);
-    CREATE INDEX IF NOT EXISTS taskfold_worker_logs_card_idx
-      ON taskfold_worker_logs(card_id, ordinal);
-  `);
-  const migrationId = `schema-${SCHEMA_VERSION}`;
-  const current = db.prepare("SELECT 1 AS found FROM taskfold_schema_migrations WHERE id = ?").get(migrationId);
-  if (!current) {
-    db.prepare(
-      "INSERT OR IGNORE INTO taskfold_schema_migrations (id, applied_at) VALUES (?, ?)"
-    ).run(migrationId, Date.now());
-  }
-}
-function ensureChangeEpoch(db) {
-  const existing = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
-  const current = existing ? stringValue(existing, "value") : void 0;
-  if (current) {
-    return current;
-  }
-  const epoch = randomUUID6();
-  db.prepare("INSERT OR IGNORE INTO taskfold_meta (key, value) VALUES ('change_epoch', ?)").run(
-    epoch
-  );
-  const stored = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_epoch'").get();
-  return (stored ? stringValue(stored, "value") : void 0) ?? epoch;
-}
-function reserveChangeRevisions(db, count) {
-  return runTransaction(db, () => {
-    const row = db.prepare("SELECT value FROM taskfold_meta WHERE key = 'change_revision'").get();
-    const stored = Number.parseInt(row ? stringValue(row, "value") ?? "" : "", 10);
-    const base = Number.isSafeInteger(stored) && stored > 0 ? stored : 0;
-    db.prepare(
-      `
-        INSERT INTO taskfold_meta (key, value) VALUES ('change_revision', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `
-    ).run(String(base + count));
-    return base;
-  });
-}
-function chmodIfExists(targetPath, mode) {
-  try {
-    fs2.chmodSync(targetPath, mode);
-  } catch (err) {
-    if (err.code !== "ENOENT") {
-      throw err;
-    }
-  }
-}
-function copyLegacyFlowboardDatabase(dbPath, legacyDbPath) {
-  if (!legacyDbPath || path3.resolve(legacyDbPath) === path3.resolve(dbPath) || fs2.existsSync(dbPath) || !fs2.existsSync(legacyDbPath)) {
-    return;
-  }
-  const source = new DatabaseSync(legacyDbPath);
-  try {
-    source.exec(`VACUUM INTO ${quoteSqlString(dbPath)}`);
-  } finally {
-    source.close();
-  }
-}
-function migrateLegacyFlowboardTables(db) {
-  const legacyTables = db.prepare(
-    `
-          SELECT name
-          FROM sqlite_master
-          WHERE type = 'table' AND name LIKE 'flowboard!_%' ESCAPE '!'
-          ORDER BY name ASC
-        `
-  ).all().flatMap((row) => {
-    const name = stringValue(row, "name");
-    return name ? [name] : [];
-  });
-  if (legacyTables.length === 0) {
-    return;
-  }
-  const taskfoldTables = new Set(
-    db.prepare(
-      `
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table' AND name LIKE 'taskfold!_%' ESCAPE '!'
-          `
-    ).all().flatMap((row) => {
-      const name = stringValue(row, "name");
-      return name ? [name] : [];
-    })
-  );
-  const conflicts = legacyTables.map((name) => name.replace(/^flowboard_/, "taskfold_")).filter((name) => taskfoldTables.has(name));
-  if (conflicts.length > 0) {
-    throw new Error(
-      `cannot migrate legacy Flowboard database because Taskfold tables already exist: ${conflicts.join(", ")}`
-    );
-  }
-  runTransaction(db, () => {
-    for (const legacyTable of legacyTables) {
-      const taskfoldTable = legacyTable.replace(/^flowboard_/, "taskfold_");
-      db.exec(
-        `ALTER TABLE ${quoteIdentifier(legacyTable)} RENAME TO ${quoteIdentifier(taskfoldTable)}`
-      );
-    }
-    const legacyIndexes = db.prepare(
-      `
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'index' AND name LIKE 'flowboard!_%' ESCAPE '!'
-            ORDER BY name ASC
-          `
-    ).all().flatMap((row) => {
-      const name = stringValue(row, "name");
-      return name ? [name] : [];
-    });
-    for (const legacyIndex of legacyIndexes) {
-      db.exec(`DROP INDEX ${quoteIdentifier(legacyIndex)}`);
-    }
-  });
-}
-function hardenTaskfoldDatabaseFiles(dbPath) {
-  fs2.chmodSync(path3.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
-  chmodIfExists(dbPath, TASKFOLD_SQLITE_FILE_MODE);
-  chmodIfExists(`${dbPath}-wal`, TASKFOLD_SQLITE_FILE_MODE);
-  chmodIfExists(`${dbPath}-shm`, TASKFOLD_SQLITE_FILE_MODE);
-  chmodIfExists(`${dbPath}-journal`, TASKFOLD_SQLITE_FILE_MODE);
-}
-function createDatabase(dbPath, legacyDbPath) {
-  fs2.mkdirSync(path3.dirname(dbPath), { recursive: true, mode: TASKFOLD_SQLITE_DIR_MODE });
-  chmodIfExists(path3.dirname(dbPath), TASKFOLD_SQLITE_DIR_MODE);
-  copyLegacyFlowboardDatabase(dbPath, legacyDbPath);
-  if (!fs2.existsSync(dbPath)) {
-    fs2.closeSync(fs2.openSync(dbPath, "a", TASKFOLD_SQLITE_FILE_MODE));
-  }
-  const db = new DatabaseSync(dbPath);
-  let maintenance;
-  try {
-    maintenance = configureSqliteConnectionPragmas(db, {
-      busyTimeoutMs: TASKFOLD_SQLITE_BUSY_TIMEOUT_MS,
-      checkpointIntervalMs: 0,
-      databaseLabel: "taskfold database",
-      databasePath: dbPath,
-      foreignKeys: true,
-      synchronous: "NORMAL"
-    });
-    migrateLegacyFlowboardTables(db);
-    ensureTaskfoldSchema(db);
-    hardenTaskfoldDatabaseFiles(dbPath);
-    return { db, maintenance };
-  } catch (error) {
-    try {
-      maintenance?.close();
-    } finally {
-      db.close();
-    }
-    throw error;
-  }
-}
-function childRows(db, table, cardId) {
-  return db.prepare(`SELECT * FROM ${table} WHERE card_id = ? ORDER BY ordinal ASC`).all(cardId);
-}
-function readLabels(db, cardId) {
-  return childRows(db, "taskfold_card_labels", cardId).flatMap((row) => {
-    const label = stringValue(row, "label");
-    return label ? [label] : [];
-  });
-}
-function readEvents(db, cardId) {
-  const events = childRows(db, "taskfold_card_events", cardId).map((row) => {
-    const event = {
-      id: requiredString(row, "id"),
-      kind: requiredString(row, "kind"),
-      at: requiredNumber(row, "at")
-    };
-    const fromStatus = stringValue(row, "from_status");
-    const toStatus = stringValue(row, "to_status");
-    const fromMilestoneId = stringValue(row, "from_milestone_id");
-    const toMilestoneId = stringValue(row, "to_milestone_id");
-    const sessionKey = stringValue(row, "session_key");
-    const runId = stringValue(row, "run_id");
-    if (fromStatus) {
-      event.fromStatus = fromStatus;
-    }
-    if (toStatus) {
-      event.toStatus = toStatus;
-    }
-    if (fromMilestoneId) {
-      event.fromMilestoneId = fromMilestoneId;
-    }
-    if (toMilestoneId) {
-      event.toMilestoneId = toMilestoneId;
-    }
-    if (sessionKey) {
-      event.sessionKey = sessionKey;
-    }
-    if (runId) {
-      event.runId = runId;
-    }
-    return event;
-  });
-  return events.length > 0 ? events : void 0;
-}
-function readExecution(row) {
-  const id = stringValue(row, "execution_id");
-  if (!id) {
-    return void 0;
-  }
-  return {
-    id,
-    kind: "agent-session",
-    mode: requiredString(row, "execution_mode"),
-    status: requiredString(row, "execution_status"),
-    ...stringValue(row, "execution_engine") ? { engine: stringValue(row, "execution_engine") } : {},
-    ...stringValue(row, "execution_model") ? { model: stringValue(row, "execution_model") } : {},
-    ...stringValue(row, "execution_session_key") ? { sessionKey: stringValue(row, "execution_session_key") } : {},
-    ...stringValue(row, "execution_run_id") ? { runId: stringValue(row, "execution_run_id") } : {},
-    startedAt: requiredNumber(row, "execution_started_at"),
-    updatedAt: requiredNumber(row, "execution_updated_at")
-  };
-}
-function readMetadata(db, row) {
-  const cardId = requiredString(row, "id");
-  const attempts = childRows(db, "taskfold_card_attempts", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      status: requiredString(child, "status"),
-      startedAt: requiredNumber(child, "started_at")
-    };
-    const endedAt = numberValue(child, "ended_at");
-    const engine = stringValue(child, "engine");
-    const mode = stringValue(child, "mode");
-    const model = stringValue(child, "model");
-    const sessionKey = stringValue(child, "session_key");
-    const runId = stringValue(child, "run_id");
-    const error = stringValue(child, "error");
-    const promptVersion = numberValue(child, "prompt_version");
-    if (promptVersion !== void 0) {
-      entry.promptVersion = promptVersion;
-    }
-    if (endedAt !== void 0) {
-      entry.endedAt = endedAt;
-    }
-    if (engine) {
-      entry.engine = engine;
-    }
-    if (mode) {
-      entry.mode = mode;
-    }
-    if (model) {
-      entry.model = model;
-    }
-    if (sessionKey) {
-      entry.sessionKey = sessionKey;
-    }
-    if (runId) {
-      entry.runId = runId;
-    }
-    if (error) {
-      entry.error = error;
-    }
-    return entry;
-  });
-  const comments = childRows(db, "taskfold_card_comments", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      body: requiredString(child, "body"),
-      createdAt: requiredNumber(child, "created_at")
-    };
-    const updatedAt = numberValue(child, "updated_at");
-    if (updatedAt !== void 0) {
-      entry.updatedAt = updatedAt;
-    }
-    return entry;
-  });
-  const links = childRows(db, "taskfold_card_links", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      type: requiredString(child, "type"),
-      createdAt: requiredNumber(child, "created_at")
-    };
-    const targetCardId = stringValue(child, "target_card_id");
-    const title = stringValue(child, "title");
-    const url = stringValue(child, "url");
-    if (targetCardId) {
-      entry.targetCardId = targetCardId;
-    }
-    if (title) {
-      entry.title = title;
-    }
-    if (url) {
-      entry.url = url;
-    }
-    return entry;
-  });
-  const proof = childRows(db, "taskfold_card_proof", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      status: requiredString(child, "status"),
-      createdAt: requiredNumber(child, "created_at")
-    };
-    const label = stringValue(child, "label");
-    const command = stringValue(child, "command");
-    const url = stringValue(child, "url");
-    const note = stringValue(child, "note");
-    if (label) {
-      entry.label = label;
-    }
-    if (command) {
-      entry.command = command;
-    }
-    if (url) {
-      entry.url = url;
-    }
-    if (note) {
-      entry.note = note;
-    }
-    return entry;
-  });
-  const artifacts = childRows(db, "taskfold_card_artifacts", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      createdAt: requiredNumber(child, "created_at")
-    };
-    const label = stringValue(child, "label");
-    const url = stringValue(child, "url");
-    const artifactPath = stringValue(child, "path");
-    const mimeType = stringValue(child, "mime_type");
-    if (label) {
-      entry.label = label;
-    }
-    if (url) {
-      entry.url = url;
-    }
-    if (artifactPath) {
-      entry.path = artifactPath;
-    }
-    if (mimeType) {
-      entry.mimeType = mimeType;
-    }
-    return entry;
-  });
-  const attachments = childRows(db, "taskfold_card_attachments", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      cardId: requiredString(child, "card_id"),
-      createdAt: requiredNumber(child, "created_at"),
-      fileName: requiredString(child, "file_name"),
-      byteSize: requiredNumber(child, "byte_size")
-    };
-    const mimeType = stringValue(child, "mime_type");
-    const note = stringValue(child, "note");
-    if (mimeType) {
-      entry.mimeType = mimeType;
-    }
-    if (note) {
-      entry.note = note;
-    }
-    return entry;
-  });
-  const workerLogs = childRows(db, "taskfold_worker_logs", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      createdAt: requiredNumber(child, "created_at"),
-      level: requiredString(child, "level"),
-      message: requiredString(child, "message")
-    };
-    const sessionKey = stringValue(child, "session_key");
-    const runId = stringValue(child, "run_id");
-    if (sessionKey) {
-      entry.sessionKey = sessionKey;
-    }
-    if (runId) {
-      entry.runId = runId;
-    }
-    return entry;
-  });
-  const diagnostics = childRows(db, "taskfold_card_diagnostics", cardId).map((child) => ({
-    kind: requiredString(child, "kind"),
-    severity: requiredString(child, "severity"),
-    title: requiredString(child, "title"),
-    detail: requiredString(child, "detail"),
-    firstSeenAt: requiredNumber(child, "first_seen_at"),
-    lastSeenAt: requiredNumber(child, "last_seen_at"),
-    count: requiredNumber(child, "count"),
-    actions: parseJson(child.actions_json) ?? []
-  }));
-  const notifications = childRows(db, "taskfold_card_notifications", cardId).map((child) => {
-    const entry = {
-      id: requiredString(child, "id"),
-      kind: requiredString(child, "kind"),
-      createdAt: requiredNumber(child, "created_at"),
-      message: requiredString(child, "message")
-    };
-    const sequence = numberValue(child, "sequence");
-    const sessionKey = stringValue(child, "session_key");
-    const runId = stringValue(child, "run_id");
-    if (sequence !== void 0) {
-      entry.sequence = sequence;
-    }
-    if (sessionKey) {
-      entry.sessionKey = sessionKey;
-    }
-    if (runId) {
-      entry.runId = runId;
-    }
-    return entry;
-  });
-  const protocol = db.prepare("SELECT * FROM taskfold_worker_protocol WHERE card_id = ?").get(cardId);
-  const automation = parseJson(row.automation_json);
-  const claim = parseJson(row.claim_json);
-  const stale = parseJson(row.stale_json);
-  const lifecycleStatusSourceUpdatedAt = numberValue(row, "lifecycle_status_source_updated_at");
-  return optional({
-    ...attempts.length > 0 ? { attempts } : {},
-    ...comments.length > 0 ? { comments } : {},
-    ...links.length > 0 ? { links } : {},
-    ...proof.length > 0 ? { proof } : {},
-    ...artifacts.length > 0 ? { artifacts } : {},
-    ...attachments.length > 0 ? { attachments } : {},
-    ...workerLogs.length > 0 ? { workerLogs } : {},
-    ...protocol ? {
-      workerProtocol: {
-        state: requiredString(protocol, "state"),
-        updatedAt: requiredNumber(protocol, "updated_at"),
-        ...stringValue(protocol, "detail") ? { detail: stringValue(protocol, "detail") } : {}
-      }
-    } : {},
-    ...automation ? { automation } : {},
-    ...claim ? { claim } : {},
-    ...diagnostics.length > 0 ? { diagnostics } : {},
-    ...notifications.length > 0 ? { notifications } : {},
-    ...stringValue(row, "template_id") ? { templateId: stringValue(row, "template_id") } : {},
-    ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {},
-    ...stale ? { stale } : {},
-    ...lifecycleStatusSourceUpdatedAt !== void 0 ? { lifecycleStatusSourceUpdatedAt } : {},
-    ...numberValue(row, "failure_count") !== void 0 ? { failureCount: numberValue(row, "failure_count") } : {}
-  });
-}
-function readDelivery(db, cardId) {
-  const row = db.prepare("SELECT * FROM taskfold_card_delivery WHERE card_id = ?").get(cardId);
-  if (!row) {
-    return void 0;
-  }
-  const delivery = {
-    updatedAt: requiredNumber(row, "updated_at")
-  };
-  const objective = stringValue(row, "objective");
-  const deliverySummary = stringValue(row, "delivery_summary");
-  const openItems = stringValue(row, "open_items");
-  const implementationState = stringValue(row, "implementation_state");
-  const verificationState = stringValue(row, "verification_state");
-  const releaseState = stringValue(row, "release_state");
-  if (objective) {
-    delivery.objective = objective;
-  }
-  if (deliverySummary) {
-    delivery.deliverySummary = deliverySummary;
-  }
-  if (openItems) {
-    delivery.openItems = openItems;
-  }
-  if (implementationState) {
-    delivery.implementationState = implementationState;
-  }
-  if (verificationState) {
-    delivery.verificationState = verificationState;
-  }
-  if (releaseState) {
-    delivery.releaseState = releaseState;
-  }
-  return delivery;
-}
-function readSourceReferences(db, cardId) {
-  return childRows(db, "taskfold_card_source_references", cardId).map((child) => {
-    const reference = {
-      id: requiredString(child, "id"),
-      label: requiredString(child, "label"),
-      target: requiredString(child, "target"),
-      position: requiredNumber(child, "position"),
-      createdAt: requiredNumber(child, "created_at"),
-      updatedAt: requiredNumber(child, "updated_at")
-    };
-    const note = stringValue(child, "note");
-    if (note) {
-      reference.note = note;
-    }
-    return reference;
-  });
-}
-function readCard(db, row) {
-  const card = {
-    id: requiredString(row, "id"),
-    title: requiredString(row, "title"),
-    status: requiredString(row, "status"),
-    priority: requiredString(row, "priority"),
-    labels: readLabels(db, requiredString(row, "id")),
-    position: requiredNumber(row, "position"),
-    createdAt: requiredNumber(row, "created_at"),
-    updatedAt: requiredNumber(row, "updated_at"),
-    revision: numberValue(row, "revision") ?? 0
-  };
-  const metadata = readMetadata(db, row);
-  const delivery = readDelivery(db, card.id);
-  const sourceReferences = readSourceReferences(db, card.id);
-  return {
-    ...card,
-    ...stringValue(row, "card_kind") ? { kind: stringValue(row, "card_kind") } : {},
-    ...stringValue(row, "notes") ? { notes: stringValue(row, "notes") } : {},
-    ...stringValue(row, "agent_id") ? { agentId: stringValue(row, "agent_id") } : {},
-    ...stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {},
-    ...stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {},
-    ...stringValue(row, "task_id") ? { taskId: stringValue(row, "task_id") } : {},
-    ...stringValue(row, "source_url") ? { sourceUrl: stringValue(row, "source_url") } : {},
-    ...stringValue(row, "milestone_id") ? { milestoneId: stringValue(row, "milestone_id") } : {},
-    ...readExecution(row) ? { execution: readExecution(row) } : {},
-    ...delivery ? { delivery } : {},
-    ...sourceReferences.length ? { sourceReferences } : {},
-    ...numberValue(row, "started_at") !== void 0 ? { startedAt: numberValue(row, "started_at") } : {},
-    ...numberValue(row, "completed_at") !== void 0 ? { completedAt: numberValue(row, "completed_at") } : {},
-    ...readEvents(db, card.id) ? { events: readEvents(db, card.id) } : {},
-    ...metadata ? { metadata } : {}
-  };
-}
-function cardBoardId2(card) {
-  return card.metadata?.automation?.boardId ?? "default";
-}
-function bindNull(value) {
-  if (value === void 0 || value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint" || value instanceof Uint8Array) {
-    return value ?? null;
-  }
-  return JSON.stringify(value);
-}
-function insertChildren(db, table, cardId, entries, insert) {
-  db.prepare(`DELETE FROM ${table} WHERE card_id = ?`).run(cardId);
-  entries?.forEach(insert);
-}
-function insertCard(db, card) {
-  const execution = card.execution;
-  const metadata = card.metadata;
-  db.prepare(
-    `
-      INSERT INTO taskfold_cards (
-        id, board_id, title, notes, status, priority, card_kind, agent_id, session_key, run_id, task_id,
-        source_url, milestone_id, position, created_at, updated_at, started_at, completed_at,
-        execution_id, execution_kind, execution_engine, execution_mode, execution_status,
-        execution_model, execution_session_key, execution_run_id, execution_started_at,
-        execution_updated_at, automation_json, claim_json, template_id, archived_at, stale_json,
-        lifecycle_status_source_updated_at, failure_count, revision, claim_owner_id
-      ) VALUES (
-        @id, @board_id, @title, @notes, @status, @priority, @card_kind, @agent_id, @session_key, @run_id,
-        @task_id, @source_url, @milestone_id, @position, @created_at, @updated_at, @started_at, @completed_at,
-        @execution_id, @execution_kind, @execution_engine, @execution_mode, @execution_status,
-        @execution_model, @execution_session_key, @execution_run_id, @execution_started_at,
-        @execution_updated_at, @automation_json, @claim_json, @template_id, @archived_at,
-        @stale_json, @lifecycle_status_source_updated_at, @failure_count, @revision, @claim_owner_id
-      )
-      ON CONFLICT(id) DO UPDATE SET
-        board_id = excluded.board_id,
-        title = excluded.title,
-        notes = excluded.notes,
-        status = excluded.status,
-        priority = excluded.priority,
-        card_kind = excluded.card_kind,
-        agent_id = excluded.agent_id,
-        session_key = excluded.session_key,
-        run_id = excluded.run_id,
-        task_id = excluded.task_id,
-        source_url = excluded.source_url,
-        milestone_id = excluded.milestone_id,
-        position = excluded.position,
-        created_at = excluded.created_at,
-        updated_at = excluded.updated_at,
-        started_at = excluded.started_at,
-        completed_at = excluded.completed_at,
-        execution_id = excluded.execution_id,
-        execution_kind = excluded.execution_kind,
-        execution_engine = excluded.execution_engine,
-        execution_mode = excluded.execution_mode,
-        execution_status = excluded.execution_status,
-        execution_model = excluded.execution_model,
-        execution_session_key = excluded.execution_session_key,
-        execution_run_id = excluded.execution_run_id,
-        execution_started_at = excluded.execution_started_at,
-        execution_updated_at = excluded.execution_updated_at,
-        automation_json = excluded.automation_json,
-        claim_json = excluded.claim_json,
-        template_id = excluded.template_id,
-        archived_at = excluded.archived_at,
-        stale_json = excluded.stale_json,
-        lifecycle_status_source_updated_at = excluded.lifecycle_status_source_updated_at,
-        failure_count = excluded.failure_count,
-        revision = excluded.revision,
-        claim_owner_id = excluded.claim_owner_id
-    `
-  ).run({
-    id: card.id,
-    board_id: cardBoardId2(card),
-    title: card.title,
-    notes: bindNull(card.notes),
-    status: card.status,
-    priority: card.priority,
-    card_kind: bindNull(card.kind),
-    agent_id: bindNull(card.agentId),
-    session_key: bindNull(card.sessionKey),
-    run_id: bindNull(card.runId),
-    task_id: bindNull(card.taskId),
-    source_url: bindNull(card.sourceUrl),
-    milestone_id: bindNull(card.milestoneId),
-    position: card.position,
-    created_at: card.createdAt,
-    updated_at: card.updatedAt,
-    started_at: bindNull(card.startedAt),
-    completed_at: bindNull(card.completedAt),
-    execution_id: bindNull(execution?.id),
-    execution_kind: bindNull(execution?.kind),
-    execution_engine: bindNull(execution?.engine),
-    execution_mode: bindNull(execution?.mode),
-    execution_status: bindNull(execution?.status),
-    execution_model: bindNull(execution?.model),
-    execution_session_key: bindNull(execution?.sessionKey),
-    execution_run_id: bindNull(execution?.runId),
-    execution_started_at: bindNull(execution?.startedAt),
-    execution_updated_at: bindNull(execution?.updatedAt),
-    automation_json: jsonValue(metadata?.automation),
-    claim_json: jsonValue(metadata?.claim),
-    template_id: bindNull(metadata?.templateId),
-    archived_at: bindNull(metadata?.archivedAt),
-    stale_json: jsonValue(metadata?.stale),
-    lifecycle_status_source_updated_at: bindNull(metadata?.lifecycleStatusSourceUpdatedAt),
-    failure_count: bindNull(metadata?.failureCount),
-    revision: card.revision,
-    claim_owner_id: bindNull(metadata?.claim?.ownerId)
-  });
-  insertChildren(db, "taskfold_card_labels", card.id, card.labels, (label, ordinal) => {
-    db.prepare("INSERT INTO taskfold_card_labels (card_id, ordinal, label) VALUES (?, ?, ?)").run(
-      card.id,
-      ordinal,
-      label
-    );
-  });
-  insertChildren(db, "taskfold_card_events", card.id, card.events, (event, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_events
-          (id, card_id, ordinal, kind, at, from_status, to_status, from_milestone_id, to_milestone_id, session_key, run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      event.id,
-      card.id,
-      ordinal,
-      event.kind,
-      event.at,
-      bindNull(event.fromStatus),
-      bindNull(event.toStatus),
-      bindNull(event.fromMilestoneId),
-      bindNull(event.toMilestoneId),
-      bindNull(event.sessionKey),
-      bindNull(event.runId)
-    );
-  });
-  insertChildren(db, "taskfold_card_attempts", card.id, metadata?.attempts, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_attempts
-          (id, card_id, ordinal, status, started_at, ended_at, engine, mode, model, session_key, run_id, error, prompt_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      entry.id,
-      card.id,
-      ordinal,
-      entry.status,
-      entry.startedAt,
-      bindNull(entry.endedAt),
-      bindNull(entry.engine),
-      bindNull(entry.mode),
-      bindNull(entry.model),
-      bindNull(entry.sessionKey),
-      bindNull(entry.runId),
-      bindNull(entry.error),
-      bindNull(entry.promptVersion)
-    );
-  });
-  insertChildren(db, "taskfold_card_comments", card.id, metadata?.comments, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_comments (id, card_id, ordinal, body, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `
-    ).run(entry.id, card.id, ordinal, entry.body, entry.createdAt, bindNull(entry.updatedAt));
-  });
-  insertChildren(db, "taskfold_card_links", card.id, metadata?.links, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_links
-          (id, card_id, ordinal, type, target_card_id, title, url, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      entry.id,
-      card.id,
-      ordinal,
-      entry.type,
-      bindNull(entry.targetCardId),
-      bindNull(entry.title),
-      bindNull(entry.url),
-      entry.createdAt
-    );
-  });
-  insertChildren(db, "taskfold_card_proof", card.id, metadata?.proof, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_proof
-          (id, card_id, ordinal, status, label, command, url, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      entry.id,
-      card.id,
-      ordinal,
-      entry.status,
-      bindNull(entry.label),
-      bindNull(entry.command),
-      bindNull(entry.url),
-      bindNull(entry.note),
-      entry.createdAt
-    );
-  });
-  insertChildren(db, "taskfold_card_artifacts", card.id, metadata?.artifacts, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_artifacts
-          (id, card_id, ordinal, label, url, path, mime_type, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      entry.id,
-      card.id,
-      ordinal,
-      bindNull(entry.label),
-      bindNull(entry.url),
-      bindNull(entry.path),
-      bindNull(entry.mimeType),
-      entry.createdAt
-    );
-  });
-  db.prepare("DELETE FROM taskfold_card_delivery WHERE card_id = ?").run(card.id);
-  if (card.delivery) {
-    db.prepare(
-      `
-        INSERT INTO taskfold_card_delivery
-          (card_id, objective, delivery_summary, open_items, implementation_state,
-           verification_state, release_state, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      card.id,
-      bindNull(card.delivery.objective),
-      bindNull(card.delivery.deliverySummary),
-      bindNull(card.delivery.openItems),
-      bindNull(card.delivery.implementationState),
-      bindNull(card.delivery.verificationState),
-      bindNull(card.delivery.releaseState),
-      card.delivery.updatedAt
-    );
-  }
-  insertChildren(
-    db,
-    "taskfold_card_source_references",
-    card.id,
-    card.sourceReferences,
-    (entry, ordinal) => {
-      db.prepare(
-        `
-          INSERT INTO taskfold_card_source_references
-            (id, card_id, ordinal, label, target, note, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        entry.id,
-        card.id,
-        ordinal,
-        entry.label,
-        entry.target,
-        bindNull(entry.note),
-        entry.position,
-        entry.createdAt,
-        entry.updatedAt
-      );
-    }
-  );
-  insertChildren(
-    db,
-    "taskfold_card_attachments",
-    card.id,
-    metadata?.attachments,
-    (entry, ordinal) => {
-      db.prepare(
-        `
-          INSERT INTO taskfold_card_attachments
-            (id, card_id, ordinal, file_name, byte_size, mime_type, note, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        entry.id,
-        entry.cardId,
-        ordinal,
-        entry.fileName,
-        entry.byteSize,
-        bindNull(entry.mimeType),
-        bindNull(entry.note),
-        entry.createdAt
-      );
-    }
-  );
-  insertChildren(
-    db,
-    "taskfold_card_diagnostics",
-    card.id,
-    metadata?.diagnostics,
-    (entry, ordinal) => {
-      db.prepare(
-        `
-          INSERT INTO taskfold_card_diagnostics
-            (card_id, ordinal, kind, severity, title, detail, first_seen_at, last_seen_at, count, actions_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        card.id,
-        ordinal,
-        entry.kind,
-        entry.severity,
-        entry.title,
-        entry.detail,
-        entry.firstSeenAt,
-        entry.lastSeenAt,
-        entry.count,
-        JSON.stringify(entry.actions)
-      );
-    }
-  );
-  insertChildren(
-    db,
-    "taskfold_card_notifications",
-    card.id,
-    metadata?.notifications,
-    (entry, ordinal) => {
-      db.prepare(
-        `
-          INSERT INTO taskfold_card_notifications
-            (id, card_id, ordinal, kind, message, created_at, sequence, session_key, run_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        entry.id,
-        card.id,
-        ordinal,
-        entry.kind,
-        entry.message,
-        entry.createdAt,
-        bindNull(entry.sequence),
-        bindNull(entry.sessionKey),
-        bindNull(entry.runId)
-      );
-    }
-  );
-  insertChildren(db, "taskfold_worker_logs", card.id, metadata?.workerLogs, (entry, ordinal) => {
-    db.prepare(
-      `
-        INSERT INTO taskfold_worker_logs
-          (id, card_id, ordinal, level, message, created_at, session_key, run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      entry.id,
-      card.id,
-      ordinal,
-      entry.level,
-      entry.message,
-      entry.createdAt,
-      bindNull(entry.sessionKey),
-      bindNull(entry.runId)
-    );
-  });
-  db.prepare("DELETE FROM taskfold_worker_protocol WHERE card_id = ?").run(card.id);
-  if (metadata?.workerProtocol) {
-    db.prepare(
-      `
-        INSERT INTO taskfold_worker_protocol (card_id, state, updated_at, detail)
-        VALUES (?, ?, ?, ?)
-      `
-    ).run(
-      card.id,
-      metadata.workerProtocol.state,
-      metadata.workerProtocol.updatedAt,
-      bindNull(metadata.workerProtocol.detail)
-    );
-  }
-}
-var TaskfoldSqliteCardStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.card.id !== key) {
-      throw new Error("invalid taskfold card payload");
-    }
-    runTransaction(this.db, () => insertCard(this.db, value.card));
-  }
-  async compareAndSwap(key, expectedRevision, value) {
-    if (value.version !== 1 || value.card.id !== key) {
-      throw new Error("invalid taskfold card payload");
-    }
-    return runTransaction(this.db, () => {
-      const row = this.db.prepare("SELECT revision FROM taskfold_cards WHERE id = ?").get(key);
-      if (!row || (numberValue(row, "revision") ?? 0) !== expectedRevision) {
-        return false;
-      }
-      insertCard(this.db, value.card);
-      return true;
-    });
-  }
-  async registerIfAbsent(key, value) {
-    if (value.version !== 1 || value.card.id !== key) {
-      throw new Error("invalid taskfold card payload");
-    }
-    return runTransaction(this.db, () => {
-      const row = this.db.prepare("SELECT id FROM taskfold_cards WHERE id = ?").get(key);
-      if (row) {
-        return false;
-      }
-      insertCard(this.db, value.card);
-      return true;
-    });
-  }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_cards WHERE id = ?").get(key);
-    return row ? { version: 1, card: readCard(this.db, row) } : void 0;
-  }
-  async delete(key) {
-    const result = runTransaction(this.db, () => {
-      this.db.prepare(
-        `
-            DELETE FROM taskfold_attachment_blobs
-            WHERE attachment_id IN (
-              SELECT id FROM taskfold_card_attachments WHERE card_id = ?
-            )
-          `
-      ).run(key);
-      return this.db.prepare("DELETE FROM taskfold_cards WHERE id = ?").run(key);
-    });
-    return result.changes > 0;
-  }
-  async entries() {
-    return this.db.prepare("SELECT * FROM taskfold_cards ORDER BY created_at ASC, id ASC").all().map((row) => ({
-      key: requiredString(row, "id"),
-      value: { version: 1, card: readCard(this.db, row) }
-    }));
-  }
-};
-var TaskfoldSqliteBoardStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.board.id !== key) {
-      throw new Error("invalid taskfold board payload");
-    }
-    const board = value.board;
-    this.db.prepare(
-      `
-          INSERT INTO taskfold_boards (
-            id, name, description, icon, color, position, version, current_objective, core_value,
-            source_of_truth, repository_url, planning_path, homepage_url,
-            default_workspace_json, orchestration_json, board_view_json,
-            created_at, updated_at, archived_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            description = excluded.description,
-            icon = excluded.icon,
-            color = excluded.color,
-            position = excluded.position,
-            version = excluded.version,
-            current_objective = excluded.current_objective,
-            core_value = excluded.core_value,
-            source_of_truth = excluded.source_of_truth,
-            repository_url = excluded.repository_url,
-            planning_path = excluded.planning_path,
-            homepage_url = excluded.homepage_url,
-            default_workspace_json = excluded.default_workspace_json,
-            orchestration_json = excluded.orchestration_json,
-            board_view_json = excluded.board_view_json,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at,
-            archived_at = excluded.archived_at
-        `
-    ).run(
-      board.id,
-      bindNull(board.name),
-      bindNull(board.description),
-      bindNull(board.icon),
-      bindNull(board.color),
-      bindNull(board.position),
-      bindNull(board.version),
-      bindNull(board.currentObjective),
-      bindNull(board.coreValue),
-      bindNull(board.sourceOfTruth),
-      bindNull(board.repositoryUrl),
-      bindNull(board.planningPath),
-      bindNull(board.homepageUrl),
-      jsonValue(board.defaultWorkspace),
-      jsonValue(board.orchestration),
-      jsonValue(board.boardView),
-      board.createdAt,
-      board.updatedAt,
-      bindNull(board.archivedAt)
-    );
-  }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_boards WHERE id = ?").get(key);
-    if (!row) {
-      return void 0;
-    }
-    const defaultWorkspace = parseJson(row.default_workspace_json);
-    const orchestration = parseJson(row.orchestration_json);
-    const boardView = parseJson(row.board_view_json);
-    return {
-      version: 1,
-      board: {
-        id: requiredString(row, "id"),
-        ...stringValue(row, "name") ? { name: stringValue(row, "name") } : {},
-        ...stringValue(row, "description") ? { description: stringValue(row, "description") } : {},
-        ...stringValue(row, "icon") ? { icon: stringValue(row, "icon") } : {},
-        ...stringValue(row, "color") ? { color: stringValue(row, "color") } : {},
-        ...numberValue(row, "position") !== void 0 ? { position: numberValue(row, "position") } : {},
-        ...stringValue(row, "version") ? { version: stringValue(row, "version") } : {},
-        ...stringValue(row, "current_objective") ? { currentObjective: stringValue(row, "current_objective") } : {},
-        ...stringValue(row, "core_value") ? { coreValue: stringValue(row, "core_value") } : {},
-        ...stringValue(row, "source_of_truth") ? { sourceOfTruth: stringValue(row, "source_of_truth") } : {},
-        ...stringValue(row, "repository_url") ? { repositoryUrl: stringValue(row, "repository_url") } : {},
-        ...stringValue(row, "planning_path") ? { planningPath: stringValue(row, "planning_path") } : {},
-        ...stringValue(row, "homepage_url") ? { homepageUrl: stringValue(row, "homepage_url") } : {},
-        ...defaultWorkspace ? { defaultWorkspace } : {},
-        ...orchestration ? { orchestration } : {},
-        ...boardView ? { boardView } : {},
-        createdAt: requiredNumber(row, "created_at"),
-        updatedAt: requiredNumber(row, "updated_at"),
-        ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {}
-      }
-    };
-  }
-  async delete(key) {
-    const result = this.db.prepare("DELETE FROM taskfold_boards WHERE id = ?").run(key);
-    return result.changes > 0;
-  }
-  async entries() {
-    const rows = this.db.prepare("SELECT id FROM taskfold_boards ORDER BY id ASC").all();
-    const entries = [];
-    for (const row of rows) {
-      const key = requiredString(row, "id");
-      const value = await this.lookup(key);
-      if (value) {
-        entries.push({ key, value });
-      }
-    }
-    return entries;
-  }
-};
-function readMilestone(row) {
-  return {
-    id: requiredString(row, "id"),
-    boardId: requiredString(row, "board_id"),
-    title: requiredString(row, "title"),
-    position: requiredNumber(row, "position"),
-    state: requiredString(row, "state"),
-    createdAt: requiredNumber(row, "created_at"),
-    updatedAt: requiredNumber(row, "updated_at"),
-    ...stringValue(row, "description") ? { description: stringValue(row, "description") } : {},
-    ...stringValue(row, "color") ? { color: stringValue(row, "color") } : {},
-    ...numberValue(row, "completed_at") !== void 0 ? { completedAt: numberValue(row, "completed_at") } : {},
-    ...numberValue(row, "archived_at") !== void 0 ? { archivedAt: numberValue(row, "archived_at") } : {}
-  };
-}
-var TaskfoldSqliteMilestoneStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.milestone.id !== key) {
-      throw new Error("invalid taskfold milestone payload");
-    }
-    const milestone = value.milestone;
-    this.db.prepare(
-      `
-          INSERT INTO taskfold_milestones (
-            id, board_id, title, description, color, position, state, created_at, updated_at,
-            completed_at, archived_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            board_id = excluded.board_id,
-            title = excluded.title,
-            description = excluded.description,
-            color = excluded.color,
-            position = excluded.position,
-            state = excluded.state,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at,
-            completed_at = excluded.completed_at,
-            archived_at = excluded.archived_at
-        `
-    ).run(
-      milestone.id,
-      milestone.boardId,
-      milestone.title,
-      bindNull(milestone.description),
-      bindNull(milestone.color),
-      milestone.position,
-      milestone.state,
-      milestone.createdAt,
-      milestone.updatedAt,
-      bindNull(milestone.completedAt),
-      bindNull(milestone.archivedAt)
-    );
-  }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_milestones WHERE id = ?").get(key);
-    return row ? { version: 1, milestone: readMilestone(row) } : void 0;
-  }
-  async delete(key) {
-    const result = this.db.prepare("DELETE FROM taskfold_milestones WHERE id = ?").run(key);
-    return result.changes > 0;
-  }
-  async entries() {
-    return this.db.prepare("SELECT * FROM taskfold_milestones ORDER BY board_id ASC, position ASC, id ASC").all().map((row) => ({
-      key: requiredString(row, "id"),
-      value: { version: 1, milestone: readMilestone(row) }
-    }));
-  }
-};
-function readProjectDocument(row) {
-  return {
-    id: requiredString(row, "id"),
-    boardId: requiredString(row, "board_id"),
-    key: requiredString(row, "document_key"),
-    section: requiredString(row, "section"),
-    source: stringValue(row, "source") ?? "project",
-    type: requiredString(row, "type"),
-    title: requiredString(row, "title"),
-    position: requiredNumber(row, "position"),
-    createdAt: requiredNumber(row, "created_at"),
-    updatedAt: requiredNumber(row, "updated_at"),
-    ...stringValue(row, "summary") ? { summary: stringValue(row, "summary") } : {},
-    ...stringValue(row, "target") ? { target: stringValue(row, "target") } : {},
-    ...stringValue(row, "content") ? { content: stringValue(row, "content") } : {},
-    ...numberValue(row, "hidden_at") !== void 0 ? { hiddenAt: numberValue(row, "hidden_at") } : {},
-    ...numberValue(row, "system") === 1 ? { system: true } : {}
-  };
-}
-var TaskfoldSqliteProjectDocumentStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.document.id !== key) {
-      throw new Error("invalid taskfold project document payload");
-    }
-    const document = value.document;
-    this.db.prepare(
-      `
-          INSERT INTO taskfold_project_documents (
-            id, board_id, document_key, section, source, type, title, summary, target, content,
-            position, hidden_at, system, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            board_id = excluded.board_id,
-            document_key = excluded.document_key,
-            section = excluded.section,
-            source = excluded.source,
-            type = excluded.type,
-            title = excluded.title,
-            summary = excluded.summary,
-            target = excluded.target,
-            content = excluded.content,
-            position = excluded.position,
-            hidden_at = excluded.hidden_at,
-            system = excluded.system,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at
-        `
-    ).run(
-      document.id,
-      document.boardId,
-      document.key,
-      document.section,
-      document.source,
-      document.type,
-      document.title,
-      bindNull(document.summary),
-      bindNull(document.target),
-      bindNull(document.content),
-      document.position,
-      bindNull(document.hiddenAt),
-      document.system ? 1 : 0,
-      document.createdAt,
-      document.updatedAt
-    );
-  }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_project_documents WHERE id = ?").get(key);
-    return row ? { version: 1, document: readProjectDocument(row) } : void 0;
-  }
-  async delete(key) {
-    const result = this.db.prepare("DELETE FROM taskfold_project_documents WHERE id = ?").run(key);
-    return result.changes > 0;
-  }
-  async entries() {
-    return this.db.prepare(
-      "SELECT * FROM taskfold_project_documents ORDER BY board_id ASC, section ASC, position ASC, id ASC"
-    ).all().map((row) => ({
-      key: requiredString(row, "id"),
-      value: { version: 1, document: readProjectDocument(row) }
-    }));
-  }
-};
-var TaskfoldSqliteSubscriptionStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.subscription.id !== key) {
-      throw new Error("invalid taskfold notification subscription payload");
-    }
-    const subscription = value.subscription;
-    this.db.prepare(
-      `
-          INSERT INTO taskfold_notification_subscriptions (
-            id, board_id, card_id, session_key, run_id, target, event_kinds_json,
-            last_event_at, last_event_id, last_event_sequence, delivered_event_ids_json,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            board_id = excluded.board_id,
-            card_id = excluded.card_id,
-            session_key = excluded.session_key,
-            run_id = excluded.run_id,
-            target = excluded.target,
-            event_kinds_json = excluded.event_kinds_json,
-            last_event_at = excluded.last_event_at,
-            last_event_id = excluded.last_event_id,
-            last_event_sequence = excluded.last_event_sequence,
-            delivered_event_ids_json = excluded.delivered_event_ids_json,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at
-        `
-    ).run(
-      subscription.id,
-      subscription.boardId,
-      bindNull(subscription.cardId),
-      bindNull(subscription.sessionKey),
-      bindNull(subscription.runId),
-      bindNull(subscription.target),
-      jsonValue(subscription.eventKinds),
-      bindNull(subscription.lastEventAt),
-      bindNull(subscription.lastEventId),
-      bindNull(subscription.lastEventSequence),
-      jsonValue(subscription.deliveredEventIds),
-      subscription.createdAt,
-      subscription.updatedAt
-    );
-  }
-  async lookup(key) {
-    const row = this.db.prepare("SELECT * FROM taskfold_notification_subscriptions WHERE id = ?").get(key);
-    if (!row) {
-      return void 0;
-    }
-    const eventKinds = parseJson(row.event_kinds_json);
-    const deliveredEventIds = parseJson(row.delivered_event_ids_json);
-    return {
-      version: 1,
-      subscription: {
-        id: requiredString(row, "id"),
-        boardId: requiredString(row, "board_id"),
-        ...stringValue(row, "card_id") ? { cardId: stringValue(row, "card_id") } : {},
-        ...stringValue(row, "session_key") ? { sessionKey: stringValue(row, "session_key") } : {},
-        ...stringValue(row, "run_id") ? { runId: stringValue(row, "run_id") } : {},
-        ...stringValue(row, "target") ? { target: stringValue(row, "target") } : {},
-        ...eventKinds ? { eventKinds } : {},
-        ...numberValue(row, "last_event_at") !== void 0 ? { lastEventAt: numberValue(row, "last_event_at") } : {},
-        ...stringValue(row, "last_event_id") ? { lastEventId: stringValue(row, "last_event_id") } : {},
-        ...numberValue(row, "last_event_sequence") !== void 0 ? { lastEventSequence: numberValue(row, "last_event_sequence") } : {},
-        ...deliveredEventIds ? { deliveredEventIds } : {},
-        createdAt: requiredNumber(row, "created_at"),
-        updatedAt: requiredNumber(row, "updated_at")
-      }
-    };
-  }
-  async delete(key) {
-    const result = this.db.prepare("DELETE FROM taskfold_notification_subscriptions WHERE id = ?").run(key);
-    return result.changes > 0;
-  }
-  async entries() {
-    const rows = this.db.prepare(
-      "SELECT id FROM taskfold_notification_subscriptions ORDER BY created_at ASC, id ASC"
-    ).all();
-    const entries = [];
-    for (const row of rows) {
-      const key = requiredString(row, "id");
-      const value = await this.lookup(key);
-      if (value) {
-        entries.push({ key, value });
-      }
-    }
-    return entries;
-  }
-};
-var TaskfoldSqliteAttachmentStore = class {
-  constructor(db) {
-    this.db = db;
-  }
-  async register(key, value) {
-    if (value.version !== 1 || value.attachment.id !== key) {
-      throw new Error("invalid taskfold attachment payload");
-    }
-    const attachment = value.attachment;
-    this.db.prepare(
-      `
-          INSERT INTO taskfold_attachment_blobs (attachment_id, content)
-          VALUES (?, ?)
-          ON CONFLICT(attachment_id) DO UPDATE SET content = excluded.content
-        `
-    ).run(attachment.id, asBlobContent(value.contentBase64));
-  }
-  async lookup(key) {
-    const row = this.db.prepare(
-      `
-          SELECT a.*, b.content
-          FROM taskfold_card_attachments a
-          JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
-          WHERE a.id = ?
-        `
-    ).get(key);
-    if (!row) {
-      return void 0;
-    }
-    return {
-      version: 1,
-      attachment: {
-        id: requiredString(row, "id"),
-        cardId: requiredString(row, "card_id"),
-        createdAt: requiredNumber(row, "created_at"),
-        fileName: requiredString(row, "file_name"),
-        byteSize: requiredNumber(row, "byte_size"),
-        ...stringValue(row, "mime_type") ? { mimeType: stringValue(row, "mime_type") } : {},
-        ...stringValue(row, "note") ? { note: stringValue(row, "note") } : {}
-      },
-      contentBase64: blobToBase64(row.content)
-    };
-  }
-  async delete(key) {
-    const deleted = runTransaction(this.db, () => {
-      this.db.prepare("DELETE FROM taskfold_attachment_blobs WHERE attachment_id = ?").run(key);
-      return this.db.prepare("DELETE FROM taskfold_card_attachments WHERE id = ?").run(key);
-    });
-    return deleted.changes > 0;
-  }
-  async entries() {
-    const rows = this.db.prepare(
-      `
-          SELECT a.id
-          FROM taskfold_card_attachments a
-          JOIN taskfold_attachment_blobs b ON b.attachment_id = a.id
-          ORDER BY a.created_at ASC, a.id ASC
-        `
-    ).all();
-    const entries = [];
-    for (const row of rows) {
-      const key = requiredString(row, "id");
-      const value = await this.lookup(key);
-      if (value) {
-        entries.push({ key, value });
-      }
-    }
-    return entries;
-  }
-};
-function createTaskfoldSqliteStores(options = {}) {
-  const dbPath = options.dbPath ?? resolveTaskfoldSqlitePath(options.env);
-  const { db, maintenance } = createDatabase(
-    dbPath,
-    options.legacyDbPath ?? (options.dbPath ? void 0 : resolveLegacyFlowboardSqlitePath(options.env))
-  );
-  return {
-    cards: new TaskfoldSqliteCardStore(db),
-    boards: new TaskfoldSqliteBoardStore(db),
-    milestones: new TaskfoldSqliteMilestoneStore(db),
-    documents: new TaskfoldSqliteProjectDocumentStore(db),
-    subscriptions: new TaskfoldSqliteSubscriptionStore(db),
-    attachments: new TaskfoldSqliteAttachmentStore(db),
-    // This connection-local primitive changes only after another connection commits.
-    dataVersion: () => requiredNumber(db.prepare("PRAGMA data_version").get(), "data_version"),
-    changeEpoch: ensureChangeEpoch(db),
-    reserveChangeRevisions: (count) => reserveChangeRevisions(db, count),
-    close: () => {
-      maintenance.close();
-      db.close();
-    }
-  };
-}
+// src/backend/src/store.ts
+init_sqlite_store();
 
 // packages/core/src/store-dispatch.ts
-import { randomUUID as randomUUID11 } from "node:crypto";
+import { randomUUID as randomUUID13 } from "node:crypto";
+init_store_constants();
 
 // packages/core/src/store-projects.ts
 init_contract();
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID12 } from "node:crypto";
 import { stat } from "node:fs/promises";
+init_store_constants();
 
 // packages/core/src/store-workflow.ts
-import { randomUUID as randomUUID9 } from "node:crypto";
+init_sdk_utils();
+import { randomUUID as randomUUID11 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
+init_store_constants();
 
 // packages/core/src/store-promote.ts
-import { randomUUID as randomUUID8 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
+init_store_constants();
 
 // packages/core/src/store-enrichment.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID9 } from "node:crypto";
+init_store_constants();
 var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
   async addProof(id, input, scope) {
     const now = Date.now();
@@ -8149,7 +13304,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
     const sessionKey = normalizeBoundedString(input.sessionKey, void 0, 240, "session key");
     const runId = normalizeBoundedString(input.runId, void 0, 160, "run id");
     const log = {
-      id: randomUUID7(),
+      id: randomUUID9(),
       level,
       message,
       createdAt: now,
@@ -8176,7 +13331,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
       const sessionKey = normalizeBoundedString(input.sessionKey, void 0, 240, "session key");
       const runId = normalizeBoundedString(input.runId, void 0, 160, "run id");
       const log = {
-        id: randomUUID7(),
+        id: randomUUID9(),
         level: "error",
         message: detail,
         createdAt: now,
@@ -8186,7 +13341,7 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
       const execution = card.execution?.status === "running" ? { ...card.execution, status: "blocked", updatedAt: now } : card.execution;
       const attempts = closeRunningAttempts(card.metadata?.attempts, now, "blocked", detail);
       const notification = {
-        id: randomUUID7(),
+        id: randomUUID9(),
         kind: "failed",
         createdAt: now,
         sequence: this.nextNotificationSequence(now),
@@ -8231,8 +13386,13 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
       return { cards: promoted, count: promoted.length };
     });
   }
-  async move(id, status, position, scope) {
-    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
+  /**
+   * 改卡片状态。`options.expectedRevision`（TASK-8，VS Code 看板的拖拽 CAS）：给了就只在卡片
+   * 仍是这个 revision 时写入，否则抛 {@link TaskfoldRevisionConflictError}、不重试；不给时
+   * 行为与原来逐字相同（以刚读到的 revision 做 CAS，输给并发写入就重读重试）。
+   */
+  async move(id, status, position, scope, options = {}) {
+    const run = async () => await this.enqueueMutation(async () => {
       const existing = await this.get(id);
       if (!existing) {
         throw new Error(`card not found: ${id}`);
@@ -8244,10 +13404,11 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
         {
           allowMetadataDependencyLinks: false,
           enforceStatusHolds: true,
-          expectedRevision: existing.revision
+          expectedRevision: options.expectedRevision ?? existing.revision
         }
       );
-    }));
+    });
+    return options.expectedRevision !== void 0 ? await run() : await this.retryOnRevisionConflict(run);
   }
   async promote(id, input = {}, scope) {
     return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
@@ -8259,7 +13420,7 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "promote reason");
       const comments = reason ? [
         ...existing.metadata?.comments ?? [],
-        { id: randomUUID8(), body: reason, createdAt: Date.now() }
+        { id: randomUUID10(), body: reason, createdAt: Date.now() }
       ].slice(-MAX_CARD_COMMENTS) : existing.metadata?.comments;
       return await this.updateCard(
         id,
@@ -8289,7 +13450,7 @@ function assertClaimIdentity(claim, input) {
   }
 }
 function taskfoldInstanceId() {
-  return resolveGlobalSingleton(Symbol.for("taskfold.instanceId"), () => randomUUID9());
+  return resolveGlobalSingleton(Symbol.for("taskfold.instanceId"), () => randomUUID11());
 }
 function preparedLaunchMatchesCard(card, expected) {
   const launch = card.metadata?.automation?.launch;
@@ -8359,7 +13520,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       if (existingClaim && (isFutureDateTimestampMs(existingClaim.expiresAt, { nowMs: now }) || !isTaskfoldClaimReclaimable(existingClaim, now))) {
         throw new Error(`card already claimed by ${existingClaim.ownerId}.`);
       }
-      const token = randomUUID9();
+      const token = randomUUID11();
       const expiresAt = addTaskfoldDurationMs(
         now,
         ttlSeconds ? secondsToDurationMs(ttlSeconds) : DEFAULT_CLAIM_TTL_MS
@@ -8613,7 +13774,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
             comments: [
               ...existing.metadata?.comments ?? [],
-              { id: randomUUID9(), body: reason, createdAt: now }
+              { id: randomUUID11(), body: reason, createdAt: now }
             ].slice(-MAX_CARD_COMMENTS)
           }
         },
@@ -8684,7 +13845,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       throw new Error("claim ownerId is required.");
     }
     const ttlSeconds = typeof input.ttlSeconds === "number" && Number.isFinite(input.ttlSeconds) ? Math.max(1, Math.trunc(input.ttlSeconds)) : void 0;
-    const token = normalizeBoundedString(input.token, void 0, 160, "claim token") ?? randomUUID9();
+    const token = normalizeBoundedString(input.token, void 0, 160, "claim token") ?? randomUUID11();
     const progress = { claimed: false };
     return await this.retryOnRevisionConflict(
       async () => await this.claimOnce(id, { ownerId, ttlSeconds, token }, options, progress)
@@ -8787,7 +13948,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       return {
         ...metadata,
         claim: removeUndefinedMetadataFields({ claim: nextClaim }).claim,
-        comments: note ? [...metadata.comments ?? [], { id: randomUUID9(), body: note, createdAt: now }].slice(
+        comments: note ? [...metadata.comments ?? [], { id: randomUUID11(), body: note, createdAt: now }].slice(
           -MAX_CARD_COMMENTS
         ) : metadata.comments
       };
@@ -8852,7 +14013,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     const artifacts = Array.isArray(input.artifacts) ? input.artifacts.map((artifact) => normalizeArtifact({ ...artifact, createdAt: now })).filter((artifact) => artifact !== null).slice(-MAX_CARD_ARTIFACTS) : [];
     const metadata = clearDiagnostics(existing.metadata, ["missing_proof"]);
     const notification = {
-      id: randomUUID9(),
+      id: randomUUID11(),
       kind: "completed",
       createdAt: now,
       sequence: this.nextNotificationSequence(now),
@@ -8881,7 +14042,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           ),
           comments: summary ? [
             ...metadata.comments ?? [],
-            { id: randomUUID9(), body: summary, createdAt: now }
+            { id: randomUUID11(), body: summary, createdAt: now }
           ].slice(-MAX_CARD_COMMENTS) : metadata.comments,
           proof: proof ? appendCompletionProof(metadata.proof, proof, proofId) : metadata.proof,
           artifacts: artifacts.length ? [...metadata.artifacts ?? [], ...artifacts].slice(-MAX_CARD_ARTIFACTS) : metadata.artifacts,
@@ -8908,7 +14069,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       const reason = normalizeBoundedString(input.reason, void 0, 2e3, "block reason") ?? "Taskfold card blocked.";
       const metadata = existing.metadata ?? {};
       const notification = {
-        id: randomUUID9(),
+        id: randomUUID11(),
         kind: "failed",
         createdAt: now,
         sequence: this.nextNotificationSequence(now),
@@ -8929,7 +14090,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             failureCount: (metadata.failureCount ?? 0) + 1,
             comments: [
               ...metadata.comments ?? [],
-              { id: randomUUID9(), body: reason, createdAt: now }
+              { id: randomUUID11(), body: reason, createdAt: now }
             ].slice(-MAX_CARD_COMMENTS),
             notifications: [...metadata.notifications ?? [], notification].slice(
               -MAX_CARD_NOTIFICATIONS
@@ -8972,7 +14133,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         ...shouldResetFailures ? { failureCount: 0 } : {},
         comments: reason ? [
           ...baseMetadata?.comments ?? [],
-          { id: randomUUID9(), body: reason, createdAt: Date.now() }
+          { id: randomUUID11(), body: reason, createdAt: Date.now() }
         ].slice(-MAX_CARD_COMMENTS) : baseMetadata?.comments
       };
       return await this.updateCard(
@@ -9003,7 +14164,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
             attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
             comments: [
               ...existing.metadata?.comments ?? [],
-              { id: randomUUID9(), body: reason, createdAt: now }
+              { id: randomUUID11(), body: reason, createdAt: now }
             ].slice(-MAX_CARD_COMMENTS),
             stale: null
           }
@@ -9041,7 +14202,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         ...existing.metadata,
         comments: summary ? [
           ...existing.metadata?.comments ?? [],
-          { id: randomUUID9(), body: summary, createdAt: now }
+          { id: randomUUID11(), body: summary, createdAt: now }
         ].slice(-MAX_CARD_COMMENTS) : existing.metadata?.comments,
         automation: normalizeAutomation(
           {
@@ -9299,9 +14460,9 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
 };
 
 // packages/core/src/project-document-discovery.ts
-import { createHash as createHash3 } from "node:crypto";
-import fs3 from "node:fs/promises";
-import path4 from "node:path";
+import { createHash as createHash4 } from "node:crypto";
+import fs10 from "node:fs/promises";
+import path16 from "node:path";
 var MAX_DISCOVERED_DOCUMENTS = 500;
 var MARKDOWN_EXTENSIONS2 = /* @__PURE__ */ new Set([".md", ".markdown"]);
 var TOP_LEVEL_AI_INSTRUCTION_NAMES = /* @__PURE__ */ new Set(["agents.md", "claude.md"]);
@@ -9323,48 +14484,48 @@ var EXTRA_DOCUMENT_PATHS = [
   ".claude/skills/deploy-prod/SKILL.md"
 ];
 function isPathInside2(root, candidate) {
-  const relative = path4.relative(root, candidate);
-  return relative === "" || !relative.startsWith(`..${path4.sep}`) && relative !== "..";
+  const relative = path16.relative(root, candidate);
+  return relative === "" || !relative.startsWith(`..${path16.sep}`) && relative !== "..";
 }
 function normalizedRelativePath(root, target) {
-  return path4.relative(root, target).split(path4.sep).join("/");
+  return path16.relative(root, target).split(path16.sep).join("/");
 }
 function isMarkdownPath(relativePath) {
-  return MARKDOWN_EXTENSIONS2.has(path4.extname(relativePath).toLocaleLowerCase());
+  return MARKDOWN_EXTENSIONS2.has(path16.extname(relativePath).toLocaleLowerCase());
 }
 function sourceForDocument(relativePath) {
-  const normalized = relativePath.toLocaleLowerCase();
-  if (normalized === ".github/copilot-instructions.md" || normalized === ".claude/skills/deploy-test/skill.md" || normalized === ".claude/skills/deploy-prod/skill.md" || /^(?:[^/]+\/)?(?:agents|claude)\.md$/.test(normalized)) {
+  const normalized2 = relativePath.toLocaleLowerCase();
+  if (normalized2 === ".github/copilot-instructions.md" || normalized2 === ".claude/skills/deploy-test/skill.md" || normalized2 === ".claude/skills/deploy-prod/skill.md" || /^(?:[^/]+\/)?(?:agents|claude)\.md$/.test(normalized2)) {
     return "ai_system";
   }
   return "project";
 }
 function sectionForDocument(relativePath) {
-  const normalized = relativePath.toLocaleLowerCase();
-  if (normalized.startsWith(".planning/codebase/")) {
+  const normalized2 = relativePath.toLocaleLowerCase();
+  if (normalized2.startsWith(".planning/codebase/")) {
     return "codebase";
   }
-  if (normalized.startsWith(".planning/intel/") || /(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized)) {
+  if (normalized2.startsWith(".planning/intel/") || /(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized2)) {
     return "environment";
   }
-  if (normalized.startsWith(".planning/notes/") || normalized.startsWith(".planning/research/")) {
+  if (normalized2.startsWith(".planning/notes/") || normalized2.startsWith(".planning/research/")) {
     return "knowledge";
   }
   return "project";
 }
 function candidateKey(relativePath, source) {
   if (source === "ai_system") {
-    const normalized = relativePath.toLocaleLowerCase().replace(/\.(?:md|markdown)$/i, "").replace(/[\\/]+/g, ".").replace(/[^a-z0-9._-]/g, "-").replace(/^\.+/, "");
-    return `ai.${normalized}`;
+    const normalized2 = relativePath.toLocaleLowerCase().replace(/\.(?:md|markdown)$/i, "").replace(/[\\/]+/g, ".").replace(/[^a-z0-9._-]/g, "-").replace(/^\.+/, "");
+    return `ai.${normalized2}`;
   }
-  return `file.${createHash3("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
+  return `file.${createHash4("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
 }
 function candidateTitle(relativePath) {
-  return path4.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
+  return path16.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
 }
 async function directoryEntries(directory) {
   try {
-    return await fs3.readdir(directory, { encoding: "utf8", withFileTypes: true });
+    return await fs10.readdir(directory, { encoding: "utf8", withFileTypes: true });
   } catch {
     return [];
   }
@@ -9373,10 +14534,10 @@ async function addCandidate(params) {
   if (params.results.length >= MAX_DISCOVERED_DOCUMENTS || !isMarkdownPath(params.relativePath)) {
     return;
   }
-  const candidatePath = path4.join(params.root, params.relativePath);
+  const candidatePath = path16.join(params.root, params.relativePath);
   let target;
   try {
-    target = await fs3.realpath(candidatePath);
+    target = await fs10.realpath(candidatePath);
   } catch {
     return;
   }
@@ -9385,7 +14546,7 @@ async function addCandidate(params) {
   }
   let stat2;
   try {
-    stat2 = await fs3.stat(target);
+    stat2 = await fs10.stat(target);
   } catch {
     return;
   }
@@ -9406,12 +14567,12 @@ async function addCandidate(params) {
   params.targets.add(target);
 }
 async function addDirectoryMarkdownFiles(params) {
-  const directory = path4.join(params.root, params.relativeDirectory);
+  const directory = path16.join(params.root, params.relativeDirectory);
   const entries = await directoryEntries(directory);
   for (const entry of entries.filter((entry2) => entry2.isFile() && isMarkdownPath(entry2.name)).toSorted((left, right) => left.name.localeCompare(right.name))) {
     await addCandidate({
       ...params,
-      relativePath: path4.join(params.relativeDirectory, entry.name)
+      relativePath: path16.join(params.relativeDirectory, entry.name)
     });
   }
 }
@@ -9420,13 +14581,13 @@ async function addTopLevelModuleAiInstructions(params) {
   for (const entry of entries.filter(
     (entry2) => entry2.isDirectory() && !entry2.isSymbolicLink() && !entry2.name.startsWith(".") && !EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES.has(entry2.name)
   ).toSorted((left, right) => left.name.localeCompare(right.name))) {
-    const moduleEntries = await directoryEntries(path4.join(params.root, entry.name));
+    const moduleEntries = await directoryEntries(path16.join(params.root, entry.name));
     for (const instruction of moduleEntries.filter(
       (moduleEntry) => moduleEntry.isFile() && TOP_LEVEL_AI_INSTRUCTION_NAMES.has(moduleEntry.name.toLocaleLowerCase())
     ).toSorted((left, right) => left.name.localeCompare(right.name))) {
       await addCandidate({
         ...params,
-        relativePath: path4.join(entry.name, instruction.name)
+        relativePath: path16.join(entry.name, instruction.name)
       });
     }
   }
@@ -9434,13 +14595,13 @@ async function addTopLevelModuleAiInstructions(params) {
 async function resolveTaskfoldProjectDocumentWorkspacePath(workspacePath) {
   let root;
   try {
-    root = await fs3.realpath(workspacePath);
+    root = await fs10.realpath(workspacePath);
   } catch {
     throw new Error("project default workspace does not exist.");
   }
   let rootStat;
   try {
-    rootStat = await fs3.stat(root);
+    rootStat = await fs10.stat(root);
   } catch {
     throw new Error("project default workspace cannot be read.");
   }
@@ -9450,11 +14611,11 @@ async function resolveTaskfoldProjectDocumentWorkspacePath(workspacePath) {
   return root;
 }
 function isTaskfoldProjectDocumentDiscoveryPath(workspaceRoot, target) {
-  if (!target || !path4.isAbsolute(target)) {
+  if (!target || !path16.isAbsolute(target)) {
     return false;
   }
-  const root = path4.resolve(workspaceRoot);
-  const resolvedTarget = path4.resolve(target);
+  const root = path16.resolve(workspaceRoot);
+  const resolvedTarget = path16.resolve(target);
   if (!isPathInside2(root, resolvedTarget)) {
     return false;
   }
@@ -9488,7 +14649,7 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   for (const directory of PLANNING_DOCUMENT_DIRECTORIES) {
     await addDirectoryMarkdownFiles({
       ...params,
-      relativeDirectory: path4.join(".planning", directory)
+      relativeDirectory: path16.join(".planning", directory)
     });
   }
   for (const relativePath of EXTRA_DOCUMENT_PATHS) {
@@ -9657,7 +14818,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       )) + POSITION_STEP;
       nextPositionBySection.set(candidate.section, position);
       const document = {
-        id: randomUUID10(),
+        id: randomUUID12(),
         boardId: board.id,
         key: candidate.key,
         section: candidate.section,
@@ -9841,7 +15002,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
     const description = normalizeBoundedString(input.description, void 0, 2e3, "milestone description");
     const color = normalizeBoundedString(input.color, void 0, 40, "milestone color");
     return {
-      id: randomUUID10(),
+      id: randomUUID12(),
       boardId,
       title,
       position: normalizePosition(input.position, POSITION_STEP),
@@ -9976,11 +15137,20 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       return next;
     });
   }
-  async moveMilestone(id, input) {
-    return await this.retryOnRevisionConflict(async () => await this.enqueueMutation(async () => {
+  /**
+   * 把卡片移到另一个里程碑（或未分配）并定位。`options.expectedRevision`（TASK-8，VS Code 看板的
+   * 拖拽 CAS）：给了就只在卡片仍是这个 revision 时写入，否则抛 {@link TaskfoldRevisionConflictError}、
+   * 不重试；不给时行为与原来逐字相同。特意不从 `input` 里读：网关把整个请求参数当 `input` 传进来，
+   * 放在 `input` 里会让网关不改代码就开始接受它。
+   */
+  async moveMilestone(id, input, options = {}) {
+    const run = async () => await this.enqueueMutation(async () => {
       const card = await this.get(id);
       if (!card) {
         throw new Error(`card not found: ${id}`);
+      }
+      if (options.expectedRevision !== void 0 && card.revision !== options.expectedRevision) {
+        throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
       }
       const boardId = cardBoardId(card);
       await this.assertProjectCanReceiveCards(boardId);
@@ -10013,7 +15183,8 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       }
       await this.persistCard(next, card.revision);
       return next;
-    }));
+    });
+    return options.expectedRevision !== void 0 ? await run() : await this.retryOnRevisionConflict(run);
   }
   async moveProject(id, input) {
     return await this.enqueueMutation(async () => {
@@ -10117,7 +15288,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       );
       const now = Date.now();
       const document = {
-        id: randomUUID10(),
+        id: randomUUID12(),
         boardId,
         key,
         section,
@@ -10321,7 +15492,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
                 notifications: [
                   ...latest.metadata?.notifications ?? [],
                   {
-                    id: randomUUID11(),
+                    id: randomUUID13(),
                     kind: "failed",
                     createdAt: now,
                     sequence: this.nextNotificationSequence(now),
@@ -10345,7 +15516,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
                 notifications: [
                   ...latest.metadata?.notifications ?? [],
                   {
-                    id: randomUUID11(),
+                    id: randomUUID13(),
                     kind: "failed",
                     createdAt: now,
                     sequence: this.nextNotificationSequence(now),
@@ -10538,7 +15709,6 @@ function redactDiagnosticsRows(result) {
 function registerTaskfoldGatewayMethods(params) {
   const { api } = params;
   const store = params.store ?? TaskfoldStore.openSqlite();
-  const changes = params.changes ?? store;
   const dispatchCards = createTaskfoldDispatchHandler({
     api,
     store,
@@ -10685,7 +15855,8 @@ function registerTaskfoldGatewayMethods(params) {
       try {
         respond(
           true,
-          await changes.waitForChange(
+          // 文件后端下 store 的游标就是跨项目聚合游标（change-aggregator.ts），返回形状不变。
+          await store.waitForChange(
             readChangeCursor(requestParams.after),
             readChangeWaitTimeout(requestParams.timeoutMs)
           )
@@ -11529,10 +16700,14 @@ function registerTaskfoldCommand(params) {
   });
 }
 
+// src/backend/index.ts
+init_project_routed_stores();
+
 // src/backend/src/reconciler.ts
 import { formatErrorMessage as formatErrorMessage4 } from "openclaw/plugin-sdk/error-runtime";
 
 // src/backend/src/lifecycle.ts
+init_store_constants();
 var ABANDONED_RUN_GRACE_MS = 10 * 60 * 1e3;
 function claimsRunning(card) {
   return card.status === "running" || card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running")) || Boolean(card.metadata?.claim);
@@ -11625,6 +16800,7 @@ function shouldSyncExecutionStatus(card, targetStatus) {
 }
 
 // src/backend/src/reconciler.ts
+init_store_constants();
 var RECONCILE_INTERVAL_MS = 15e3;
 var LAUNCH_ACCEPT_GRACE_MS = 10 * 60 * 1e3;
 function hasRunningAttempt(card) {
@@ -11784,6 +16960,24 @@ function createTaskfoldReconcilerService(params) {
       if (timer) {
         clearInterval(timer);
         timer = void 0;
+      }
+    }
+  };
+}
+
+// src/backend/src/sqlite-migration-check.ts
+import fs12 from "node:fs";
+import path18 from "node:path";
+function createTaskfoldSqliteMigrationCheckService(pluginDir) {
+  return {
+    id: "taskfold-sqlite-migration-check",
+    start(ctx) {
+      const sqlitePath = path18.join(pluginDir, "taskfold.sqlite");
+      const projectsJsonPath = path18.join(pluginDir, "projects.json");
+      if (fs12.existsSync(sqlitePath) && !fs12.existsSync(projectsJsonPath)) {
+        ctx.logger.warn(
+          `taskfold: ${sqlitePath} exists but ${projectsJsonPath} does not: Taskfold now stores data in files and your SQLite data has not been migrated yet. Run "openclaw taskfold migrate-sqlite --dry-run" to preview, then "openclaw taskfold migrate-sqlite --apply".`
+        );
       }
     }
   };
@@ -17312,7 +22506,10 @@ var index_default = definePluginEntry({
       }, TASKFOLD_CLI_OPTIONS);
       return;
     }
-    const store = TaskfoldStore.openSqlite();
+    const pluginDir = resolveTaskfoldPluginDir(resolveStateDir2(process.env));
+    const store = TaskfoldStore.fromStores(
+      createTaskfoldProjectRoutedStores({ pluginDir, warn: (message) => api.logger.warn(message) })
+    );
     api.session.controls.registerControlUiDescriptor({
       surface: "tab",
       id: "taskfold",
@@ -17325,6 +22522,7 @@ var index_default = definePluginEntry({
     registerTaskfoldGatewayMethods({ api, store });
     registerTaskfoldCommand({ api, store });
     api.registerService(createTaskfoldChangeEventService(store));
+    api.registerService(createTaskfoldSqliteMigrationCheckService(pluginDir));
     api.registerService(createTaskfoldReconcilerService({ store, runtime: api.runtime }));
     api.on("subagent_ended", async (event) => {
       await store.finishExecutionForRun(event.runId, {
@@ -17343,7 +22541,7 @@ var index_default = definePluginEntry({
     api.registerCli(
       async ({ program }) => {
         const { registerTaskfoldCli: registerTaskfoldCli2 } = await Promise.resolve().then(() => (init_cli(), cli_exports));
-        registerTaskfoldCli2({ program, store });
+        registerTaskfoldCli2({ program, store, pluginDir });
       },
       TASKFOLD_CLI_OPTIONS
     );
