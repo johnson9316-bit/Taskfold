@@ -146,7 +146,7 @@ async function main(): Promise<void> {
         milestone: {
           id: key,
           boardId: "board-1",
-          title: `worker ${args.workerIndex} milestone ${i}`,
+          title: "同名阶段",
           position: i,
           state: "active",
           createdAt: now,

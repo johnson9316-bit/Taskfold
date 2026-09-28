@@ -50,8 +50,3 @@ export function allocateNextOrdinalId(options: {
 export function allocateNextTaskfoldCardId(cardsDir: string, archiveCardsDir: string): string {
   return allocateNextOrdinalId({ prefix: "CARD", directories: [cardsDir, archiveCardsDir] });
 }
-
-/** Convenience wrapper for milestones: `M-<n>`, scanning `milestonesDir`. */
-export function allocateNextTaskfoldMilestoneId(milestonesDir: string): string {
-  return allocateNextOrdinalId({ prefix: "M", directories: [milestonesDir] });
-}

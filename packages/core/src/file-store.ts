@@ -59,7 +59,7 @@ export {
   resolveTaskfoldFileStoreLayout,
   resolveTaskfoldPluginDir,
 } from "./file-store-paths.js";
-export { allocateNextTaskfoldCardId, allocateNextTaskfoldMilestoneId } from "./file-store-card-id.js";
+export { allocateNextTaskfoldCardId } from "./file-store-card-id.js";
 
 export { resolveTaskfoldMainCheckoutPath } from "./file-store-path-resolver.js";
 export { TaskfoldFormatTooNewError, TASKFOLD_FORMAT_VERSION } from "./file-store-format.js";
@@ -138,6 +138,7 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
       : createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
   const milestones = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileMilestoneStore({
     milestonesDir: layout.milestonesDir,
+    configPath: layout.configPath,
     codec: milestoneCodec,
     locksDir: layout.locksDir,
   }));

@@ -29,6 +29,8 @@ export function renderGuidelinesBlock(version: string = TASKFOLD_CLI_VERSION): s
     "  whenever you are unsure how a command behaves.",
     '- Quick reference: `taskfold list`, `taskfold show <id>`, `taskfold create "<title>"`,',
     "  `taskfold update <id> --status done`. Add `--json` for machine-readable output.",
+    "- Name projects/boards by purpose and milestones/phases by concrete goals or deliverables.",
+    "  Avoid numbered names or prefixes (M1, M2, Phase 1, 阶段一); preserve user-specified names.",
     END_MARKER,
   ].join("\n");
 }
@@ -140,6 +142,15 @@ cross-process locks and checks revisions, and hand edits bypass both.
   Branch on \`error.code\`, not on the message.
 - Card ids are UUIDs. A unique prefix or the \`card-N\` \`displayId\` from \`list\` also works.
 - Each card has a \`revision\` number that increases on every write.
+
+## Naming
+
+When proposing project or board names, describe the project or business purpose
+(e.g. 'Customer Support Platform'). Name milestones or phases after concrete goals
+or deliverables (e.g. 'File Storage Migration' or 'Authentication and Permissions').
+Do not default to numbered names or add prefixes such as M1, M2, M3, Phase 1, or 阶段一,
+even when existing names use that style. Preserve names explicitly specified by the
+user and do not rename existing items unless asked.
 
 ## Commands
 

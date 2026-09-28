@@ -8,7 +8,7 @@
 // 只管 `.taskfold/` 本身。宿主自己目录里的东西（OpenClaw 的 projects.json、通知订阅）不归
 // 这个版本号管。
 import fs from "node:fs";
-import { createFileExclusive, readFileIfExists } from "./file-store-atomic.js";
+import { createFileExclusive, readFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
 
 /**
  * 本版 core 读写的 `.taskfold/` 格式版本。旧版 core 照旧写下去会写坏数据的改动都要 +1：
@@ -16,7 +16,7 @@ import { createFileExclusive, readFileIfExists } from "./file-store-atomic.js";
  * `TASKFOLD_LOCK_STALE_MS` / `TASKFOLD_LOCK_UPDATE_MS` 改动一次就视为一次格式升级
  * （参数不一致 proper-lockfile 检测不到，只能靠版本号把旧 core 挡在只读模式里）。
  */
-export const TASKFOLD_FORMAT_VERSION = 1;
+export const TASKFOLD_FORMAT_VERSION = 2;
 
 const FORMAT_VERSION_KEY = "format_version";
 const FORMAT_VERSION_LINE = /^format_version:(.*)$/m;
@@ -81,4 +81,16 @@ export function ensureTaskfoldFormatVersion(configPath: string): void {
   }
   const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
   fs.appendFileSync(configPath, `${separator}${line}`);
+}
+
+/** 调用方持有全局锁；在写入新格式阶段之前升级版本，保留其他配置及行尾注释。 */
+export function upgradeTaskfoldFormatVersion(configPath: string, assertHeld: () => void): void {
+  assertTaskfoldFormatWritable(configPath);
+  if (readFormatVersion(configPath) === TASKFOLD_FORMAT_VERSION) return;
+  const existing = readFileIfExists(configPath) ?? "";
+  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}`;
+  const content = FORMAT_VERSION_LINE.test(existing)
+    ? existing.replace(FORMAT_VERSION_LINE, (match) => line + (match.match(/\s+#.*$/)?.[0] ?? ""))
+    : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${line}\n`;
+  writeFileAtomic(configPath, content, undefined, assertHeld);
 }

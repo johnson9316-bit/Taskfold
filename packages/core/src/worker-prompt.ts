@@ -240,6 +240,10 @@ export function buildWorkerPrompt(params: {
     "If you called taskfold_proof separately, pass its returned proofId to taskfold_complete.",
     "If blocked, call taskfold_block with the card id, token, and reason.",
     "",
+    "## Naming",
+    "When proposing project or board names, describe their purpose (e.g. 'Customer Support Platform'). Name milestones or phases after concrete goals or deliverables (e.g. 'File Storage Migration' or 'Authentication and Permissions').",
+    "Do not default to numbered names or prefixes such as M1, M2, M3, Phase 1, or 阶段一, even when existing names use that style. Preserve user-specified names and do not rename existing items unless asked.",
+    "",
     params.context,
   ].join("\n");
 }

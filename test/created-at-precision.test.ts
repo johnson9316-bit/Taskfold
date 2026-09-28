@@ -108,7 +108,6 @@ describe("里程碑 createdAt 毫秒精度", () => {
   it("往返后 createdAt 保留毫秒，created_date 仍是分钟格式", () => {
     const markdown = serializeMarkdownMilestone({
       milestone: milestone(),
-      displayId: { prefix: "M", numericId: 1 },
       trailing: "",
     });
     expect(markdown).toMatch(/^created_date: '?2026-07-29 02:41'?$/m);
@@ -118,7 +117,6 @@ describe("里程碑 createdAt 毫秒精度", () => {
   it("有人手改了 created_date：以 created_date 为准", () => {
     const markdown = serializeMarkdownMilestone({
       milestone: milestone(),
-      displayId: { prefix: "M", numericId: 1 },
       trailing: "",
     }).replace("2026-07-29 02:41", "2026-07-30 08:15");
     expect(parseMarkdownMilestone(markdown).milestone.createdAt).toBe(Date.UTC(2026, 6, 30, 8, 15));

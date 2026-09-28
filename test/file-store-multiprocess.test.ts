@@ -5,7 +5,7 @@
 //   (a) N 个进程对同一张卡做 CAS：恰好一个成功，其余 false，最终文件完整可解析；
 //   (b) N 个进程并发新建卡片：展示 ID 互不重复，文件一个不少；
 //   (c) N 个进程并发预留 change revision：区间互不重叠；
-//   (d) N 个进程并发新建里程碑：展示 ID 互不重复，文件一个不少。
+//   (d) N 个进程并发新建里程碑：同名文件互不覆盖，文件一个不少。
 // 另有两条单进程用例覆盖锁超时、锁失效（compromised）两条路径：CAS 返回 false、不 throw、不写入。
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -173,7 +173,7 @@ describe("文件后端跨进程并发（child_process 多进程）", () => {
   );
 
   it(
-    "(d) N 个进程并发新建里程碑：展示 ID 互不重复，文件一个不少",
+    "(d) N 个进程并发新建里程碑：同名文件互不覆盖，文件一个不少",
     async () => {
       const { dataDir, pluginDir } = tempRoots();
       createTaskfoldFileStores({ dataDir, pluginDir });
@@ -190,9 +190,8 @@ describe("文件后端跨进程并发（child_process 多进程）", () => {
       const fileNames = fs
         .readdirSync(path.join(dataDir, "milestones"))
         .filter((name) => name.endsWith(".md"));
-      const displayIds = fileNames.map((name) => name.slice(0, name.indexOf(" - ")));
       expect(fileNames).toHaveLength(PROCESS_COUNT * perProcess);
-      expect(new Set(displayIds).size).toBe(displayIds.length);
+      expect(new Set(fileNames).size).toBe(fileNames.length);
 
       const stores = createTaskfoldFileStores({ dataDir, pluginDir });
       const entries = await stores.milestones.entries();

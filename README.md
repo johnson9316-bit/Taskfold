@@ -137,6 +137,19 @@ operate on Taskfold cards. `.taskfold/.runtime/` and `.taskfold/.locks/` stay ou
 of Git. Project-local paths saved in cards and documents use `./` relative to
 the main checkout; existing absolute paths remain readable.
 
+Milestone files use their titles (for example, `File Storage Migration.md`) and
+follow title changes. Duplicate filenames receive a short UUID suffix. Milestones
+no longer receive `M-<number>` display IDs; card display IDs are unchanged. Format
+version 2 keeps UUID-based associations and reads legacy milestone files. Upgrade
+all clients (OpenClaw plugin, CLI, and VS Code extension) before writing version 2:
+older clients reject writes and cannot fully read the new milestone format.
+
+From a development checkout, preview an existing project's milestone migration with
+`node scripts/migrate-milestone-names.mjs --repo /path/to/project`. Stop writers before
+applying it with `--apply --backup-dir /path/outside/project/backups`; the script
+backs up milestones, cards, and configuration and verifies that associations and
+content remain unchanged. Reads alone do not migrate legacy milestones.
+
 The design is in `需求/16-文件存储改造.md` and `需求/18-多宿主架构.md` (Chinese).
 
 ### Migrating Existing SQLite Data

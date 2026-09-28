@@ -35,7 +35,7 @@ export const TASKFOLD_INITIAL_CARD_REVISION = 1;
  * only because both the prompt builder and the attempt recorder need it, and this
  * is the module neither of them depends on transitively.
  */
-export const TASKFOLD_PROMPT_VERSION = 1;
+export const TASKFOLD_PROMPT_VERSION = 2;
 
 /**
  * Next monotonic revision for a card write. Rows persisted before the revision

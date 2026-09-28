@@ -4,7 +4,6 @@ import {
   parseMarkdownMilestone,
   serializeMarkdownMilestone,
   type MarkdownMilestoneDocument,
-  type MilestoneDisplayId,
 } from "@taskfold/core/markdown-milestone-format.js";
 
 /** 造一张最小可用的里程碑，测试按需覆盖字段。 */
@@ -21,19 +20,16 @@ function baseMilestone(overrides: Partial<TaskfoldMilestone> = {}): TaskfoldMile
   };
 }
 
-const displayId: MilestoneDisplayId = { prefix: "M", numericId: 1 };
-
 function baseDoc(overrides: Partial<MarkdownMilestoneDocument> = {}): MarkdownMilestoneDocument {
   return {
     milestone: baseMilestone(),
-    displayId,
     trailing: "",
     ...overrides,
   };
 }
 
 describe("serializeMarkdownMilestone / parseMarkdownMilestone 基础往返", () => {
-  it("完整往返后里程碑字段与展示 ID 不变", () => {
+  it("完整往返后里程碑字段不变", () => {
     const doc = baseDoc({
       milestone: baseMilestone({
         description: "一些说明",
@@ -45,12 +41,12 @@ describe("serializeMarkdownMilestone / parseMarkdownMilestone 基础往返", () 
     const markdown = serializeMarkdownMilestone(doc);
     const parsed = parseMarkdownMilestone(markdown);
     expect(parsed.milestone).toEqual(doc.milestone);
-    expect(parsed.displayId).toEqual(displayId);
+    expect(markdown).not.toMatch(/^id:/m);
   });
 
-  it("frontmatter id 写大写 prefix M，数字紧随", () => {
+  it("不再生成展示编号", () => {
     const markdown = serializeMarkdownMilestone(baseDoc());
-    expect(markdown).toContain("id: M-1");
+    expect(markdown).not.toMatch(/^id:/m);
   });
 
   it("P0 雷 #2：Description 即使为空也带完整哨兵", () => {

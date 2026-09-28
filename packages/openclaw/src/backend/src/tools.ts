@@ -642,12 +642,18 @@ export function createTaskfoldTools(params: {
       parameters: Type.Object(
         {
           id: Type.String({ description: "Stable project id." }),
-          name: Type.String({ description: "Project name." }),
+          name: Type.String({
+            description:
+              "Project name describing its purpose, e.g. 'Customer Support Platform'. Avoid numbered names or prefixes such as M1 or Phase 1 unless explicitly requested by the user. Preserve user-specified names.",
+          }),
           projectMode: Type.Optional(
             Type.Union([Type.Literal("new"), Type.Literal("existing")]),
           ),
           initialMilestoneTitle: Type.Optional(
-            Type.String({ description: "Optional initial milestone title." }),
+            Type.String({
+              description:
+                "Optional initial milestone title describing a concrete goal or deliverable, e.g. 'File Storage Migration'. Avoid numbered names or prefixes such as M1 or Phase 1 unless explicitly requested by the user. Preserve user-specified names.",
+            }),
           ),
           description: Type.Optional(Type.String()),
           color: Type.Optional(Type.String()),
@@ -687,7 +693,10 @@ export function createTaskfoldTools(params: {
       parameters: Type.Object(
         {
           boardId: Type.String(),
-          title: Type.String(),
+          title: Type.String({
+            description:
+              "Milestone title describing a concrete goal or deliverable, e.g. 'Authentication and Permissions'. Avoid numbered names or prefixes such as M1 or Phase 1 unless explicitly requested by the user. Preserve user-specified names.",
+          }),
           description: Type.Optional(Type.String()),
           color: Type.Optional(Type.String()),
         },
@@ -791,7 +800,12 @@ export function createTaskfoldTools(params: {
       parameters: Type.Object(
         {
           id: Type.String({ description: "Board id." }),
-          name: Type.Optional(Type.String({ description: "Display name." })),
+          name: Type.Optional(
+            Type.String({
+              description:
+                "Board display name describing its project or business purpose, e.g. 'Customer Support Platform'. Avoid numbered names or prefixes such as M1 or Phase 1 unless explicitly requested by the user. Preserve user-specified names.",
+            }),
+          ),
           description: Type.Optional(Type.String({ description: "Board description." })),
           icon: Type.Optional(Type.String({ description: "Short icon or label." })),
           color: Type.Optional(Type.String({ description: "Display color token." })),

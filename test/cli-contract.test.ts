@@ -98,9 +98,9 @@ describe("taskfold --json：每个 kind 的形状", () => {
     const repo = makeTempGitRepo();
     const first = await runJson(bundle, ["init"], { cwd: repo });
     expect(keys(first)).toEqual(["created", "dataDir", "formatVersion", "kind", "schemaVersion"]);
-    expect(first).toMatchObject({ schemaVersion: 1, kind: "init", created: true, formatVersion: 1 });
+    expect(first).toMatchObject({ schemaVersion: 1, kind: "init", created: true, formatVersion: 2 });
     expect(first.dataDir).toBe(path.join(repo, ".taskfold"));
-    expect(fs.readFileSync(path.join(repo, ".taskfold", "config.yml"), "utf8")).toMatch(/^format_version: 1$/m);
+    expect(fs.readFileSync(path.join(repo, ".taskfold", "config.yml"), "utf8")).toMatch(/^format_version: 2$/m);
     expect(fs.readFileSync(path.join(repo, ".taskfold", ".gitignore"), "utf8")).toContain(".runtime/");
     expect(fs.statSync(path.join(repo, ".taskfold", "cards")).isDirectory()).toBe(true);
 

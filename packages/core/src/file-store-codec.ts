@@ -46,7 +46,7 @@ export type TaskfoldCardCodec = {
  * Injection point for milestone (de)serialization, mirroring {@link TaskfoldCardCodec}.
  */
 export type TaskfoldMilestoneCodec = {
-  serialize(milestone: TaskfoldMilestone, previousContent?: string, displayIdHint?: CardDisplayId): string;
+  serialize(milestone: TaskfoldMilestone, previousContent?: string): string;
   parse(content: string): TaskfoldMilestone;
 };
 
@@ -137,27 +137,20 @@ export function createMarkdownCardCodec(): TaskfoldCardCodec {
   };
 }
 
-/** Milestone 版本的 {@link fallbackCardDisplayId}，同一套理由（含"何时仍会被触发"的
- * 解释），前缀改成 "M"。 */
-function fallbackMilestoneDisplayId(milestone: TaskfoldMilestone): CardDisplayId {
-  return parseCardFrontmatterId(milestone.id) ?? { prefix: "M", numericId: 0 };
-}
-
 /**
  * Milestone 版本的 {@link createMarkdownCardCodec}。比卡片简单：`TaskfoldMilestone`
  * 自带 `description` 字段（卡片没有对应字段），`## Description` 区块直接是它的载体，
  * 不需要像卡片那样单独保留一份「与业务字段脱钩」的正文——每次 serialize 都以
  * `milestone.description` 为准即可，天然与业务层的读改写循环一致。真正需要从
- * `previousContent` 找回来的只有 displayId 和未识别的 trailing 正文，这两样
+ * `previousContent` 找回来的只有未识别的 trailing 正文，这些内容
  * `TaskfoldMilestone` 上完全没有对应字段。
  */
 export function createMarkdownMilestoneCodec(): TaskfoldMilestoneCodec {
   return {
-    serialize(milestone, previousContent, displayIdHint) {
+    serialize(milestone, previousContent) {
       const previous = previousContent === undefined ? undefined : parseMarkdownMilestone(previousContent);
       const doc: MarkdownMilestoneDocument = {
         milestone,
-        displayId: previous?.displayId ?? displayIdHint ?? fallbackMilestoneDisplayId(milestone),
         trailing: previous?.trailing ?? "",
       };
       return serializeMarkdownMilestone(doc);

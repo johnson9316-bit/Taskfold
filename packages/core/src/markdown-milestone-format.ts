@@ -10,7 +10,7 @@
 //   - `## Description` 必须带完整哨兵，即使为空（P0 雷 #2，同一防线）；
 //   - Description/Taskfold 两个已识别区块之外的其余正文原样保留，不重新排版；
 //   - 复用 markdown-card-format.ts 已导出的 YAML/frontmatter 编解码、哨兵查找、
-//     展示 ID 编解码，不重新实现一遍。
+//     旧展示 ID 解析，不重新实现一遍。
 //
 // 与卡片格式层的一处实质差异：TaskfoldMilestone 本身就带一个 `description` 字段
 // （不像 TaskfoldCard——TaskfoldCard 完全没有 description，`## Description` 区块内容
@@ -31,7 +31,6 @@ import {
   escapeTaskfoldBodyText,
   findSectionFamilyBlock,
   formatBacklogDateTime,
-  formatCardFrontmatterId,
   numberValue,
   parseBacklogDateTime,
   resolvePreciseTimestamp,
@@ -41,17 +40,11 @@ import {
   splitFrontmatter,
   stringifyFrontmatterBlock,
   stringValue,
-  type CardDisplayId,
   type FrontmatterFieldValue,
 } from "./markdown-card-format.js";
 
-/** 与卡片共享同一套 {prefix, numericId} 展示 ID 形状，见 markdown-card-format.ts 的
- * `CardDisplayId`；这里起个更贴切的别名，实际就是同一个类型（约定 prefix 为 "M"）。 */
-export type MilestoneDisplayId = CardDisplayId;
-
 export type MarkdownMilestoneDocument = {
   milestone: TaskfoldMilestone;
-  displayId: MilestoneDisplayId;
   /**
    * Description/Taskfold 两个已识别区块之外的其余正文，按原始相对顺序原样保留——这些
    * 内容不是 Taskfold 写的，格式层不应该篡改（同 markdown-card-format.ts 的 `trailing`）。
@@ -76,10 +69,9 @@ function buildTaskfoldMilestoneSectionJson(milestone: TaskfoldMilestone): string
 }
 
 export function serializeMarkdownMilestone(doc: MarkdownMilestoneDocument): string {
-  const { milestone, displayId } = doc;
+  const { milestone } = doc;
 
   const frontmatterEntries: ReadonlyArray<readonly [string, FrontmatterFieldValue]> = [
-    ["id", formatCardFrontmatterId(displayId)],
     ["title", milestone.title],
     // state 不校验值域，照抄卡片格式层「决策 7」对 status 的做法。
     ["state", milestone.state],
@@ -112,12 +104,6 @@ export function parseMarkdownMilestone(markdown: string): MarkdownMilestoneDocum
   const fm = parseFrontmatterBlock(frontmatter);
   const lines = body.split("\n");
 
-  const displayIdRaw = requiredString(fm, "id");
-  const displayId = parseCardFrontmatterId(displayIdRaw);
-  if (!displayId) {
-    throw new Error(`markdown-milestone-format: 无法解析 frontmatter id "${displayIdRaw}"`);
-  }
-
   const taskfoldBlock = findSectionFamilyBlock(lines, "Taskfold", "TASKFOLD");
   if (!taskfoldBlock) {
     throw new Error(
@@ -141,7 +127,14 @@ export function parseMarkdownMilestone(markdown: string): MarkdownMilestoneDocum
   const ordinal = numberValue(fm, "ordinal");
   const position = positionFromPayload ?? ordinal ?? 0;
 
-  const uuid = typeof payload.uuid === "string" && payload.uuid ? payload.uuid : displayIdRaw;
+  // 旧格式没有 UUID 时，保留原有展示标识作为实体标识；新格式必须有 UUID。
+  const legacyId = stringValue(fm, "id");
+  const uuid = typeof payload.uuid === "string" && payload.uuid
+    ? payload.uuid
+    : legacyId && parseCardFrontmatterId(legacyId) ? legacyId : undefined;
+  if (!uuid) {
+    throw new Error("markdown-milestone-format: 缺少 UUID 或有效的旧格式 id");
+  }
   const boardId = typeof payload.boardId === "string" && payload.boardId ? payload.boardId : "default";
 
   const descriptionBlock = findSectionFamilyBlock(lines, "Description", "DESCRIPTION");
@@ -177,5 +170,5 @@ export function parseMarkdownMilestone(markdown: string): MarkdownMilestoneDocum
     .join("\n")
     .trim();
 
-  return { milestone, displayId, trailing };
+  return { milestone, trailing };
 }
