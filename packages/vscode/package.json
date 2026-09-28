@@ -31,6 +31,29 @@
         "title": "%command.openBoard%",
         "category": "Taskfold"
       }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "taskfold",
+          "title": "Taskfold",
+          "icon": "resources/taskfold.svg"
+        }
+      ]
+    },
+    "views": {
+      "taskfold": [
+        {
+          "id": "taskfold.launcher",
+          "name": "%view.board%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "taskfold.launcher",
+        "contents": "%view.welcome%"
+      }
     ]
   },
   "scripts": {

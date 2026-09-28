@@ -1,4 +1,4 @@
-# .vsix 里只放：package.json、package.nls*.json、README.md、LICENSE、dist/extension.js、media/。
+# .vsix 里只放：package.json、package.nls*.json、README.md、LICENSE、dist/extension.js、media/、resources/。
 # 扩展进程与 Webview 都已由 scripts/build.mjs 打成自包含文件，不需要源码与 node_modules。
 src/**
 scripts/**

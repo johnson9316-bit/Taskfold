@@ -1,3 +1,5 @@
 {
-  "command.openBoard": "Open Board"
+  "command.openBoard": "Open Board",
+  "view.board": "Board",
+  "view.welcome": "Open the Taskfold board for this workspace.\n[Open Board](command:taskfold.openBoard)"
 }

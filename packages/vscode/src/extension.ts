@@ -26,6 +26,10 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   context.subscriptions.push(
+    vscode.window.registerTreeDataProvider<vscode.TreeItem>("taskfold.launcher", {
+      getTreeItem: (item) => item,
+      getChildren: () => [],
+    }),
     vscode.workspace.registerTextDocumentContentProvider(TASKFOLD_LOCAL_SCHEME, localDocuments),
     vscode.commands.registerCommand("taskfold.openBoard", () =>
       TaskfoldBoardPanel.show({

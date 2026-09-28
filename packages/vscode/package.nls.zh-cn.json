@@ -1,3 +1,5 @@
 {
-  "command.openBoard": "打开看板"
+  "command.openBoard": "打开看板",
+  "view.board": "看板",
+  "view.welcome": "打开当前工作区的 Taskfold 看板。\n[打开看板](command:taskfold.openBoard)"
 }

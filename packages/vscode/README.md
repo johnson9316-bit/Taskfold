@@ -19,9 +19,13 @@ The `.vsix` is self-contained: core and its dependencies are bundled into `dist/
 and the board UI into `media/`. After installing it you can delete or move the repository checkout.
 Requires VS Code 1.100 or newer.
 
+After updating the UI or extension code, rebuild and reinstall the `.vsix`, then run
+**Developer: Reload Window**. Building the workspace alone does not update an installed extension.
+
 ## Use
 
-Run **Taskfold: Open Board** from the Command Palette.
+Click **Taskfold** in the Activity Bar, then **Open Board** in the sidebar.
+You can also run **Taskfold: Open Board** from the Command Palette.
 
 - **Projects**: every workspace folder where a `.taskfold/` directory can be found is one project,
   named after the folder. `.taskfold/` is located the same way as the CLI does it: inside a git
