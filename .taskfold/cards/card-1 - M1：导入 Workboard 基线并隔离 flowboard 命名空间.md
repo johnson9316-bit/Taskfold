@@ -1,10 +1,10 @@
 ---
 id: CARD-1
-title: M1：导入 Workboard 基线并隔离 flowboard 命名空间
+title: 导入 Workboard 基线并隔离 flowboard 命名空间
 status: done
 assignee: []
 created_date: '2026-07-29 03:46'
-updated_date: '2026-07-30 07:00'
+updated_date: '2026-09-28 09:56'
 labels: []
 milestone: 715bbd46-bfe0-448f-be4a-370388287883
 dependencies: []

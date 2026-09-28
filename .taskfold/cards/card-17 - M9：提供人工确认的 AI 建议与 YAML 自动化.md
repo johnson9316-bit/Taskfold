@@ -1,10 +1,10 @@
 ---
 id: CARD-17
-title: M9：提供人工确认的 AI 建议与 YAML 自动化
-status: todo
+title: 提供人工确认的 AI 建议与 YAML 自动化
+status: backlog
 assignee: []
 created_date: '2026-07-29 03:46'
-updated_date: '2026-07-30 07:00'
+updated_date: '2026-09-28 09:56'
 labels: []
 milestone: fc3f16eb-0058-4886-8dd5-96f847cab93e
 dependencies: []
@@ -24,7 +24,7 @@ ordinal: 2000
   "uuid": "c4a01ddd-6909-4a63-8b74-5714209e8e32",
   "position": 2000,
   "createdAt": 1785296802898,
-  "notes": "默认只读或建议；写操作、执行操作、超时、超预算与越权均有确认和审计。",
+  "notes": "默认只读或建议；写操作、执行操作、超时、超预算与越权均有确认和审计。\n\n远期 M9 方向；进入条件与验收见 需求/8.4-AI自动化与度量.md。该文档仍有 SQLite/GSD 旧前提，实施前须按文件存储与多宿主现状修订。",
   "metadata": {
     "automation": {
       "boardId": "flowboard",

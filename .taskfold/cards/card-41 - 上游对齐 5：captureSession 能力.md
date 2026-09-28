@@ -1,15 +1,17 @@
 ---
-id: CARD-2
-title: 自动化与本机运行时检查
+id: CARD-41
+title: captureSession 能力
 status: done
 assignee: []
-created_date: '2026-07-29 03:46'
+created_date: '2026-09-28 09:51'
 updated_date: '2026-09-28 09:56'
-labels: []
-milestone: 715bbd46-bfe0-448f-be4a-370388287883
+labels:
+  - 上游对齐
+  - 历史成果
+milestone: dc058a67-122f-4981-908e-188e515837a8
 dependencies: []
-priority: high
-ordinal: 1001
+priority: normal
+ordinal: 20000
 ---
 
 ## Description
@@ -21,11 +23,11 @@ ordinal: 1001
 
 <!-- SECTION:TASKFOLD:BEGIN -->
 {
-  "uuid": "5df5291c-46b8-4a3d-8aba-e811952ffa7f",
-  "position": 1001,
-  "createdAt": 1785296796561,
-  "notes": "已完成。2026-07-28 自动化检查、本机链接安装、runtime inspect 和 plugins doctor 通过。",
-  "completedAt": 1785296796561,
+  "uuid": "3f208975-9e35-450c-b4a7-7af1b5790db9",
+  "position": 20000,
+  "createdAt": 1790589098675,
+  "notes": "需求/15-上游2026.9.4差异评估.md §实施进展第 5 项；提交 8a3b9f9。store 与网关方法已实现。",
+  "completedAt": 1790589098675,
   "metadata": {
     "automation": {
       "boardId": "flowboard",
