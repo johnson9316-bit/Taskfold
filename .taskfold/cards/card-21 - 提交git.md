@@ -4,11 +4,12 @@ title: 提交git
 status: done
 assignee: []
 created_date: '2026-07-29 05:33'
-updated_date: '2026-07-30 08:48'
+updated_date: '2026-10-08 09:35'
 labels: []
+milestone: 715bbd46-bfe0-448f-be4a-370388287883
 dependencies: []
 priority: normal
-ordinal: 1000
+ordinal: 5000
 ---
 
 ## Description
@@ -21,7 +22,7 @@ ordinal: 1000
 <!-- SECTION:TASKFOLD:BEGIN -->
 {
   "uuid": "252615eb-1a96-461c-8e04-58f9ce0ed7ad",
-  "position": 1000,
+  "position": 5000,
   "createdAt": 1785303205781,
   "notes": "1. 添加项目应该有的说明文档。\n3. 确保用户可以装上\n4. 提交github",
   "completedAt": 1785313637442,

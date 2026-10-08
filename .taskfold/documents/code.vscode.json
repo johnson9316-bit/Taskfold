@@ -1,0 +1,14 @@
+{
+  "id": "42e0beed-1590-456f-acb6-23c0052c75b5",
+  "boardId": "flowboard",
+  "key": "code.vscode",
+  "section": "codebase",
+  "source": "project",
+  "type": "path",
+  "title": "VS Code 扩展说明",
+  "position": 5000,
+  "createdAt": 1791452609450,
+  "updatedAt": 1791452609450,
+  "summary": "VS Code 扩展的构建、安装与使用。",
+  "target": "./packages/vscode/README.md"
+}

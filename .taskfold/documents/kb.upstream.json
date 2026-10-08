@@ -1,0 +1,14 @@
+{
+  "id": "502e44e5-382e-4ef6-996b-5b9c0cecacf1",
+  "boardId": "flowboard",
+  "key": "kb.upstream",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "上游 2026.9.4 差异评估",
+  "position": 1000,
+  "createdAt": 1791452611360,
+  "updatedAt": 1791452611360,
+  "summary": "上游 workboard 对齐清单，九项的实施进展与信任门筛选规则。",
+  "target": "./需求/15-上游2026.9.4差异评估.md"
+}

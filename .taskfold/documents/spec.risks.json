@@ -1,0 +1,14 @@
+{
+  "id": "70d22d3e-5823-46c0-99a8-0c588d6391ac",
+  "boardId": "flowboard",
+  "key": "spec.risks",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "风险与取舍",
+  "position": 12000,
+  "createdAt": 1791452607092,
+  "updatedAt": 1791452607092,
+  "summary": "风险登记册。",
+  "target": "./需求/9-风险与取舍.md"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "9eb4d40c-3b90-435b-b0da-850531e80bf1",
+  "boardId": "flowboard",
+  "key": "spec.handoff",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "交接与待决",
+  "position": 9000,
+  "createdAt": 1791452605660,
+  "updatedAt": 1791452605660,
+  "summary": "当前交接摘要、已定事项与待验证项。",
+  "target": "./需求/11-交接与待决.md"
+}

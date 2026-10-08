@@ -1,0 +1,14 @@
+{
+  "id": "c27c5511-1b75-46d0-ace1-46a9d08d2f27",
+  "boardId": "flowboard",
+  "key": "spec.readme",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "规划入口",
+  "position": 5000,
+  "createdAt": 1791452587516,
+  "updatedAt": 1791452587516,
+  "summary": "需求/ 规划文档体系的入口：当前决定、活跃文档索引与文档规则。",
+  "target": "./需求/README.md"
+}

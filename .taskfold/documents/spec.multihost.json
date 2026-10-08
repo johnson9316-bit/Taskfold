@@ -1,0 +1,14 @@
+{
+  "id": "9bb2d25a-063f-44a1-943f-5ac63e9f4b65",
+  "boardId": "flowboard",
+  "key": "spec.multihost",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "多宿主架构",
+  "position": 10000,
+  "createdAt": 1791452606139,
+  "updatedAt": 1791452606139,
+  "summary": "已定：OpenClaw / VS Code 等多宿主，core 库 + 两层文件锁，AI 只走 CLI。",
+  "target": "./需求/18-多宿主架构.md"
+}

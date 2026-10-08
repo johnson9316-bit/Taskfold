@@ -1,0 +1,14 @@
+{
+  "id": "0d4799d5-5afe-4c1c-8382-52097a5ffc12",
+  "boardId": "flowboard",
+  "key": "code.filestore",
+  "section": "codebase",
+  "source": "project",
+  "type": "path",
+  "title": "文件存储改造",
+  "position": 3000,
+  "createdAt": 1791452608485,
+  "updatedAt": 1791452608485,
+  "summary": "已定：去 SQLite，改本地 Markdown 文件，兼容 Backlog.md 格式，数据入项目库。",
+  "target": "./需求/16-文件存储改造.md"
+}

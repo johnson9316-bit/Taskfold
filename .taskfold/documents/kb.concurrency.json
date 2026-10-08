@@ -1,0 +1,14 @@
+{
+  "id": "4de1dc94-1795-4b76-8947-1c02b69a0fac",
+  "boardId": "flowboard",
+  "key": "kb.concurrency",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "并发与补偿设计",
+  "position": 3000,
+  "createdAt": 1791452612334,
+  "updatedAt": 1791452612334,
+  "summary": "第 8 项设计：CAS 不做、补偿部分做、owner slot 挂起。",
+  "target": "./需求/15.8-并发与补偿设计.md"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "89852105-f541-4349-a53d-db026d2d26d1",
+  "boardId": "flowboard",
+  "key": "kb.session",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "会话生命周期设计",
+  "position": 2000,
+  "createdAt": 1791452611850,
+  "updatedAt": 1791452611850,
+  "summary": "第 7 项设计：三段式盖在本地证据判活之上。",
+  "target": "./需求/15.7-会话生命周期设计.md"
+}

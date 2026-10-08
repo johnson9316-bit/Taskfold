@@ -1,0 +1,14 @@
+{
+  "id": "73d53a9a-bb21-4d1c-acb3-32b740314eca",
+  "boardId": "flowboard",
+  "key": "kb.parallel",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "并发执行模型调查",
+  "position": 5000,
+  "createdAt": 1791452613302,
+  "updatedAt": 1791452613302,
+  "summary": "未处理：并行执行方案四选一待定。",
+  "target": "./需求/15.10-并发执行模型调查.md"
+}

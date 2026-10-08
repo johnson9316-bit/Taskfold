@@ -1,0 +1,14 @@
+{
+  "id": "967cf00e-caae-42df-91bd-72a1a819b71d",
+  "boardId": "flowboard",
+  "key": "spec.card-graph",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "卡片图谱与可配置看板",
+  "position": 11000,
+  "createdAt": 1791452606621,
+  "updatedAt": 1791452606621,
+  "summary": "8.9 需求：思维导图、流程图与按里程碑/需求/状态分列的看板，含 11 项验收。",
+  "target": "./需求/8.9-卡片/概述.md"
+}

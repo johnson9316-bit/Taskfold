@@ -1,0 +1,14 @@
+{
+  "id": "15603510-56e0-45f7-b9ea-e88fc85ef426",
+  "boardId": "flowboard",
+  "key": "code.arch",
+  "section": "codebase",
+  "source": "project",
+  "type": "path",
+  "title": "技术架构与选型",
+  "position": 1000,
+  "createdAt": 1791452607561,
+  "updatedAt": 1791452607561,
+  "summary": "TypeScript、Workboard 代码基线与插件打包。部分结论已被 16、18 推翻，以后者为准。",
+  "target": "./需求/5-技术架构与选型.md"
+}

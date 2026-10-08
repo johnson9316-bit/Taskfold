@@ -1,0 +1,14 @@
+{
+  "id": "2846f67e-47e1-4aa3-b721-332a2faca7b4",
+  "boardId": "flowboard",
+  "key": "spec.roadmap",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "路线图与验收",
+  "position": 8000,
+  "createdAt": 1791452605200,
+  "updatedAt": 1791452605200,
+  "summary": "里程碑划分与各阶段验收标准。",
+  "target": "./需求/8-路线图与验收.md"
+}

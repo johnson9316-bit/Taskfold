@@ -1,0 +1,14 @@
+{
+  "id": "10fa2302-8522-47a0-9542-e5fcbaca9b19",
+  "boardId": "flowboard",
+  "key": "kb.problems",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "实机验证后的待办",
+  "position": 10000,
+  "createdAt": 1791452615715,
+  "updatedAt": 1791452615715,
+  "summary": "2026-07-29 实机验证遗留：worker 工具挂载缺口、UI 能力缺口等。",
+  "target": "./需求/8.6-问题修复.md"
+}

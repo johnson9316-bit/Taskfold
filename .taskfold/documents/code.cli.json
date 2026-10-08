@@ -1,0 +1,14 @@
+{
+  "id": "570986cb-9df4-4730-bef6-7bca41b112c5",
+  "boardId": "flowboard",
+  "key": "code.cli",
+  "section": "codebase",
+  "source": "project",
+  "type": "path",
+  "title": "CLI 使用说明",
+  "position": 4000,
+  "createdAt": 1791452608966,
+  "updatedAt": 1791452608966,
+  "summary": "taskfold CLI：命令、JSON 输出契约、错误码与 AI 指引。",
+  "target": "./packages/cli/README.md"
+}

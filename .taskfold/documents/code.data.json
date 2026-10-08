@@ -1,0 +1,14 @@
+{
+  "id": "8c361e45-5207-4e78-ba2e-ec522674f0e8",
+  "boardId": "flowboard",
+  "key": "code.data",
+  "section": "codebase",
+  "source": "project",
+  "type": "path",
+  "title": "数据与接口",
+  "position": 2000,
+  "createdAt": 1791452607998,
+  "updatedAt": 1791452607998,
+  "summary": "数据与接口规划。SQLite 真相源结论已被 16 推翻。",
+  "target": "./需求/7-数据与接口.md"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "6907ecbc-88b7-4d3a-8684-e9e128024b26",
+  "boardId": "flowboard",
+  "key": "kb.layout",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "规划文件目录规范调研",
+  "position": 8000,
+  "createdAt": 1791452614753,
+  "updatedAt": 1791452614753,
+  "summary": "调研结论：AI 规划文件目录无统一标准。",
+  "target": "./需求/17-规划文件目录规范调研.md"
+}
