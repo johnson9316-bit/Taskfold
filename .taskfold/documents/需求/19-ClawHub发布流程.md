@@ -35,10 +35,10 @@ pack-spec resolver reads an unprefixed `a/b`-shaped path as a
 on disk, so a bare `packages/openclaw` gets misread as a GitHub install spec
 and fails with a git error instead of packing the local directory.
 
-`packages/openclaw/package.json`'s `files` whitelist includes five files
+`packages/openclaw/package.json`'s `files` whitelist includes four files
 that live only at the repository root (`README.md`, `LICENSE`,
-`THIRD-PARTY-NOTICES`, `UPSTREAM.md`, `docs/CLAW_HUB_PUBLISHING.md` — this
-file). npm's `files` field cannot reach outside the package directory with
+`THIRD-PARTY-NOTICES`, `UPSTREAM.md`). This document is not one of them: it
+lives in `.taskfold/documents/需求/` and is not shipped in the package. npm's `files` field cannot reach outside the package directory with
 `../`, so there is exactly one source copy of each at the repository root,
 and `packages/openclaw/scripts/release-files.mjs` copies them into
 `packages/openclaw/` right before packing and removes the copies right
@@ -47,10 +47,10 @@ lifecycle hooks to do it implicitly. The ClawHub CLI's `package publish` and
 `package validate` commands both pack a local folder by shelling out to
 `npm pack <dir> --json --ignore-scripts`, and `--ignore-scripts` skips
 `prepack`/`postpack` entirely, so a hook-only implementation silently
-produces a ClawPack missing those five files:
+produces a ClawPack missing those four files:
 
 ```bash
-npm run prepare-release-files   # copy the 5 root files into packages/openclaw/
+npm run prepare-release-files   # copy the 4 root files into packages/openclaw/
 # ... npm pack / clawhub package validate / clawhub package publish ...
 npm run clean-release-files     # remove the copies again
 ```

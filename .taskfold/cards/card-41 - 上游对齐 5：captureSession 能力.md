@@ -4,7 +4,7 @@ title: captureSession 能力
 status: done
 assignee: []
 created_date: '2026-09-28 09:51'
-updated_date: '2026-09-28 09:56'
+updated_date: '2026-10-08 10:16'
 labels:
   - 上游对齐
   - 历史成果
@@ -26,7 +26,7 @@ ordinal: 20000
   "uuid": "3f208975-9e35-450c-b4a7-7af1b5790db9",
   "position": 20000,
   "createdAt": 1790589098675,
-  "notes": "需求/15-上游2026.9.4差异评估.md §实施进展第 5 项；提交 8a3b9f9。store 与网关方法已实现。",
+  "notes": ".taskfold/documents/需求/15-上游2026.9.4差异评估.md §实施进展第 5 项；提交 8a3b9f9。store 与网关方法已实现。",
   "completedAt": 1790589098675,
   "metadata": {
     "automation": {

@@ -4,7 +4,7 @@ title: 会话生命周期三段式
 status: done
 assignee: []
 created_date: '2026-09-28 09:51'
-updated_date: '2026-09-28 09:56'
+updated_date: '2026-10-08 10:16'
 labels:
   - 上游对齐
   - 历史成果
@@ -26,7 +26,7 @@ ordinal: 21000
   "uuid": "e0a31124-20fd-4c5e-a0da-a5c2c4bed149",
   "position": 21000,
   "createdAt": 1790589100171,
-  "notes": "需求/15-上游2026.9.4差异评估.md §实施进展第 7 项；提交 f085325、33ee1c9、c169fab。U1 已实机验证；独立的关闭生命周期缺口另评估。",
+  "notes": ".taskfold/documents/需求/15-上游2026.9.4差异评估.md §实施进展第 7 项；提交 f085325、33ee1c9、c169fab。U1 已实机验证；独立的关闭生命周期缺口另评估。",
   "completedAt": 1790589100171,
   "metadata": {
     "automation": {

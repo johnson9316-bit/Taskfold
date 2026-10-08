@@ -8,7 +8,7 @@
   "title": "规划文件目录规范调研",
   "position": 8000,
   "createdAt": 1791452614753,
-  "updatedAt": 1791452614753,
+  "updatedAt": 1791454544183,
   "summary": "调研结论：AI 规划文件目录无统一标准。",
-  "target": "./需求/17-规划文件目录规范调研.md"
+  "target": "./.taskfold/documents/需求/17-规划文件目录规范调研.md"
 }

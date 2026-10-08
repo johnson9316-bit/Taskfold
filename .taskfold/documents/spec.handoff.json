@@ -8,7 +8,7 @@
   "title": "交接与待决",
   "position": 9000,
   "createdAt": 1791452605660,
-  "updatedAt": 1791452605660,
+  "updatedAt": 1791454547547,
   "summary": "当前交接摘要、已定事项与待验证项。",
-  "target": "./需求/11-交接与待决.md"
+  "target": "./.taskfold/documents/需求/11-交接与待决.md"
 }

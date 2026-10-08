@@ -78,7 +78,7 @@ workspaces monorepo and the publishable plugin lives in `packages/openclaw`,
 but OpenClaw's `git:` install source clones the repository root and treats
 it as the plugin directory with no way to point at a subdirectory, so
 `openclaw plugins install git:...` against this repository no longer works.
-See [docs/CLAW_HUB_PUBLISHING.md](docs/CLAW_HUB_PUBLISHING.md) for details.
+See [the ClawHub publishing guide](https://github.com/johnson9316-bit/Taskfold/blob/main/.taskfold/documents/%E9%9C%80%E6%B1%82/19-ClawHub%E5%8F%91%E5%B8%83%E6%B5%81%E7%A8%8B.md) for details.
 
 ## Control UI Security
 
@@ -150,7 +150,7 @@ applying it with `--apply --backup-dir /path/outside/project/backups`; the scrip
 backs up milestones, cards, and configuration and verifies that associations and
 content remain unchanged. Reads alone do not migrate legacy milestones.
 
-The design is in `需求/16-文件存储改造.md` and `需求/18-多宿主架构.md` (Chinese).
+The design is in `.taskfold/documents/需求/16-文件存储改造.md` and `.taskfold/documents/需求/18-多宿主架构.md` (Chinese).
 
 ### Migrating Existing SQLite Data
 
@@ -238,7 +238,7 @@ The ClawHub package identity is `@johnson9316-bit/taskfold`; the scoped name is
 intentional so it remains distinct from unrelated packages.
 
 The release procedure, validation steps, and trusted-publisher handoff are
-recorded in [docs/CLAW_HUB_PUBLISHING.md](docs/CLAW_HUB_PUBLISHING.md).
+recorded in [the ClawHub publishing guide](https://github.com/johnson9316-bit/Taskfold/blob/main/.taskfold/documents/%E9%9C%80%E6%B1%82/19-ClawHub%E5%8F%91%E5%B8%83%E6%B5%81%E7%A8%8B.md).
 
 ## License and Attribution
 

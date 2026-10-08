@@ -4,7 +4,7 @@ title: manifest 声明补齐
 status: done
 assignee: []
 created_date: '2026-09-28 09:51'
-updated_date: '2026-09-28 09:56'
+updated_date: '2026-10-08 10:16'
 labels:
   - 上游对齐
   - 历史成果
@@ -26,7 +26,7 @@ ordinal: 19000
   "uuid": "6511a672-0291-4ce6-9373-df84be0a16df",
   "position": 19000,
   "createdAt": 1790589097208,
-  "notes": "需求/15-上游2026.9.4差异评估.md §实施进展第 3 项；提交 db125ad。cliCommands/doctorContract 已补，运行时 inspect 验收。",
+  "notes": ".taskfold/documents/需求/15-上游2026.9.4差异评估.md §实施进展第 3 项；提交 db125ad。cliCommands/doctorContract 已补，运行时 inspect 验收。",
   "completedAt": 1790589097208,
   "metadata": {
     "automation": {

@@ -8,7 +8,7 @@
   "title": "会话生命周期设计",
   "position": 2000,
   "createdAt": 1791452611850,
-  "updatedAt": 1791452611850,
+  "updatedAt": 1791454541304,
   "summary": "第 7 项设计：三段式盖在本地证据判活之上。",
-  "target": "./需求/15.7-会话生命周期设计.md"
+  "target": "./.taskfold/documents/需求/15.7-会话生命周期设计.md"
 }

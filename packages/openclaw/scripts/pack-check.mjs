@@ -10,7 +10,7 @@ import { copyReleaseFiles, cleanReleaseFiles } from "./release-files.mjs";
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // 对应 package.json 的 `files` 白名单展开后的最终产物：dist/ 内的 4 个构建产物、
-// openclaw.plugin.json、package.json（npm 总是隐式打包），以及从仓库根同步来的 5 份
+// openclaw.plugin.json、package.json（npm 总是隐式打包），以及从仓库根同步来的 4 份
 // 发布文件。多一个少一个都判失败，而不是只检查「必需文件是否存在」。
 const EXPECTED_FILES = [
   "package.json",
@@ -19,7 +19,6 @@ const EXPECTED_FILES = [
   "LICENSE",
   "THIRD-PARTY-NOTICES",
   "UPSTREAM.md",
-  "docs/CLAW_HUB_PUBLISHING.md",
   "dist/index.js",
   "dist/control-ui/index.js",
   "dist/control-ui/index.css",

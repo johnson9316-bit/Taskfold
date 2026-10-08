@@ -32,13 +32,13 @@ OpenClaw 2026.9.4 起官方内置了 stock `workboard`（`origin: bundled`，默
 
 `npm run check:public-names`（`scripts/check-public-names.mjs`）是这条隔离边界的守门人，会校验没有未迁移的公共 `workboard` 残留名，且 manifest 声明的工具面与源码工具名集合完全一致。
 
-上游 `78d6c6c`（fork 点）→ `3a9d69d`（`v2026.9.4`，本机当前版本）的具体差异、新增能力、以及是否值得 Taskfold 借鉴，详见 [[需求/15-上游2026.9.4差异评估]]（中文，规划层文档）。**两版真实 TS 源码已拉取存放在 `tpm/openclaw-<短SHA>-workboard-source/`**（被 `.gitignore` 排除），openclaw 是公开 MIT 仓库（`github.com/openclaw/openclaw`），下次升级后按该文档「对比方法」一节的命令重新拉取一份新快照即可继续对照，不用整仓克隆。
+上游 `78d6c6c`（fork 点）→ `3a9d69d`（`v2026.9.4`，本机当前版本）的具体差异、新增能力、以及是否值得 Taskfold 借鉴，详见 [[15-上游2026.9.4差异评估]]（中文，规划层文档）。**两版真实 TS 源码已拉取存放在 `tpm/openclaw-<短SHA>-workboard-source/`**（被 `.gitignore` 排除），openclaw 是公开 MIT 仓库（`github.com/openclaw/openclaw`），下次升级后按该文档「对比方法」一节的命令重新拉取一份新快照即可继续对照，不用整仓克隆。
 
-结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点与**当前进展**见该文档「实施进展」一节（1/2/3/5 已落地，4 经核实本来就不需要做，7/8 已出设计文档 [[需求/15.7-会话生命周期设计]]／[[需求/15.8-并发与补偿设计]]，9 进行中见 [[需求/15.9-ControlUI注入调查]]）。**第 6 项经核实不可行**（不是技术难度，是架构前提）：上游触发 cron 的唯一调用点走 `runtime.gateway.request`，而那道信任门只认 `origin="bundled"` 或 `trustedOfficialInstall`，Taskfold 走本地路径加载（`origin="config"`）拿不到。**这道门已经咬过三次**（`b7abc5c` 的 sessions.list 对账、第 7 项路线 A、第 6 项），已固化成一条筛选规则记在该文档「信任门」一节——以后评估任何上游机制，先 grep 它的实现里有没有 `gateway.request`，有就直接判不可行。反向推论：hook（`api.on(...)`）不走这道门，「宿主事件→插件」方向一直可用。**另两项有意挂起**：并行执行方案（[[需求/15.10-并发执行模型调查]]，四选一待定，等实际使用一段时间再决定）与第 8 项的 owner slot 子项（与前者动同一段代码）——查明上游 stock workboard 同样是串行，而并行零代码即可开启（给卡填不同 `agentId`）。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
+结论摘要（已用真实源码核对，不是压缩产物推测）：功能层面 Taskfold 已覆盖 stock 全部工具且更丰富，无需追赶；工作区沙箱访问控制、变更事件轮询这两项 Taskfold 已经具备等价设计，不是缺口。**2026-09-18 已定 9 项要做**（子表索引、归档诊断、manifest 补 `cliCommands`/`doctorContract`、执行引擎放开、会话捕获 captureSession、板级自动化联动、会话生命周期两阶段落地、乐观并发+补偿+owner slot、Control UI 迁移到宿主原生注入），逐项实现要点与**当前进展**见该文档「实施进展」一节（1/2/3/5 已落地，4 经核实本来就不需要做，7/8 已出设计文档 [[15.7-会话生命周期设计]]／[[15.8-并发与补偿设计]]，9 进行中见 [[15.9-ControlUI注入调查]]）。**第 6 项经核实不可行**（不是技术难度，是架构前提）：上游触发 cron 的唯一调用点走 `runtime.gateway.request`，而那道信任门只认 `origin="bundled"` 或 `trustedOfficialInstall`，Taskfold 走本地路径加载（`origin="config"`）拿不到。**这道门已经咬过三次**（`b7abc5c` 的 sessions.list 对账、第 7 项路线 A、第 6 项），已固化成一条筛选规则记在该文档「信任门」一节——以后评估任何上游机制，先 grep 它的实现里有没有 `gateway.request`，有就直接判不可行。反向推论：hook（`api.on(...)`）不走这道门，「宿主事件→插件」方向一直可用。**另两项有意挂起**：并行执行方案（[[15.10-并发执行模型调查]]，四选一待定，等实际使用一段时间再决定）与第 8 项的 owner slot 子项（与前者动同一段代码）——查明上游 stock workboard 同样是串行，而并行零代码即可开启（给卡填不同 `agentId`）。`openclaw plugins validate`/`plugins build` 失败评估后决定不修——这两个命令目前只支持一种全新的声明式 `defineToolPlugin()` 插件写法（全仓只有 `llm-task` 一个扩展用它），stock `workboard` 大概率也过不了，**跟能不能装插件无关**（那是开发期工具，不参与 `plugins install`/`enable` 的安装加载路径）。
 
 ## Control UI 的本机验证方法
 
-Control UI 已迁到宿主原生注入（前端源码 `packages/ui/src/` → 产物 `packages/openclaw/dist/control-ui/`，见 [[需求/15.9-ControlUI注入调查]]）。验证面板要注意四件事，前两件是环境坑、后两件是机制：
+Control UI 已迁到宿主原生注入（前端源码 `packages/ui/src/` → 产物 `packages/openclaw/dist/control-ui/`，见 [[15.9-ControlUI注入调查]]）。验证面板要注意四件事，前两件是环境坑、后两件是机制：
 
 1. **地址是 `https://openclaw.local/`**（hosts 映射到 `127.0.0.1`，443 端口有反向代理转发到 Gateway 的 18789），自签证书。
 2. **必须绕过代理**：本机有 `HTTP_PROXY` 指向 `127.0.0.1:7897`，curl 和 Playwright 都会走它然后失败。curl 加 `--noproxy '*'`；Playwright 要在脚本里 `os.environ.pop()` 掉 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 及其小写形式，并给 chromium 传 `args=["--no-proxy-server","--proxy-bypass-list=*"]`，光靠 `proxy={"server":"direct://"}` 挡不住。再加 `ignore_https_errors=True`。
@@ -135,12 +135,12 @@ code --install-extension /home/john/src/personal/Taskfold/packages/vscode/taskfo
 
 | 文档 | 定位 |
 | --- | --- |
-| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（按设计要打进 ClawHub 包，不要往里塞本机路径或临时排查结论）。TASK-9 已处理：README、LICENSE、THIRD-PARTY-NOTICES、UPSTREAM.md、docs/CLAW_HUB_PUBLISHING.md 仍只在仓库根留一份源文件，`packages/openclaw/scripts/release-files.mjs`（`npm run prepare-release-files` / `clean-release-files`）在打包前后临时复制/清理进 `packages/openclaw/`，`npm run pack:check` 自带这一步并校验产物清单；README 的「From GitHub」安装方式已删除，只保留 ClawHub/npm |
+| `README.md` | 面向外部用户/发布产物的权威安装与开发说明（按设计要打进 ClawHub 包，不要往里塞本机路径或临时排查结论）。TASK-9 已处理：README、LICENSE、THIRD-PARTY-NOTICES、UPSTREAM.md 仍只在仓库根留一份源文件，`packages/openclaw/scripts/release-files.mjs`（`npm run prepare-release-files` / `clean-release-files`）在打包前后临时复制/清理进 `packages/openclaw/`，`npm run pack:check` 自带这一步并校验产物清单；README 的「From GitHub」安装方式已删除，只保留 ClawHub/npm |
 | `VERIFICATION.md` | 按日期只增的验证台账，历史快照性质，早期结论可能已被后文推翻 —— 不要拿它当「当前状态」用 |
-| `docs/CLAW_HUB_PUBLISHING.md` | ClawHub 发布流程，已适配 monorepo（TASK-9）：发布对象是 `packages/openclaw`，命令要带 `./packages/openclaw` 前缀或在该目录内用 `.`（裸 `packages/openclaw` 会被 npm 误判成 GitHub `user/repo` 简写） |
-| `需求/` | 中文规划文档体系，Obsidian 风格 `[[wiki-link]]` 互链，入口 `需求/README.md` |
-| `需求/6-OpenClaw集成.md` | 插件安装/运行/分发的规划记录（注意：其「已在 2026.7.1-2 验证」的记载已过期，本机现为 2026.9.4，尚待重新验证） |
-| `需求/15-上游2026.9.4差异评估.md` | 上游 workboard 版本差异评估，见上文 |
+| `.taskfold/documents/需求/19-ClawHub发布流程.md` | ClawHub 发布流程（不随包发布），已适配 monorepo（TASK-9）：发布对象是 `packages/openclaw`，命令要带 `./packages/openclaw` 前缀或在该目录内用 `.`（裸 `packages/openclaw` 会被 npm 误判成 GitHub `user/repo` 简写） |
+| `.taskfold/documents/需求/` | 中文规划文档体系（原仓库根的 `需求/`，已并入 Taskfold 数据目录统一管理），Obsidian 风格 `[[wiki-link]]` 互链，入口 `.taskfold/documents/需求/README.md`。项目的 `planningPath` 指向这里，资料库按路径登记其中的文档。**这里是 `.taskfold/` 里唯一允许手工编辑的区域**（文档正文）；卡片、里程碑、登记 JSON 仍只能走 CLI / 宿主 |
+| `.taskfold/documents/需求/6-OpenClaw集成.md` | 插件安装/运行/分发的规划记录（注意：其「已在 2026.7.1-2 验证」的记载已过期，本机现为 2026.9.4，尚待重新验证） |
+| `.taskfold/documents/需求/15-上游2026.9.4差异评估.md` | 上游 workboard 版本差异评估，见上文 |
 | `reports/plugin-inspector-*` | 工具生成的静态兼容性扫描，`Generated: deterministic`，**不执行插件代码**，不能替代 `openclaw plugins validate` 之类需要实际加载的检查 |
 | `tpm/openclaw-<短SHA>-workboard-source/` | 上游 `workboard`/`workboard-contract` 真实源码快照，`.gitignore` 排除，供对照评估用，不参与构建 |
 | 本文件（`AGENTS.md`） | 本机开发环境事实，不随包发布 |
@@ -150,4 +150,4 @@ code --install-extension /home/john/src/personal/Taskfold/packages/vscode/taskfo
 以下路径目前只硬编码在代码/文档里，尚无正式说明，供后续排查时参考：
 
 - `scripts/backfill-procloud-m3.mjs` 顶部硬编码 `PLANNING_ROOT = "/home/john/src/lz/procloud/.planning"`、`DOCS_ROOT = "/home/john/src/lz/procloud/docs"`，是一次性数据回填脚本，无 npm script 入口。
-- `需求/8.8-工作流/工作流迁移.md` 提到参考仓库 `/home/john/src/other/kandev`。
+- `.taskfold/documents/需求/8.8-工作流/工作流迁移.md` 提到参考仓库 `/home/john/src/other/kandev`。

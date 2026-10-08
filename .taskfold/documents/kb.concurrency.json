@@ -8,7 +8,7 @@
   "title": "并发与补偿设计",
   "position": 3000,
   "createdAt": 1791452612334,
-  "updatedAt": 1791452612334,
+  "updatedAt": 1791454541779,
   "summary": "第 8 项设计：CAS 不做、补偿部分做、owner slot 挂起。",
-  "target": "./需求/15.8-并发与补偿设计.md"
+  "target": "./.taskfold/documents/需求/15.8-并发与补偿设计.md"
 }

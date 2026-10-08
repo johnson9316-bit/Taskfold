@@ -8,7 +8,7 @@
   "title": "规划评审与阶段门",
   "position": 6000,
   "createdAt": 1791452604250,
-  "updatedAt": 1791452604250,
+  "updatedAt": 1791454546104,
   "summary": "当前决定与阶段门；各文档矛盾时以此为准。",
-  "target": "./需求/1-规划评审.md"
+  "target": "./.taskfold/documents/需求/1-规划评审.md"
 }

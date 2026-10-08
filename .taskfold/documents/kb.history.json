@@ -8,7 +8,7 @@
   "title": "历史现状与迁移",
   "position": 9000,
   "createdAt": 1791452615234,
-  "updatedAt": 1791452615234,
+  "updatedAt": 1791454544660,
   "summary": "旧 Hermes 脚手架与迁移边界。",
-  "target": "./需求/10-历史现状与迁移.md"
+  "target": "./.taskfold/documents/需求/10-历史现状与迁移.md"
 }

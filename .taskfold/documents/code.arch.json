@@ -8,7 +8,7 @@
   "title": "技术架构与选型",
   "position": 1000,
   "createdAt": 1791452607561,
-  "updatedAt": 1791452607561,
+  "updatedAt": 1791454538424,
   "summary": "TypeScript、Workboard 代码基线与插件打包。部分结论已被 16、18 推翻，以后者为准。",
-  "target": "./需求/5-技术架构与选型.md"
+  "target": "./.taskfold/documents/需求/5-技术架构与选型.md"
 }

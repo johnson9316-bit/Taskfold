@@ -8,7 +8,7 @@
   "title": "多宿主架构",
   "position": 10000,
   "createdAt": 1791452606139,
-  "updatedAt": 1791452606139,
+  "updatedAt": 1791454548027,
   "summary": "已定：OpenClaw / VS Code 等多宿主，core 库 + 两层文件锁，AI 只走 CLI。",
-  "target": "./需求/18-多宿主架构.md"
+  "target": "./.taskfold/documents/需求/18-多宿主架构.md"
 }

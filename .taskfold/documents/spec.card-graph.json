@@ -8,7 +8,7 @@
   "title": "卡片图谱与可配置看板",
   "position": 11000,
   "createdAt": 1791452606621,
-  "updatedAt": 1791452606621,
+  "updatedAt": 1791454548489,
   "summary": "8.9 需求：思维导图、流程图与按里程碑/需求/状态分列的看板，含 11 项验收。",
-  "target": "./需求/8.9-卡片/概述.md"
+  "target": "./.taskfold/documents/需求/8.9-卡片/概述.md"
 }

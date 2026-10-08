@@ -4,7 +4,7 @@ title: 子表索引补齐
 status: done
 assignee: []
 created_date: '2026-09-28 09:51'
-updated_date: '2026-09-28 09:56'
+updated_date: '2026-10-08 10:16'
 labels:
   - 上游对齐
   - 历史成果
@@ -26,7 +26,7 @@ ordinal: 17000
   "uuid": "554a6f06-0966-4aaa-84af-cba9e8e9ffeb",
   "position": 17000,
   "createdAt": 1790589094221,
-  "notes": "需求/15-上游2026.9.4差异评估.md §实施进展第 1 项；提交 034473a。8 条索引已补齐。",
+  "notes": ".taskfold/documents/需求/15-上游2026.9.4差异评估.md §实施进展第 1 项；提交 034473a。8 条索引已补齐。",
   "completedAt": 1790589094221,
   "metadata": {
     "automation": {
