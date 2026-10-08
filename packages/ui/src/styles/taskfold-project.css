@@ -800,51 +800,74 @@ taskfold-graph-canvas,
   min-width: 0;
 }
 
-.taskfold-project__document-source-filter {
+select.taskfold-project__document-source-filter {
+  flex: 0 0 auto;
   width: auto;
 }
 
-.taskfold-project__document-index {
-  border-bottom: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+.taskfold-project__document-workspace {
+  align-items: start;
   display: grid;
-  gap: 0;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
-  overflow-x: auto;
+  gap: 18px;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+}
+
+.taskfold-project__document-index {
+  border: 1px solid var(--border);
+  display: grid;
+  max-height: calc(100vh - 160px);
+  min-width: 0;
+  overflow-y: auto;
+  position: sticky;
+  top: 8px;
 }
 
 .taskfold-project__document-group {
-  border-right: 1px solid var(--border);
-  display: grid;
-  gap: 8px;
-  min-width: 165px;
-  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px 6px;
 }
 
 .taskfold-project__document-group:last-child {
-  border-right: 0;
+  border-bottom: 0;
 }
 
-.taskfold-project__document-group h2 {
+.taskfold-project__document-group summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
   font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 6px 4px;
+}
+
+.taskfold-project__document-group summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.taskfold-project__document-group .taskfold-project__empty-column {
   margin: 0;
+  padding: 2px 6px 4px;
 }
 
 .taskfold-project__document-list {
   display: grid;
-  gap: 4px;
+  gap: 1px;
 }
 
 .taskfold-project__document-index-item {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text);
-  display: grid;
-  gap: 3px;
-  min-height: 62px;
-  padding: 7px;
-  position: relative;
+  font-size: 12px;
+  overflow: hidden;
+  padding: 5px 8px;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   width: 100%;
 }
 
@@ -858,23 +881,6 @@ taskfold-graph-canvas,
   opacity: 0.58;
 }
 
-.taskfold-project__document-index-item > span {
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskfold-project__document-index-item > small {
-  color: var(--muted);
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskfold-project__document-index-item em,
 .taskfold-project__document-source-tag,
 .taskfold-project__document-unsaved {
   border: 1px solid var(--border);
@@ -887,20 +893,15 @@ taskfold-graph-canvas,
   width: fit-content;
 }
 
-.taskfold-project__document-index-item em {
-  margin-top: 1px;
-}
-
 .taskfold-project__document-unsaved {
   border-color: color-mix(in srgb, var(--warn) 60%, var(--border));
   color: var(--warn);
 }
 
 .taskfold-project__document-reader {
-  border-top: 1px solid var(--border);
   min-height: 460px;
+  min-width: 0;
   overflow: auto;
-  padding: 18px 0 0;
 }
 
 .taskfold-project__document-reader.tf-is-empty {
@@ -1442,8 +1443,13 @@ taskfold-graph-canvas,
     min-height: calc(100vh - 230px);
   }
 
+  .taskfold-project__document-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .taskfold-project__document-index {
-    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    max-height: 260px;
+    position: static;
   }
 
   .taskfold-project__document-reader {
@@ -1474,10 +1480,6 @@ taskfold-graph-canvas,
   .taskfold-project__document-search {
     flex-basis: 100%;
     max-width: none;
-  }
-
-  .taskfold-project__document-reader {
-    padding-top: 14px;
   }
 
   .taskfold-project__document-reader-actions {

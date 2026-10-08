@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskfoldCard, TaskfoldProjectView } from "@taskfold/core/contract/index.js";
-import { buildGraphModel, type GraphFilter } from "../packages/ui/src/pages/projects/graph-model.ts";
+import { buildGraphModel, resolveGraphDrop, type GraphFilter } from "../packages/ui/src/pages/projects/graph-model.ts";
 
 const filter: GraphFilter = { query: "", milestoneId: "", status: "", tag: "", relation: "all", focusCardId: "" };
 const labels = { requirements: "Requirements", noMilestone: "Unassigned", status: (value: string) => value };
@@ -43,5 +43,36 @@ describe("graph model", () => {
     expect(focused.nodes.map((node) => node.id)).toContain("b");
     expect(focused.nodes.map((node) => node.id)).not.toContain("c");
     expect(cards).toHaveLength(3);
+  });
+});
+
+describe("graph drop", () => {
+  const withView = (groupBy: "milestone" | "requirement" | "status", cards: TaskfoldCard[]) => {
+    const view = project(cards);
+    view.board.boardView = { groupBy, sortBy: "priority", sortDirection: "asc" };
+    return view;
+  };
+  const req = card("req", { kind: "requirement", milestoneId: "m1", status: "review" });
+  const task = card("task", { milestoneId: "m2", status: "todo" });
+
+  it("only changes the field of the active grouping when dropped on a requirement", () => {
+    expect(resolveGraphDrop(withView("milestone", [req, task]), "task", "req")).toEqual({ kind: "milestone", milestoneId: "m1" });
+    expect(resolveGraphDrop(withView("status", [req, task]), "task", "req")).toEqual({ kind: "status", status: "review" });
+    expect(resolveGraphDrop(withView("requirement", [req, task]), "task", "req")).toEqual({ kind: "requirement", requirementId: "req" });
+  });
+
+  it("clears the requirement from the root only when grouped by requirement", () => {
+    const child = card("child", { metadata: { links: [{ type: "contained_by", targetCardId: "req" }] } as TaskfoldCard["metadata"] });
+    expect(resolveGraphDrop(withView("requirement", [req, child]), "child", "project")).toEqual({ kind: "requirement" });
+    expect(resolveGraphDrop(withView("milestone", [req, child]), "child", "project")).toBeNull();
+  });
+
+  it("maps group nodes, and ignores plain cards, requirement sources and no-op drops", () => {
+    const view = withView("milestone", [req, task, card("other")]);
+    expect(resolveGraphDrop(view, "task", "milestone:none")).toEqual({ kind: "milestone", milestoneId: undefined });
+    expect(resolveGraphDrop(view, "task", "status:done")).toEqual({ kind: "status", status: "done" });
+    expect(resolveGraphDrop(view, "task", "other")).toBeNull();
+    expect(resolveGraphDrop(view, "req", "status:done")).toBeNull();
+    expect(resolveGraphDrop(view, "task", "milestone:m2")).toBeNull();
   });
 });

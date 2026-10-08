@@ -135,3 +135,46 @@ export function buildGraphModel(
   }
   return { nodes, edges, totalCards: visible.length, truncated: visible.length > MAX_CARDS };
 }
+
+export type GraphDropAction =
+  | { kind: "requirement"; requirementId?: string }
+  | { kind: "milestone"; milestoneId?: string }
+  | { kind: "status"; status: TaskfoldStatus };
+
+function isRequirement(card: TaskfoldCard): boolean {
+  return card.kind === "requirement" ||
+    Boolean(card.metadata?.links?.some((link) => link.type === "contains" && link.targetCardId));
+}
+
+/** 按当前分列规则，把「拖 source 到 target」翻译成唯一一种业务字段修改；无需修改时返回 null。 */
+export function resolveGraphDrop(
+  project: TaskfoldProjectView,
+  sourceId: string,
+  targetId: string,
+): GraphDropAction | null {
+  const source = project.cards.find((card) => card.id === sourceId);
+  if (!source || isRequirement(source)) return null;
+  const groupBy = project.board.boardView?.groupBy ?? "milestone";
+  const target = project.cards.find((card) => card.id === targetId);
+  let action: GraphDropAction | null = null;
+  if (target) {
+    if (!isRequirement(target)) return null;
+    if (groupBy === "requirement") action = { kind: "requirement", requirementId: target.id };
+    else if (groupBy === "milestone") action = { kind: "milestone", milestoneId: target.milestoneId };
+    else action = { kind: "status", status: target.status };
+  } else if (targetId.startsWith("milestone:")) {
+    action = {
+      kind: "milestone",
+      milestoneId: targetId === "milestone:none" ? undefined : targetId.slice("milestone:".length),
+    };
+  } else if (targetId.startsWith("status:")) {
+    action = { kind: "status", status: targetId.slice("status:".length) as TaskfoldStatus };
+  } else if ((targetId === "project" || targetId === "group:requirements") && groupBy === "requirement") {
+    action = { kind: "requirement" };
+  }
+  if (!action) return null;
+  if (action.kind === "requirement" && requirementId(source) === action.requirementId) return null;
+  if (action.kind === "milestone" && source.milestoneId === action.milestoneId) return null;
+  if (action.kind === "status" && source.status === action.status) return null;
+  return action;
+}

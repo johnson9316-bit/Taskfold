@@ -24,7 +24,7 @@ import type {
 } from "@taskfold/core/contract/index.js";
 import "../../components/modal-dialog.ts";
 import "./graph-canvas.ts";
-import { buildGraphModel, type GraphFilter, type GraphRelation } from "./graph-model.ts";
+import { buildGraphModel, resolveGraphDrop, type GraphFilter, type GraphRelation } from "./graph-model.ts";
 import { t, type TaskfoldLocale } from "../../i18n/index.ts";
 import {
   taskfoldEditorHtmlToMarkdown,
@@ -95,6 +95,7 @@ export type TaskfoldProjectModal =
       requirementId?: string;
       status?: TaskfoldStatus;
       cardKind?: TaskfoldCardKind;
+      relatedCardId?: string;
     }
   | { kind: "milestone"; milestone?: TaskfoldMilestone }
   | { kind: "document"; document?: TaskfoldProjectDocument }
@@ -1226,6 +1227,13 @@ function renderGraph(controller: TaskfoldProjectViewController) {
   const createAtSelection = () => {
     if (selected?.kind === "requirement") {
       controller.openModal({ kind: "card", requirementId: selected.id, milestoneId: selectedCard?.milestoneId });
+    } else if (selectedCard) {
+      controller.openModal({
+        kind: "card",
+        milestoneId: selectedCard.milestoneId,
+        requirementId: cardRequirementId(selectedCard),
+        relatedCardId: selectedCard.id,
+      });
     } else if (selected?.id.startsWith("milestone:") && selected.id !== "milestone:none") {
       controller.openModal({ kind: "card", milestoneId: selected.id.slice("milestone:".length) });
     } else if (selected?.id.startsWith("status:")) {
@@ -1279,7 +1287,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
             @change=${(event: Event) => { filter.relation = (event.currentTarget as HTMLSelectElement).value as GraphFilter["relation"]; controller.requestUpdate(); }}>
             <option value="all" ?selected=${filter.relation === "all"}>${t("taskfoldProject.graphAllRelations")}</option>
             ${(["contains", ...relationTypes] as GraphRelation[]).map((relation) => html`
-              <option value=${relation} ?selected=${filter.relation === relation}>${t(`taskfoldProject.graphRelation.${relation}`)}</option>`)}
+              <option value=${relation} ?selected=${filter.relation === relation}>${t(`taskfoldProject.graphRelation_${relation}`)}</option>`)}
           </select>` : nothing}
         <select aria-label=${t("taskfoldProject.graphFocus")}
           @change=${(event: Event) => { filter.focusCardId = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
@@ -1301,14 +1309,11 @@ function renderGraph(controller: TaskfoldProjectViewController) {
               if (project.cards.some((card) => card.id === event.detail.id)) controller.openModal({ kind: "card-detail", cardId: event.detail.id });
             }}
             @graph-drop=${(event: CustomEvent<{ source: string; target: string }>) => {
-              const { source, target } = event.detail;
-              const sourceCard = project.cards.find((card) => card.id === source);
-              if (!sourceCard || isRequirementCard(sourceCard)) return;
-              const targetCard = project.cards.find((card) => card.id === target);
-              if (targetCard && isRequirementCard(targetCard)) controller.moveCardRequirement(source, target);
-              else if (target === "project" || target === "group:requirements") controller.moveCardRequirement(source);
-              else if (target.startsWith("milestone:")) controller.moveCardMilestone(source, target === "milestone:none" ? undefined : target.slice("milestone:".length));
-              else if (target.startsWith("status:")) controller.updateCardStatus(source, target.slice("status:".length) as TaskfoldStatus);
+              const action = resolveGraphDrop(project, event.detail.source, event.detail.target);
+              if (!action) return;
+              if (action.kind === "requirement") controller.moveCardRequirement(event.detail.source, action.requirementId);
+              else if (action.kind === "milestone") controller.moveCardMilestone(event.detail.source, action.milestoneId);
+              else controller.updateCardStatus(event.detail.source, action.status);
             }}
           ></taskfold-graph-canvas>
         </div>
@@ -1318,6 +1323,9 @@ function renderGraph(controller: TaskfoldProjectViewController) {
           <div class="taskfold-project__graph-inspector-actions">
             ${selectedCard ? html`<button type="button" @click=${() => controller.openModal({ kind: "card-detail", cardId: selectedCard.id })}>${t("taskfoldProject.graphOpenCard")}</button>` : nothing}
             <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)} @click=${createAtSelection}>${t("taskfoldProject.newCard")}</button>
+            ${selected?.id.startsWith("milestone:") && selected.id !== "milestone:none" ? html`
+              <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)}
+                @click=${() => controller.openModal({ kind: "milestone" })}>${t("taskfoldProject.newMilestone")}</button>` : nothing}
             <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)}
               @click=${() => controller.openModal({ kind: "card", cardKind: "requirement" })}>${t("taskfoldProject.newRequirement")}</button>
             ${selected ? html`<button type="button" @click=${(event: Event) => canvas(event)?.focusNode(selected.id)}>${t("taskfoldProject.graphFocusNode")}</button>` : nothing}
@@ -1333,13 +1341,13 @@ function renderGraph(controller: TaskfoldProjectViewController) {
               </select>
               <select aria-label=${t("taskfoldProject.graphRelation")}
                 @change=${(event: Event) => { state.graphLinkType = (event.currentTarget as HTMLSelectElement).value as typeof state.graphLinkType; controller.requestUpdate(); }}>
-                ${relationTypes.map((relation) => html`<option value=${relation} ?selected=${state.graphLinkType === relation}>${t(`taskfoldProject.graphRelation.${relation}`)}</option>`)}
+                ${relationTypes.map((relation) => html`<option value=${relation} ?selected=${state.graphLinkType === relation}>${t(`taskfoldProject.graphRelation_${relation}`)}</option>`)}
               </select>
               <button type="button" ?disabled=${!state.graphLinkTargetId || !controller.connected || Boolean(project.board.archivedAt)}
                 @click=${() => controller.createGraphRelation(selectedCard.id, state.graphLinkTargetId, state.graphLinkType)}>${t("taskfoldProject.graphAddRelation")}</button>
               <div class="taskfold-project__graph-relation-list">
                 ${currentEdges.filter((edge) => edge.source === selectedCard.id || edge.target === selectedCard.id).map((edge) => html`
-                  <div><span>${t(`taskfoldProject.graphRelation.${edge.relation}`)}: ${model.nodes.find((node) => node.id === edge.source)?.title} → ${model.nodes.find((node) => node.id === edge.target)?.title}</span>
+                  <div><span>${t(`taskfoldProject.graphRelation_${edge.relation}`)}: ${model.nodes.find((node) => node.id === edge.source)?.title} → ${model.nodes.find((node) => node.id === edge.target)?.title}</span>
                     <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)}
                       @click=${() => controller.deleteGraphRelation(edge.source, edge.target, edge.relation as Exclude<GraphRelation, "contains">)}>${t("taskfoldProject.graphRemoveRelation")}</button></div>`)}
               </div>
@@ -1483,11 +1491,14 @@ function renderDocumentIndex(
   const { state } = controller;
   const workspacePath = state.project?.board.defaultWorkspace?.path;
   return html`
-    <div class="taskfold-project__document-index" role="list">
+    <nav class="taskfold-project__document-index">
       ${documentIndexGroups(documents).map(
         (group) => html`
-          <section class="taskfold-project__document-group">
-            <h2>${group.label}</h2>
+          <details class="taskfold-project__document-group" open>
+            <summary>
+              <span>${group.label}</span>
+              <small>${group.documents.length}</small>
+            </summary>
             ${group.documents.length
               ? html`
                   <div class="taskfold-project__document-list">
@@ -1498,14 +1509,11 @@ function renderDocumentIndex(
                             ? "tf-is-hidden"
                             : ""} ${document.id === state.selectedDocumentId ? "tf-is-selected" : ""}"
                           type="button"
+                          title=${documentPathLabel(document.target, workspacePath) ??
+                          documentTypeLabel(document.type)}
                           @click=${() => controller.openDocument(document.id)}
                         >
-                          <span>${document.title}</span>
-                          <small>
-                            ${documentPathLabel(document.target, workspacePath) ??
-                            documentTypeLabel(document.type)}
-                          </small>
-                          <em>${documentSourceLabel(document.source)}</em>
+                          ${document.title}
                         </button>
                       `,
                     )}
@@ -1514,10 +1522,10 @@ function renderDocumentIndex(
               : html`<p class="taskfold-project__empty-column">${t(
                   "taskfoldProject.noDocuments",
                 )}</p>`}
-          </section>
+          </details>
         `,
       )}
-    </div>
+    </nav>
   `;
 }
 
@@ -1598,8 +1606,10 @@ function renderDocuments(controller: TaskfoldProjectViewController) {
           </button>
         </div>
       </div>
-      ${renderDocumentIndex(controller, visibleDocuments)}
-      ${renderDocumentPreview(controller)}
+      <div class="taskfold-project__document-workspace">
+        ${renderDocumentIndex(controller, visibleDocuments)}
+        ${renderDocumentPreview(controller)}
+      </div>
     </section>
   `;
 }
@@ -2658,8 +2668,19 @@ function renderModal(controller: TaskfoldProjectViewController) {
           <input type="hidden" name="milestoneId" value=${modal.milestoneId ?? ""} />
           <input type="hidden" name="requirementId" value=${modal.requirementId ?? ""} />
           <input type="hidden" name="cardKind" value=${cardKind} />
+          <input type="hidden" name="relatedCardId" value=${modal.relatedCardId ?? ""} />
           <label>${t("taskfoldProject.cardTitle")}<input name="title" required /></label>
           <label>${t("taskfoldProject.cardNotes")}<textarea name="notes"></textarea></label>
+          ${modal.relatedCardId ? html`
+            <label>${t("taskfoldProject.newCardRelation", { title: project.cards.find((card) => card.id === modal.relatedCardId)?.title ?? modal.relatedCardId })}
+              <select name="relation">
+                <option value="">${t("taskfoldProject.newCardRelation_none")}</option>
+                <option value="follows" selected>${t("taskfoldProject.newCardRelation_follows")}</option>
+                <option value="precedes">${t("taskfoldProject.newCardRelation_precedes")}</option>
+                <option value="blocks">${t("taskfoldProject.newCardRelation_blocks")}</option>
+                <option value="relates_to">${t("taskfoldProject.newCardRelation_relates_to")}</option>
+              </select>
+            </label>` : nothing}
           <div class="taskfold-project__modal-grid">
             <label>${t("taskfoldProject.status")}<select name="status">${renderStatusOptions(modal.status ?? "todo")}</select></label>
             <label>${t("taskfoldProject.priority")}<select name="priority">${renderPriorityOptions("normal")}</select></label>

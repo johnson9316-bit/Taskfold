@@ -370,7 +370,7 @@ export function createTaskfoldVscodeMethods(deps: {
     "taskfold.cards.create": async (params) => {
       const project = await registry.byKey(params.boardId);
       const card = await project.store.create({
-        ...pick(params, ["title", "notes", "status", "priority", "agentId", "milestoneId", "requirementId", "kind"]),
+        ...pick(params, ["title", "notes", "status", "priority", "agentId", "milestoneId", "requirementId", "kind", "parents"]),
         boardId: project.boardId,
       });
       return cardResult(project, card);

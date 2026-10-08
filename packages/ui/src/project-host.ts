@@ -504,8 +504,10 @@ class TaskfoldProjectHost extends LitElement {
     if (!project) {
       return;
     }
+    const relatedCardId = data.relatedCardId || undefined;
+    const relation = relatedCardId ? data.relation : "";
     void this.mutate(async () => {
-      await taskfoldHost().request("taskfold.cards.create", {
+      const response = await taskfoldHost().request<{ card: { id: string } }>("taskfold.cards.create", {
         boardId: project.board.id,
         title: data.title,
         notes: data.notes,
@@ -515,7 +517,15 @@ class TaskfoldProjectHost extends LitElement {
         ...(data.milestoneId ? { milestoneId: data.milestoneId } : {}),
         ...(data.requirementId ? { requirementId: data.requirementId } : {}),
         ...(data.cardKind === "requirement" ? { kind: "requirement" } : {}),
+        ...(relation === "follows" ? { parents: [relatedCardId] } : {}),
       });
+      if (relatedCardId && (relation === "precedes" || relation === "blocks" || relation === "relates_to")) {
+        await taskfoldHost().request("taskfold.cards.relation.create", {
+          id: response.card.id,
+          target: relatedCardId,
+          type: relation === "precedes" ? "parent" : relation,
+        });
+      }
     });
   }
 
