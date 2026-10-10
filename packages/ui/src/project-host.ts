@@ -852,13 +852,19 @@ class TaskfoldProjectHost extends LitElement {
     });
   }
 
-  private completeMilestone(id: string) {
+  private async completeMilestone(id: string) {
+    if (!(await taskfoldHost().confirm(i18n.t("taskfoldProject.completeMilestoneConfirm")))) {
+      return;
+    }
     void this.mutate(async () => {
       await taskfoldHost().request("taskfold.projects.milestones.complete", { id });
     }, { closeModal: false });
   }
 
-  private archiveMilestone(id: string, archived: boolean) {
+  private async archiveMilestone(id: string, archived: boolean) {
+    if (archived && !(await taskfoldHost().confirm(i18n.t("taskfoldProject.archiveMilestoneConfirm")))) {
+      return;
+    }
     void this.mutate(async () => {
       await taskfoldHost().request(
         archived ? "taskfold.projects.milestones.archive" : "taskfold.projects.milestones.restore",

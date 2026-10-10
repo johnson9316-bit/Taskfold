@@ -349,6 +349,11 @@
   border-color: var(--accent);
 }
 
+.taskfold-project__overview-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .taskfold-project__overview-item.tf-is-archived {
   opacity: 0.65;
 }
@@ -1428,7 +1433,7 @@ select.taskfold-project__document-source-filter {
   width: 1px;
 }
 
-.tf-btn--danger {
+taskfold-app .tf-btn.tf-btn--danger {
   border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
   color: var(--danger);
 }

@@ -57,6 +57,11 @@ body taskfold-app button:focus-visible {
   outline-offset: -1px;
 }
 
+/* OpenClaw 的主按钮文字取 var(--bg)（host.css）；VS Code 里按钮前景与背景是按 button.* 配对的，覆盖回去。 */
+body taskfold-app .tf-btn--primary {
+  color: var(--accent-foreground);
+}
+
 body taskfold-app .tf-btn--primary:hover:not(:disabled) {
   background: var(--vscode-button-hoverBackground);
 }

@@ -699,7 +699,16 @@ function renderOverview(controller: TaskfoldProjectViewController) {
                 (project) => html`
                   <article
                     class="taskfold-project__overview-item ${project.archivedAt ? "tf-is-archived" : ""}"
+                    role="button"
+                    tabindex="0"
+                    aria-label=${boardName(project)}
                     @click=${() => controller.selectProject(project.id)}
+                    @keydown=${(event: KeyboardEvent) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        controller.selectProject(project.id);
+                      }
+                    }}
                   >
                     <div class="taskfold-project__overview-item-top">
                       <span class="taskfold-project__project-color" ${styleProperties({ "--project-color": project.color })}></span>
@@ -844,19 +853,18 @@ function renderCard(
           title=${project.milestones.find((milestone) => milestone.id === card.milestoneId)?.title ?? t("taskfoldProject.unassigned")}
           aria-label=${t("taskfoldProject.moveTo")}
           ?disabled=${isProjectArchived}
-          .value=${card.milestoneId ?? ""}
           @change=${(event: Event) =>
             controller.moveCardMilestone(
               card.id,
               (event.currentTarget as HTMLSelectElement).value || undefined,
             )}
         >
-          <option value="">${t("taskfoldProject.unassigned")}</option>
+          <option value="" ?selected=${!card.milestoneId}>${t("taskfoldProject.unassigned")}</option>
           ${project.milestones
             .filter((milestone) => milestone.state === "active")
             .map(
               (milestone) => html`
-                <option value=${milestone.id}>${milestone.title}</option>
+                <option value=${milestone.id} ?selected=${milestone.id === card.milestoneId}>${milestone.title}</option>
               `,
             )}
         </select>
@@ -1256,11 +1264,11 @@ function renderGraph(controller: TaskfoldProjectViewController) {
             <button class=${state.graphMode === "flow" ? "tf-is-active" : ""} type="button"
               @click=${() => controller.setGraphMode("flow")}>${t("taskfoldProject.flowChart")}</button>
           </div>
-          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomOut")}
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomOut")} aria-label=${t("taskfoldProject.zoomOut")}
             @click=${(event: Event) => canvas(event)?.zoomBy(0.8)}>−</button>
-          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.fitGraph")}
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.fitGraph")} aria-label=${t("taskfoldProject.fitGraph")}
             @click=${(event: Event) => canvas(event)?.fit()}>□</button>
-          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomIn")}
+          <button class="taskfold-project__icon-button" type="button" title=${t("taskfoldProject.zoomIn")} aria-label=${t("taskfoldProject.zoomIn")}
             @click=${(event: Event) => canvas(event)?.zoomBy(1.25)}>+</button>
         </div>
       </div>
@@ -1843,7 +1851,7 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
           <small>${boardName(project.board)}</small>
           <h2>${t("taskfoldProject.details")}</h2>
         </div>
-        <button class="taskfold-project__icon-button" type="button" @click=${controller.closeModal}>&times;</button>
+        <button class="taskfold-project__icon-button" type="button" aria-label=${t("common.close")} @click=${controller.closeModal}>&times;</button>
       </header>
       <div class="taskfold-project__detail-body">
         ${controller.cardEditingEnabled && controller.state.cardDraft?.cardId === card.id

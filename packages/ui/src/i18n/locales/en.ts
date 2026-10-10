@@ -5072,6 +5072,8 @@ export const en: TranslationMap = {
     completeMilestoneHelp: "All non-archived cards must be Done before completion.",
     projectArchived: "This project is archived. New cards and structural moves are unavailable.",
     archiveProjectConfirm: "Archive this project? Running work will continue, but no new work can start.",
+    completeMilestoneConfirm: "Complete this milestone? You can restore it later.",
+    archiveMilestoneConfirm: "Archive this milestone? You can restore it later.",
     moveTo: "Move to",
     moveToProject: "Move to project",
     moveCard: "Move card",

@@ -4813,6 +4813,8 @@ export const zh_CN: TranslationMap = {
     completeMilestoneHelp: "仅当所有未归档卡片均为已完成时才能完成。",
     projectArchived: "项目已归档，不能新建卡片或调整项目、里程碑归属。",
     archiveProjectConfirm: "确定归档此项目吗？运行中的工作不会中断，但不能启动新工作。",
+    completeMilestoneConfirm: "确定完成此里程碑吗？之后可以恢复。",
+    archiveMilestoneConfirm: "确定归档此里程碑吗？之后可以恢复。",
     moveTo: "移动到",
     moveToProject: "移动到项目",
     moveCard: "移动卡片",

@@ -33,8 +33,25 @@ taskfold-app {
   padding: 16px;
 }
 
+/*
+ * 浅色分支的触发条件有两层：
+ * 1. 宿主在 <html> 上维护 data-theme-resolved（"light" | "dark"，随宿主主题实时更新），有则以它为准；
+ * 2. 没有该属性（VS Code Webview 等）时退回系统 prefers-color-scheme。
+ * 兜底分支用 :where() 压平特异性，保持 (0,0,1)，这样 vscode-theme.css 里的 `body taskfold-app` 仍能覆盖它。
+ */
+:root[data-theme-resolved="light"] taskfold-app {
+  color-scheme: light;
+  --warn: #94621b;
+  --info: #1772a8;
+  --success: #2f7b50;
+}
+
+:root[data-theme-resolved="dark"] taskfold-app {
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: light) {
-  taskfold-app {
+  :where(:root:not([data-theme-resolved])) taskfold-app {
     color-scheme: light;
     --warn: #94621b;
     --info: #1772a8;
@@ -115,7 +132,7 @@ taskfold-app .tf-btn:hover:not(:disabled) {
 taskfold-app .tf-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-foreground, #07131c);
+  color: var(--bg);
 }
 
 taskfold-app .tf-callout {
