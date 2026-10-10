@@ -1,0 +1,14 @@
+{
+  "id": "31fd7285-c69e-4e2d-ba33-a5b7e112ea13",
+  "boardId": "flowboard",
+  "key": "kb.uiux",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "面板 UI/UX 评审",
+  "position": 11000,
+  "createdAt": 1791604328149,
+  "updatedAt": 1791604328149,
+  "summary": "面板 UI/UX 合并问题清单：静态审计加浏览器评审共 72 条，大改项与小问题待用户拍板。",
+  "target": "./.taskfold/documents/需求/20-面板UIUX评审.md"
+}
