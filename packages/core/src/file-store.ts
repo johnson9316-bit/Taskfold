@@ -18,6 +18,7 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   TaskfoldCompareAndSwapFailure,
   TaskfoldKeyedStore,
+  TaskfoldStatusConfigPort,
 } from "./persistence-types.js";
 import {
   ensureTaskfoldDataDirectories,
@@ -52,6 +53,8 @@ import { createTaskfoldFileDocumentStore } from "./file-store-documents.js";
 import { createTaskfoldFileSubscriptionStore } from "./file-store-subscriptions.js";
 import { createTaskfoldFileAttachmentStore } from "./file-store-attachments.js";
 import { createTaskfoldFileBoardStore } from "./file-store-boards.js";
+import { createTaskfoldFileCardImageStore } from "./file-store-card-images.js";
+import { createTaskfoldFileStatusConfigStore } from "./file-store-statuses.js";
 
 export type { TaskfoldCardCodec, TaskfoldMilestoneCodec } from "./file-store-codec.js";
 export {
@@ -62,7 +65,12 @@ export {
 export { allocateNextTaskfoldCardId } from "./file-store-card-id.js";
 
 export { resolveTaskfoldMainCheckoutPath } from "./file-store-path-resolver.js";
-export { TaskfoldFormatTooNewError, TASKFOLD_FORMAT_VERSION } from "./file-store-format.js";
+export {
+  TaskfoldFormatTooNewError,
+  TASKFOLD_BASE_FORMAT_VERSION,
+  TASKFOLD_FORMAT_VERSION,
+  TASKFOLD_STATUS_MODEL_FORMAT_VERSION,
+} from "./file-store-format.js";
 
 export type TaskfoldFileStoresOptions = {
   /** One project's `.taskfold/` root, e.g. `resolveTaskfoldDataDir(board.defaultWorkspace)`.
@@ -155,6 +163,22 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     cardsDir: layout.cardsDir,
     cardCodec,
   }));
+  // 卡片图片：`attachments/<卡 uuid>/`，自己在写入时检查格式版本并惰性升到 3。
+  const cardImages = createTaskfoldFileCardImageStore({
+    attachmentsDir: layout.attachmentsDir,
+    locksDir: layout.locksDir,
+    configPath: layout.configPath,
+  });
+
+  // 状态定义：单项目后端，`boardId` 无关紧要（OpenClaw 的多项目路由在 project-routed-stores.ts）。
+  const statusConfigStore = createTaskfoldFileStatusConfigStore({
+    configPath: layout.configPath,
+    locksDir: layout.locksDir,
+  });
+  const statusConfig: TaskfoldStatusConfigPort = {
+    read: async () => statusConfigStore.read(),
+    write: async (_boardId, definitions) => await statusConfigStore.write(definitions),
+  };
 
   // `changeEpoch` is a value, not a function: evaluated once, right here, at factory
   // construction time -- see file-store-change-cursor.ts's `ensureFileChangeEpoch` for
@@ -176,6 +200,8 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     documents,
     subscriptions,
     attachments,
+    cardImages,
+    statusConfig,
     dataVersion: externalChangeReconciler.dataVersion,
     changeEpoch,
     reserveChangeRevisions: (count: number) => {

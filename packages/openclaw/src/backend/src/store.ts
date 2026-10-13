@@ -8,7 +8,9 @@ import type {
   PersistedTaskfoldNotificationSubscription,
   PersistedTaskfoldProjectDocument,
   TaskfoldKeyedStore,
+  TaskfoldStatusConfigPort,
 } from "@taskfold/core/persistence-types.js";
+import type { TaskfoldCardImageStore } from "@taskfold/core/file-store-card-images.js";
 import { TaskfoldDispatchStore } from "@taskfold/core/store-dispatch.js";
 import type { TaskfoldChangeSource } from "@taskfold/core/store-change-tracker.js";
 
@@ -31,6 +33,10 @@ export type TaskfoldBackendStores = {
   documents: TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>;
   subscriptions: TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>;
   attachments: TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+  /** 卡片图片（`attachments/<卡 uuid>/`）；文件后端给出，内存 store 不带。 */
+  cardImages?: TaskfoldCardImageStore;
+  /** 各项目的状态定义（`.taskfold/config.yml` 的 `statuses`）；内存 store 不带，用过渡默认集。 */
+  statusConfig?: TaskfoldStatusConfigPort;
   dataVersion?: () => number;
   changeEpoch?: string;
   reserveChangeRevisions?: (count: number) => number;
@@ -59,6 +65,8 @@ export class TaskfoldStore extends TaskfoldDispatchStore {
       documents: stores.documents,
       subscriptions: stores.subscriptions,
       attachments: stores.attachments,
+      ...(stores.cardImages ? { cardImages: stores.cardImages } : {}),
+      ...(stores.statusConfig ? { statusConfig: stores.statusConfig } : {}),
       dataVersion: stores.dataVersion,
       changeEpoch: stores.changeEpoch,
       reserveChangeRevisions: stores.reserveChangeRevisions,

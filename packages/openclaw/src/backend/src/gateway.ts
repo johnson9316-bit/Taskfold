@@ -811,6 +811,40 @@ export function registerTaskfoldGatewayMethods(params: {
     { scope: WRITE_SCOPE },
   );
 
+  // 卡片图片（粘贴进 notes / 评论的截图）：存在 `.taskfold/attachments/<卡 uuid>/`，
+  // 不动卡片本身。大小不设业务上限，受网关单帧 25 MiB（base64 后）限制。
+  api.registerGatewayMethod(
+    "taskfold.cards.images.add",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, await store.addCardImage(readId(requestParams), requestParams));
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
+  );
+
+  api.registerGatewayMethod(
+    "taskfold.cards.images.get",
+    async ({ params: requestParams, respond }) => {
+      try {
+        const name = requestParams.name;
+        if (typeof name !== "string" || !name.trim()) {
+          throw new Error("name is required.");
+        }
+        const image = await store.getCardImage(readId(requestParams), name);
+        if (!image) {
+          throw new Error(`card image not found: ${name.trim()}`);
+        }
+        respond(true, image);
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE },
+  );
+
   api.registerGatewayMethod(
     "taskfold.cards.workerLog",
     async ({ params: requestParams, respond }) => {

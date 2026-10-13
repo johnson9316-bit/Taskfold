@@ -6,6 +6,7 @@ import type {
   TaskfoldWorkerLog,
 } from "./contract/index.js";
 import type { PersistedTaskfoldAttachment } from "./persistence-types.js";
+import { taskfoldCardImageRef, type TaskfoldCardImageStore } from "./file-store-card-images.js";
 import {
   assertCanMutateClaimedCard,
   capText,
@@ -24,6 +25,9 @@ import { TaskfoldCoreStore } from "./store-core.js";
 import type {
   TaskfoldArtifactInput,
   TaskfoldAttachmentInput,
+  TaskfoldCardImageContent,
+  TaskfoldCardImageInput,
+  TaskfoldCardImageResult,
   TaskfoldMutationScope,
   TaskfoldProofInput,
   TaskfoldProtocolViolationInput,
@@ -34,6 +38,7 @@ import {
   normalizeArtifact,
   normalizeAttachmentInput,
   normalizeBoundedString,
+  normalizeCardImageInput,
   normalizeProofInput,
 } from "./store-normalizers.js";
 
@@ -178,6 +183,43 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
         throw error;
       }
     }));
+  }
+
+  /**
+   * 给卡片存一张图（粘贴进 notes / 评论的截图），写到 `attachments/<卡 uuid>/`。
+   * 不动卡片本身（不涨 revision）：文件夹就是真相，引用由调用方写进 Markdown。
+   * `id` 必须是卡 uuid。大小不设业务上限（受调用方传输层限制）。
+   */
+  async addCardImage(id: string, input: TaskfoldCardImageInput): Promise<TaskfoldCardImageResult> {
+    const images = this.requireCardImageStore();
+    const card = await this.get(id);
+    if (!card) {
+      throw new Error(`card not found: ${id}`);
+    }
+    const { extension, bytes, mimeType } = normalizeCardImageInput(input);
+    const name = await images.put(card.id, extension, bytes);
+    return {
+      cardId: card.id,
+      name,
+      ref: taskfoldCardImageRef(card.id, name),
+      mimeType,
+      byteSize: bytes.byteLength,
+    };
+  }
+
+  async getCardImage(id: string, name: string): Promise<TaskfoldCardImageContent | undefined> {
+    const images = this.requireCardImageStore();
+    const image = await images.get(id.trim(), name.trim());
+    return image
+      ? { name: name.trim(), mimeType: image.mimeType, contentBase64: Buffer.from(image.bytes).toString("base64") }
+      : undefined;
+  }
+
+  private requireCardImageStore(): TaskfoldCardImageStore {
+    if (!this.cardImageStore) {
+      throw new Error("card images are not supported by this store backend");
+    }
+    return this.cardImageStore;
   }
 
   async listAttachments(id: string): Promise<{

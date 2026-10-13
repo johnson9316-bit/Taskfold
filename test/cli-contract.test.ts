@@ -38,7 +38,7 @@ const CARD_SUMMARY_KEYS = [
 ];
 const CARD_DETAIL_KEYS = [...CARD_SUMMARY_KEYS, "notes"].toSorted();
 
-const COMMANDS = ["init", "list", "show", "create", "update", "delete", "boards", "instructions", "guidelines"];
+const COMMANDS = ["init", "list", "show", "create", "update", "delete", "attach", "boards", "instructions", "guidelines"];
 
 let bundle: string;
 
@@ -154,6 +154,40 @@ describe("taskfold --json：每个 kind 的形状", () => {
     const deleted = await runJson(bundle, ["delete", created.card.displayId], { cwd: repo });
     expect(deleted).toEqual({ schemaVersion: 1, kind: "card-deleted", id: created.card.id });
     expect((await runJson(bundle, ["list"], { cwd: repo })).cards).toEqual([]);
+  });
+
+  it("card-images（attach）：图片落到卡片文件夹，可选追加到 notes；非图片 / 缺文件报 INVALID_ARGUMENT", async () => {
+    const repo = await initializedRepo();
+    const created = await runJson(bundle, ["create", "有截图的卡"], { cwd: repo });
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    fs.writeFileSync(path.join(repo, "shot.png"), png);
+    fs.writeFileSync(path.join(repo, "notes.txt"), "not an image");
+
+    const attached = await runJson(bundle, ["attach", created.card.displayId, "shot.png"], { cwd: repo });
+    expect(keys(attached)).toEqual(["card", "cardId", "images", "kind", "schemaVersion"]);
+    expect(attached).toMatchObject({ kind: "card-images", cardId: created.card.id, card: null });
+    expect(attached.images).toHaveLength(1);
+    expect(keys(attached.images[0])).toEqual(["byteSize", "file", "markdown", "mimeType", "name", "ref"]);
+    const [image] = attached.images;
+    expect(image).toMatchObject({ file: "shot.png", mimeType: "image/png", byteSize: png.byteLength });
+    expect(image.ref).toBe(`../attachments/${created.card.id}/${image.name}`);
+    expect(image.markdown).toBe(`![shot](${image.ref})`);
+    expect(fs.readFileSync(path.join(repo, ".taskfold", "attachments", created.card.id, image.name)).equals(png)).toBe(true);
+    // 第一张图把项目升到格式版本 3。
+    expect(fs.readFileSync(path.join(repo, ".taskfold", "config.yml"), "utf8")).toMatch(/^format_version: 3$/m);
+    // 默认不动卡片。
+    expect((await runJson(bundle, ["show", created.card.displayId], { cwd: repo })).card.notes).toBe("");
+
+    const appended = await runJson(bundle, ["attach", created.card.displayId, "shot.png", "--append-notes"], { cwd: repo });
+    expect(appended.card.notes).toBe(appended.images[0].markdown);
+    expect(appended.card.revision).toBe(created.card.revision + 1);
+
+    await expectError(["attach", created.card.displayId, "notes.txt"], repo, "INVALID_ARGUMENT");
+    await expectError(["attach", created.card.displayId, "missing.png"], repo, "INVALID_ARGUMENT");
+    await expectError(["attach", "card-999", "shot.png"], repo, "NOT_FOUND");
+
+    await runJson(bundle, ["delete", created.card.displayId], { cwd: repo });
+    expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", created.card.id))).toBe(false);
   });
 
   it("board-list", async () => {

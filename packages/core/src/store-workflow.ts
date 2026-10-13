@@ -802,7 +802,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       const status =
         input.status === undefined
           ? existing.status
-          : normalizeStatus(input.status, existing.status);
+          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const claim = existing.metadata?.claim;
       if (claim) {
         assertClaimIdentity(claim, input);
@@ -1011,7 +1011,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       const status =
         input.status === undefined
           ? existing.status
-          : normalizeStatus(input.status, existing.status);
+          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const reason = normalizeBoundedString(input.reason, undefined, 1000, "reassign reason");
       const shouldResetFailures = input.resetFailures !== false;
       const baseMetadata = shouldResetFailures
@@ -1055,7 +1055,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           ? existing.status === "running"
             ? "ready"
             : existing.status
-          : normalizeStatus(input.status, existing.status);
+          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const reclaimed = await this.updateCard(
         id,
         {
@@ -1105,7 +1105,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       ) {
         throw new Error("only triage, backlog, or todo cards can be specified.");
       }
-      const requestedStatus = normalizeStatus(input.status, "todo");
+      const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
+      const requestedStatus = normalizeStatus(input.status, "todo", statusRegistry);
       if (requestedStatus !== "todo") {
         throw new Error("specified cards must move to todo.");
       }

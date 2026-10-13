@@ -1,6 +1,7 @@
 // Taskfold plugin module implements persistence types behavior.
 import type {
   TaskfoldAttachment,
+  TaskfoldStatusDefinition,
   TaskfoldBoardMetadata,
   TaskfoldCard,
   TaskfoldMilestone,
@@ -110,3 +111,14 @@ export type TaskfoldKeyedStore<T = PersistedTaskfoldCard> = TaskfoldKeyedStoreBa
  * 不参与写入，也不参与 CAS。
  */
 export type TaskfoldReadOnlyKeyedStore<T> = Pick<TaskfoldKeyedStoreBase<T>, "lookup" | "entries">;
+
+/**
+ * 项目的状态定义（需求/22-状态模型，存在该项目 `.taskfold/config.yml` 的 `statuses`）。按看板 id
+ * 取：OpenClaw 一个 store 管多个项目，要路由到各项目的数据根；CLI / VS Code 只有一个项目，忽略
+ * `boardId`。`read` 返回 `undefined` 表示该项目没有配置（用默认集）。
+ */
+export type TaskfoldStatusConfigPort = {
+  read(boardId: string): Promise<TaskfoldStatusDefinition[] | undefined>;
+  /** 整体替换。首次写入会把项目升到格式版本 4。 */
+  write(boardId: string, definitions: readonly TaskfoldStatusDefinition[]): Promise<TaskfoldStatusDefinition[]>;
+};

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PersistedTaskfoldCard } from "@taskfold/core/persistence-types.js";
 import {
   createTaskfoldFileStores,
+  TASKFOLD_BASE_FORMAT_VERSION,
   TASKFOLD_FORMAT_VERSION,
   TaskfoldFormatTooNewError,
 } from "@taskfold/core/file-store.js";
@@ -107,11 +108,11 @@ describe("TASK-4 AC#3：config.yml 格式版本高于 core 时只读不写", () 
     expect(fs.readdirSync(dataDir)).toEqual(["config.yml"]);
   });
 
-  it("版本号不高于 core 时照常读写；新项目初始化时写下当前格式版本", async () => {
+  it("版本号不高于 core 时照常读写；新项目初始化时写下基础格式版本（版本 3 是写图片时才惰性升级）", async () => {
     const { dataDir, pluginDir } = tempRoots();
     const store = openStore(dataDir, pluginDir);
     expect(fs.readFileSync(path.join(dataDir, "config.yml"), "utf8")).toBe(
-      `format_version: ${TASKFOLD_FORMAT_VERSION}\n`,
+      `format_version: ${TASKFOLD_BASE_FORMAT_VERSION}\n`,
     );
     const card = await store.create({ title: "当前格式" });
     expect((await store.update(card.id, { notes: "照常写" })).notes).toBe("照常写");
@@ -125,7 +126,7 @@ describe("TASK-4 AC#3：config.yml 格式版本高于 core 时只读不写", () 
     createTaskfoldFileStores({ dataDir, pluginDir });
 
     expect(fs.readFileSync(path.join(dataDir, "config.yml"), "utf8")).toBe(
-      `project_name: "demo"\nformat_version: ${TASKFOLD_FORMAT_VERSION}\n`,
+      `project_name: "demo"\nformat_version: ${TASKFOLD_BASE_FORMAT_VERSION}\n`,
     );
   });
 });

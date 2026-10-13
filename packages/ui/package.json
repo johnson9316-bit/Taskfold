@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
+    "@milkdown/kit": "^7.22.3",
     "@taskfold/core": "0.2.0",
     "dompurify": "^3.4.12",
     "lit": "^3.3.0",

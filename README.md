@@ -144,6 +144,12 @@ version 2 keeps UUID-based associations and reads legacy milestone files. Upgrad
 all clients (OpenClaw plugin, CLI, and VS Code extension) before writing version 2:
 older clients reject writes and cannot fully read the new milestone format.
 
+Images pasted into a card (or attached with `taskfold attach`) are stored per card in
+`.taskfold/attachments/<card uuid>/`, referenced from the Markdown as
+`![alt](../attachments/<card uuid>/<name>.png)`, and removed together with the card.
+Format version 3 introduces that folder; a project is upgraded lazily, when its first
+image is written, and from then on older clients are read-only for it.
+
 From a development checkout, preview an existing project's milestone migration with
 `node scripts/migrate-milestone-names.mjs --repo /path/to/project`. Stop writers before
 applying it with `--apply --backup-dir /path/outside/project/backups`; the script

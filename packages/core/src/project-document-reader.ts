@@ -5,6 +5,11 @@ import type {
   TaskfoldProjectDocument,
   TaskfoldProjectDocumentRead,
 } from "./contract/index.js";
+import {
+  isTaskfoldDocumentImageRef,
+  taskfoldCardImageExtensionForMime,
+  taskfoldCardImageMimeType,
+} from "./card-image-ref.js";
 
 const MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
@@ -158,4 +163,114 @@ export async function writeTaskfoldProjectDocumentPath(params: {
     document: params.document,
     assertPathAllowed: params.assertPathAllowed,
   });
+}
+
+/** 文档里一张图的上限。传输层（网关一帧 25 MiB、base64 膨胀）才是真正的顶，这里只防读入过大的文件。 */
+const MAX_DOCUMENT_IMAGE_BYTES = 16 * 1024 * 1024;
+
+function documentAssetsDirName(documentFile: string): string {
+  const base = path.basename(documentFile, path.extname(documentFile));
+  return `${base}.assets`;
+}
+
+/** `(`、`)` 等在 Markdown 链接里有特殊含义，`encodeURIComponent` 不会转，手动补上。 */
+function encodeRefSegment(segment: string): string {
+  return encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
+ * 读文档里引用的一张图（相对文档所在目录）。ref 必须是相对路径、白名单图片扩展名；
+ * 解析（含符号链接）后的真实路径必须通过宿主的路径权限，所以 `../` 逃不出允许的范围。
+ */
+export async function readTaskfoldProjectDocumentAsset(params: {
+  document: TaskfoldProjectDocument;
+  ref: unknown;
+  assertPathAllowed: (filePath: string) => Promise<void>;
+}): Promise<{ mimeType: string; contentBase64: string }> {
+  if (params.document.type !== "path") {
+    throw new Error("images are only available for Markdown file documents.");
+  }
+  if (typeof params.ref !== "string" || !isTaskfoldDocumentImageRef(params.ref)) {
+    throw new Error("invalid document image reference.");
+  }
+  let relative: string;
+  try {
+    relative = decodeURIComponent(params.ref);
+  } catch {
+    throw new Error("invalid document image reference.");
+  }
+  if (relative.includes("\0") || !isTaskfoldDocumentImageRef(relative)) {
+    throw new Error("invalid document image reference.");
+  }
+  const document = await resolveProjectDocumentFile(params);
+  const target = path.resolve(path.dirname(document.path), relative);
+  let resolvedPath: string;
+  try {
+    resolvedPath = await fs.realpath(target);
+  } catch {
+    throw new Error("document image does not exist.");
+  }
+  await params.assertPathAllowed(resolvedPath);
+  const mimeType = taskfoldCardImageMimeType(path.extname(resolvedPath).slice(1));
+  if (!mimeType) {
+    throw new Error("invalid document image reference.");
+  }
+  const stat = await fs.stat(resolvedPath);
+  if (!stat.isFile()) {
+    throw new Error("document image must be a regular file.");
+  }
+  if (stat.size > MAX_DOCUMENT_IMAGE_BYTES) {
+    throw new Error("document image exceeds the size limit.");
+  }
+  return { mimeType, contentBase64: (await fs.readFile(resolvedPath)).toString("base64") };
+}
+
+/**
+ * 给文档存一张图，放在文档旁的 `<文档名>.assets/` 里，返回写进 Markdown 的相对引用。
+ * 文档文件本身不动（由编辑器随后把引用写进正文并保存）。
+ */
+export async function writeTaskfoldProjectDocumentAsset(params: {
+  document: TaskfoldProjectDocument;
+  fileName?: unknown;
+  mimeType?: unknown;
+  contentBase64?: unknown;
+  assertPathAllowed: (filePath: string) => Promise<void>;
+}): Promise<{ ref: string; name: string; mimeType: string; byteSize: number }> {
+  if (params.document.type !== "path") {
+    throw new Error("images are only available for Markdown file documents.");
+  }
+  const content = typeof params.contentBase64 === "string" ? params.contentBase64 : "";
+  if (!content || !/^[A-Za-z0-9+/]*={0,2}$/.test(content) || content.length % 4 !== 0) {
+    throw new Error("document image contentBase64 must be canonical base64.");
+  }
+  const bytes = Buffer.from(content, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== content) {
+    throw new Error("document image contentBase64 must be canonical base64.");
+  }
+  const fileName = typeof params.fileName === "string" ? params.fileName.trim() : "";
+  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
+  const extension =
+    (typeof params.mimeType === "string" ? taskfoldCardImageExtensionForMime(params.mimeType) : undefined) ??
+    (taskfoldCardImageMimeType(fileExtension) ? fileExtension : undefined);
+  if (!extension) {
+    throw new Error("document image must be png, jpeg, gif, webp, avif or bmp.");
+  }
+  // 文档文件本身已通过路径权限；图片放在它旁边的子目录里，不会跳出同一个目录。
+  const document = await resolveProjectDocumentFile(params);
+  const directory = path.dirname(document.path);
+  const assetsDirName = documentAssetsDirName(document.path);
+  const assetsDir = path.join(directory, assetsDirName);
+  const existing = await fs.lstat(assetsDir).catch(() => undefined);
+  if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) {
+    throw new Error(`${assetsDirName} must be a regular directory.`);
+  }
+  await fs.mkdir(assetsDir, { recursive: true });
+  const name = `img-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}.${extension}`;
+  await fs.writeFile(path.join(assetsDir, name), bytes, { flag: "wx", mode: 0o644 });
+  return {
+    ref: `${encodeRefSegment(assetsDirName)}/${name}`,
+    name,
+    mimeType: taskfoldCardImageMimeType(extension)!,
+    byteSize: bytes.byteLength,
+  };
 }

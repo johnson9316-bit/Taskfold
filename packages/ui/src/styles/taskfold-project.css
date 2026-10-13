@@ -2,7 +2,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-height: 0;
 }
 
@@ -14,11 +14,9 @@
 .taskfold-project__detail-panel > header,
 .taskfold-project__detail-panel > footer,
 .taskfold-project__document,
-.taskfold-project__card-footer,
 .taskfold-project__overview-item-top,
 .taskfold-project__heading-actions,
-.taskfold-project__topbar-actions,
-.taskfold-project__column-actions {
+.taskfold-project__topbar-actions {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -125,13 +123,35 @@
   width: 24px;
 }
 
-.taskfold-project__project-toolbar {
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 2px 10px;
+.taskfold-project__switcher {
+  position: relative;
+}
+
+.taskfold-project__switcher-menu {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  display: grid;
+  gap: 6px;
+  min-width: 280px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+}
+
+.taskfold-project__switcher-menu .taskfold-project__project-list {
+  display: grid;
+  gap: 2px;
+  max-height: min(320px, 50vh);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.taskfold-project__switcher-menu .taskfold-project__search {
+  flex: none;
 }
 
 .taskfold-project__nav-item,
@@ -268,7 +288,7 @@
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .taskfold-project__tabs button {
@@ -276,7 +296,7 @@
   border: 0;
   border-bottom: 2px solid transparent;
   color: var(--muted);
-  min-height: 35px;
+  min-height: 30px;
   padding: 0 2px;
 }
 
@@ -287,8 +307,33 @@
 }
 
 .taskfold-project__section-heading {
+  flex-wrap: wrap;
   justify-content: space-between;
   margin-bottom: 18px;
+}
+
+/* 看板页：标题、分列/排序控制、按钮压成一行，描述放在标题下面一行小字。 */
+.taskfold-project__board > .taskfold-project__section-heading {
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+
+.taskfold-project__board > .taskfold-project__section-heading h1 {
+  font-size: 17px;
+}
+
+.taskfold-project__board > .taskfold-project__section-heading p {
+  font-size: 12px;
+  margin-top: 2px;
+  max-width: 46ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskfold-project__add-column {
+  align-self: start;
+  display: grid;
 }
 
 .taskfold-project__section-heading h1 {
@@ -309,25 +354,24 @@
 }
 
 .taskfold-project__board-controls {
-  align-items: end;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
-  padding: 0 0 12px;
+  margin-left: auto;
 }
 
 .taskfold-project__board-controls label {
+  align-items: center;
   color: var(--muted);
-  display: grid;
+  display: flex;
   font-size: 11px;
-  gap: 4px;
-  min-width: 138px;
+  gap: 6px;
 }
 
 .taskfold-project__board-controls select {
-  min-height: 31px;
+  min-height: 28px;
+  padding-block: 2px;
 }
 
 .taskfold-project__overview-grid {
@@ -414,24 +458,35 @@
 }
 
 .taskfold-project__kanban {
+  --tf-board-offset: 380px;
+  align-items: stretch;
   display: grid;
   gap: 12px;
-  grid-auto-columns: minmax(min(280px, 100%), 1fr);
+  grid-auto-columns: 280px;
   grid-auto-flow: column;
+  /* --tf-board-height 由 lib/fit-viewport.ts 按实际位置量出来；量不到时（脚本未跑）退回固定偏移。 */
+  height: var(--tf-board-height, max(360px, calc(100vh - var(--tf-board-offset))));
   min-width: 0;
   max-width: 100%;
-  min-height: calc(100vh - 180px);
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 8px;
 }
 
 .taskfold-project__column {
-  background: color-mix(in srgb, var(--panel) 74%, var(--bg) 26%);
-  border: 1px solid var(--border);
+  /* 列底比页面底略深（深色主题里略浅），卡片是更亮的 elevated 色，三层才分得开。 */
+  background: color-mix(in srgb, var(--text) 6%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 6px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
+}
+
+.taskfold-project__column.tf-is-drag-over {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-color: var(--accent);
 }
 
 .taskfold-project__column.tf-is-completed,
@@ -440,23 +495,21 @@
 }
 
 .taskfold-project__column-header {
-  align-items: stretch;
-  flex-direction: column;
-  border-bottom: 1px solid var(--border);
-  justify-content: space-between;
-  min-height: 58px;
-  padding: 10px;
-}
-
-.taskfold-project__column-heading {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 6px 6px 10px;
 }
 
 .taskfold-project__column-header h2 {
   font-size: 13px;
   line-height: 1.2;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskfold-project__column-title-button {
@@ -468,29 +521,55 @@
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
   padding: 0;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskfold-project__column-title-button:hover {
   color: var(--accent);
 }
 
-.taskfold-project__column-subtitle {
+.taskfold-project__column-count {
   color: var(--muted);
-  display: block;
-  font-size: 11px;
-  margin-top: 4px;
-}
-
-.taskfold-project__column-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.taskfold-project__column-actions .taskfold-project__icon-button {
   flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.taskfold-project__column-state {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  border-radius: 3px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+/* 列菜单：悬停、聚焦或展开时才出现，列头保持一行。 */
+.taskfold-project__column-menu {
+  margin-left: auto;
+  opacity: 0;
+  position: relative;
+}
+
+.taskfold-project__column-header:hover .taskfold-project__column-menu,
+.taskfold-project__column-menu:focus-within,
+.taskfold-project__column-menu.is-open {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .taskfold-project__column-menu {
+    opacity: 1;
+  }
+}
+
+.taskfold-project__column-menu .taskfold-project__icon-button {
+  height: 26px;
+  width: 26px;
 }
 
 .taskfold-project__column button:focus-visible {
@@ -498,27 +577,155 @@
   outline-offset: 2px;
 }
 
-.taskfold-project__column-actions .taskfold-project__order-actions {
-  margin-right: 2px;
-}
-
 .taskfold-project__card-list {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
-  min-height: 120px;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
   padding: 8px;
 }
 
 .taskfold-project__card {
+  align-items: flex-start;
   background: var(--bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
+  cursor: grab;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 8px;
+  position: relative;
+}
+
+.taskfold-project__card.tf-is-dragging {
+  opacity: 0.45;
+}
+
+/* 完成的卡整张退后：标题变灰、不加粗，不再显示备注预览（对已完成的卡没有信息量）。 */
+.taskfold-project__card.tf-is-done .taskfold-project__card-main {
+  opacity: 0.6;
+}
+
+.taskfold-project__card.tf-is-done .taskfold-project__card-title {
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: line-through;
+}
+
+.taskfold-project__card.tf-is-done .taskfold-project__card-notes {
+  display: none;
+}
+
+.taskfold-project__card.tf-is-done .taskfold-project__priority {
+  opacity: 0.4;
+}
+
+.taskfold-project .taskfold-project__card-check {
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 2px 0 0;
+  min-height: 0;
+  padding: 0;
+  width: 14px;
+}
+
+.taskfold-project__card-order {
+  display: none;
+  flex: 0 0 auto;
+}
+
+.taskfold-project__card:hover .taskfold-project__card-order,
+.taskfold-project__card:focus-within .taskfold-project__card-order {
+  display: block;
+}
+
+.taskfold-project__card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  grid-column: 2;
+}
+
+.taskfold-project__label {
+  background: color-mix(in srgb, var(--tf-label, var(--muted)) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tf-label, var(--muted)) 45%, var(--border));
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskfold-project__label.tf-label-0 { --tf-label: var(--accent); }
+.taskfold-project__label.tf-label-1 { --tf-label: var(--info); }
+.taskfold-project__label.tf-label-2 { --tf-label: var(--success); }
+.taskfold-project__label.tf-label-3 { --tf-label: var(--warn); }
+.taskfold-project__label.tf-label-4 { --tf-label: var(--danger); }
+.taskfold-project__label.tf-label-5 { --tf-label: #9a7be0; }
+
+.taskfold-project__quick-add {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.taskfold-project__quick-add:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.taskfold-project__quick-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.taskfold-project__quick-input {
+  flex: 0 0 auto;
+  font-size: 13px;
+  min-height: 32px;
+  width: 100%;
+}
+
+.taskfold-project__segmented {
   border: 1px solid var(--border);
   border-radius: 5px;
-  cursor: grab;
-  min-height: 86px;
-  padding: 12px;
-  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.taskfold-project__segmented button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  min-height: 31px;
+  padding: 0 12px;
+}
+
+.taskfold-project__segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+.taskfold-project__segmented button.tf-is-active {
+  background: var(--panel-strong);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .taskfold-project__card:hover {
@@ -644,11 +851,12 @@ taskfold-graph-canvas,
   border: 0;
   color: var(--text);
   display: grid;
-  gap: 5px;
+  flex: 1;
+  gap: 4px 5px;
   grid-template-columns: 8px minmax(0, 1fr);
+  min-width: 0;
   padding: 0;
   text-align: left;
-  width: 100%;
 }
 
 .taskfold-project__priority {
@@ -694,61 +902,6 @@ taskfold-graph-canvas,
   font-size: 10px;
   line-height: 1.2;
   padding: 2px 4px;
-}
-
-.taskfold-project__card-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.taskfold-project__card-footer > .taskfold-project__order-actions {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.taskfold-project__card-footer > select {
-  min-width: 0;
-  font-size: 12px;
-  min-height: 30px;
-  padding: 4px 8px;
-}
-
-.taskfold-project__card-footer > select:first-child {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.taskfold-project__card-footer > select:first-child:nth-last-child(2) {
-  grid-column: 1 / -1;
-}
-
-.taskfold-project__card-footer > select:hover:not(:disabled) {
-  border-color: var(--border-strong);
-}
-
-.taskfold-project__card-footer > select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.taskfold-project__compact-select {
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  font-size: 10px;
-  min-height: 22px;
-  padding: 0;
-  width: auto;
-}
-
-.taskfold-project__move-card {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .taskfold-project__card-archived {
@@ -1050,6 +1203,147 @@ select.taskfold-project__document-source-filter {
   border-top: 1px solid var(--border);
   justify-content: flex-end;
   padding-top: 10px;
+}
+
+/* ---- <taskfold-markdown-editor>：卡片 notes / 评论 / 新建卡片的所见即所得编辑框 ----
+   编辑器库不注入任何样式（VS Code Webview 的 CSP 不允许 <style> 与 style 属性），这里全包。 */
+taskfold-markdown-editor {
+  display: block;
+}
+
+.taskfold-markdown-editor__toolbar {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+}
+
+.taskfold-markdown-editor__surface {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  max-height: 60vh;
+  min-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  position: relative;
+}
+
+.taskfold-markdown-editor__surface:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  outline-offset: 1px;
+}
+
+.taskfold-markdown-editor__surface[data-empty]::before {
+  color: var(--muted, var(--text));
+  content: attr(data-placeholder);
+  left: 14px;
+  opacity: 0.55;
+  pointer-events: none;
+  position: absolute;
+  top: 14px;
+}
+
+.taskfold-markdown-editor__content {
+  min-height: 130px;
+  outline: none;
+  padding: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.taskfold-markdown-editor__content > :first-child { margin-top: 0; }
+.taskfold-markdown-editor__content > :last-child { margin-bottom: 0; }
+
+.taskfold-markdown-editor__content h1,
+.taskfold-markdown-editor__content h2,
+.taskfold-markdown-editor__content h3,
+.taskfold-markdown-editor__content h4 {
+  line-height: 1.3;
+}
+
+.taskfold-markdown-editor__content h1 { font-size: 22px; }
+.taskfold-markdown-editor__content h2 { font-size: 18px; }
+.taskfold-markdown-editor__content h3 { font-size: 15px; }
+
+.taskfold-markdown-editor__content code {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.92em;
+  padding: 1px 4px;
+}
+
+.taskfold-markdown-editor__content pre {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  overflow: auto;
+  padding: 12px;
+  white-space: pre;
+}
+
+.taskfold-markdown-editor__content pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.taskfold-markdown-editor__content blockquote {
+  border-left: 3px solid var(--border);
+  margin-left: 0;
+  padding-left: 12px;
+}
+
+.taskfold-markdown-editor__content table {
+  border-collapse: collapse;
+}
+
+.taskfold-markdown-editor__content th,
+.taskfold-markdown-editor__content td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+
+.taskfold-markdown-editor__content .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+.taskfold-markdown-editor__content .ProseMirror-separator {
+  display: none;
+}
+
+.taskfold-markdown-upload {
+  color: var(--muted, var(--text));
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* 图片：编辑框与只读渲染共用。state 由编辑器 / 渲染后处理写在 data-state 上。 */
+.taskfold-markdown-image,
+.taskfold-markdown img[data-tf-ref] {
+  border: 1px solid var(--border);
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.taskfold-markdown-image:not([src]),
+.taskfold-markdown img[data-tf-ref]:not([src]) {
+  background: var(--panel-strong);
+  min-height: 48px;
+  min-width: 96px;
+}
+
+.taskfold-markdown-image[data-state="error"],
+.taskfold-markdown-image[data-state="blocked"],
+.taskfold-markdown img[data-tf-ref][data-state="error"] {
+  border-style: dashed;
 }
 
 .taskfold-markdown {
@@ -1356,7 +1650,7 @@ select.taskfold-project__document-source-filter {
 }
 
 .taskfold-project__detail-panel {
-  --openclaw-modal-width: min(520px, calc(100vw - 40px));
+  --openclaw-modal-width: min(980px, calc(100vw - 40px));
   background: var(--panel);
   display: flex;
   flex-direction: column;
@@ -1385,10 +1679,10 @@ select.taskfold-project__document-source-filter {
 }
 
 .taskfold-project__detail-notes {
-  color: var(--muted);
-  line-height: 1.5;
+  color: var(--text);
+  line-height: 1.55;
   margin: 0;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .taskfold-project__card-edit textarea {
@@ -1474,10 +1768,6 @@ taskfold-app .tf-btn.tf-btn--danger {
     justify-content: flex-start;
   }
 
-  .taskfold-project__project-toolbar {
-    align-items: stretch;
-  }
-
   .taskfold-project__search {
     flex-basis: 100%;
   }
@@ -1509,5 +1799,220 @@ taskfold-app .tf-btn.tf-btn--danger {
 
   .taskfold-project__kanban {
     grid-auto-columns: min(100%, max(236px, 84vw));
+  }
+}
+
+/* 卡片详情：左右两栏（主区 + 属性栏） */
+.taskfold-project__detail-layout {
+  align-items: start;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+.taskfold-project__detail-main,
+.taskfold-project__detail-side {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.taskfold-project__detail-side {
+  align-content: start;
+  background: color-mix(in srgb, var(--panel-strong) 55%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px;
+  position: sticky;
+  top: 0;
+}
+
+.taskfold-project__detail-field {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.taskfold-project__detail-field strong {
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.taskfold-project__detail-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.taskfold-project__card-menu {
+  position: relative;
+}
+
+.taskfold-project__card-menu-list {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  display: grid;
+  min-width: 120px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 2;
+}
+
+.taskfold-project__card-menu-list button {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text);
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.taskfold-project__card-menu-list button:hover:not(:disabled) {
+  background: var(--panel-strong);
+}
+
+.taskfold-project__card-menu-list button.is-danger {
+  color: var(--danger);
+}
+
+.taskfold-project__label-editor {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.taskfold-project__label-editor .taskfold-project__label {
+  font-size: 11px;
+  padding: 2px 3px 2px 6px;
+}
+
+.taskfold-project__label-remove {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.taskfold-project__label-remove:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.taskfold-project__label-editor input {
+  flex: 1 1 90px;
+  min-width: 90px;
+}
+
+/* 折叠区块：无数据时只留一行标题 */
+details.taskfold-project__detail-section > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  list-style: none;
+}
+
+details.taskfold-project__detail-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.taskfold-project__detail-section > summary::before {
+  color: var(--muted);
+  content: "+";
+  display: inline-block;
+  text-align: center;
+  width: 12px;
+}
+
+details.taskfold-project__detail-section[open] > summary::before {
+  content: "\2212";
+}
+
+details.taskfold-project__detail-section > summary small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+details.taskfold-project__detail-section[open] {
+  gap: 10px;
+}
+
+.taskfold-project__execution-heading {
+  justify-content: flex-end;
+}
+
+/* 评论 / 变更历史 */
+.taskfold-project__activity-tabs {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+}
+
+.taskfold-project__activity-tabs button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 0 8px;
+}
+
+.taskfold-project__activity-tabs button.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.taskfold-project__comment-form {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.taskfold-project__comment-form textarea {
+  min-height: 56px;
+  resize: vertical;
+  width: 100%;
+}
+
+.taskfold-project__timeline {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.taskfold-project__timeline li {
+  border-left: 2px solid var(--border);
+  display: grid;
+  font-size: 13px;
+  gap: 3px;
+  line-height: 1.5;
+  padding-left: 10px;
+}
+
+.taskfold-project__timeline time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .taskfold-project__detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .taskfold-project__detail-side {
+    order: -1;
+    position: static;
   }
 }

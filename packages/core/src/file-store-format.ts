@@ -16,7 +16,24 @@ import { createFileExclusive, readFileIfExists, writeFileAtomic } from "./file-s
  * `TASKFOLD_LOCK_STALE_MS` / `TASKFOLD_LOCK_UPDATE_MS` 改动一次就视为一次格式升级
  * （参数不一致 proper-lockfile 检测不到，只能靠版本号把旧 core 挡在只读模式里）。
  */
-export const TASKFOLD_FORMAT_VERSION = 2;
+export const TASKFOLD_FORMAT_VERSION = 4;
+
+/**
+ * 新项目、以及没用到新格式特性的项目所写的版本。版本 3（`attachments/<卡uuid>/` 卡片图片目录）
+ * 是惰性升级：只在某个项目第一次写图片时才升（{@link TASKFOLD_CARD_IMAGES_FORMAT_VERSION}），
+ * 在此之前其他客户端的旧版 core 照常读写。
+ */
+export const TASKFOLD_BASE_FORMAT_VERSION = 2;
+
+/** 卡片图片目录（`attachments/<卡uuid>/<文件>`）所需的格式版本；旧版 core 删卡不会清这个目录。 */
+export const TASKFOLD_CARD_IMAGES_FORMAT_VERSION = 3;
+
+/**
+ * 状态模型（需求/22-状态模型）所需的格式版本：`config.yml` 里有自定义 `statuses`，卡片的状态 id
+ * 随之不再限于旧的九个值，还带了阻塞 / 派发标记。旧版 core 不认这些，会写坏数据，所以首次写入
+ * `statuses`（或迁移）时才惰性升到 4，在此之前其他客户端的旧版 core 照常读写。
+ */
+export const TASKFOLD_STATUS_MODEL_FORMAT_VERSION = 4;
 
 const FORMAT_VERSION_KEY = "format_version";
 const FORMAT_VERSION_LINE = /^format_version:(.*)$/m;
@@ -71,7 +88,7 @@ export function assertTaskfoldFormatWritable(configPath: string): void {
 
 /** 初始化：config.yml 不存在就建一份，存在但没有版本键就补一行。已有版本键时不动。 */
 export function ensureTaskfoldFormatVersion(configPath: string): void {
-  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}\n`;
+  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_BASE_FORMAT_VERSION}\n`;
   if (createFileExclusive(configPath, line)) {
     return;
   }
@@ -83,12 +100,18 @@ export function ensureTaskfoldFormatVersion(configPath: string): void {
   fs.appendFileSync(configPath, `${separator}${line}`);
 }
 
-/** 调用方持有全局锁；在写入新格式阶段之前升级版本，保留其他配置及行尾注释。 */
-export function upgradeTaskfoldFormatVersion(configPath: string, assertHeld: () => void): void {
+/** 调用方持有全局锁；在写入新格式阶段之前升级到 `target`（默认 {@link TASKFOLD_BASE_FORMAT_VERSION}），
+ * 保留其他配置及行尾注释。已经 >= `target` 时不动，绝不降级。 */
+export function upgradeTaskfoldFormatVersion(
+  configPath: string,
+  assertHeld: () => void,
+  target: number = TASKFOLD_BASE_FORMAT_VERSION,
+): void {
   assertTaskfoldFormatWritable(configPath);
-  if (readFormatVersion(configPath) === TASKFOLD_FORMAT_VERSION) return;
+  const current = readFormatVersion(configPath);
+  if (typeof current === "number" && current >= target) return;
   const existing = readFileIfExists(configPath) ?? "";
-  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}`;
+  const line = `${FORMAT_VERSION_KEY}: ${target}`;
   const content = FORMAT_VERSION_LINE.test(existing)
     ? existing.replace(FORMAT_VERSION_LINE, (match) => line + (match.match(/\s+#.*$/)?.[0] ?? ""))
     : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${line}\n`;

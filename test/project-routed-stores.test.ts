@@ -121,6 +121,20 @@ describe("组合 store：跨项目移卡", () => {
     expect((await store.list()).filter((c) => c.id === card.id)).toHaveLength(1);
   });
 
+  it("卡片图片文件夹跟着卡走：新项目里读得到，旧项目里的被清掉", async () => {
+    const { pluginDir, repo, store, card, targetMilestoneId } = await cardToMove();
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    const added = await store.addCardImage(card.id, { fileName: "a.png", contentBase64: png.toString("base64") });
+    expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", card.id, added.name))).toBe(true);
+
+    await store.moveProject(card.id, { boardId: "no-ws", milestoneId: targetMilestoneId });
+
+    expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", card.id))).toBe(false);
+    expect(fs.existsSync(path.join(pluginDir, "projects", "no-ws", "attachments", card.id, added.name))).toBe(true);
+    const content = await store.getCardImage(card.id, added.name);
+    expect(Buffer.from(content!.contentBase64, "base64").equals(png)).toBe(true);
+  });
+
   it("旧副本删不掉：两边都在，按 revision 取新写的那份，并告警写出两边的位置", async () => {
     const { pluginDir, repo, store, open, warnings, card, targetMilestoneId } = await cardToMove();
     const oldCardsDir = path.join(repo, ".taskfold", "cards");

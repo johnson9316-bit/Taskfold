@@ -9,7 +9,7 @@
 // - 确认框用 `window.confirm`；
 // - 能力开关：执行、项目管理、资料库打开；卡片 CAS、编辑模式、打开原文件关闭。
 import type { ControlUiHost } from "openclaw/plugin-sdk/control-ui";
-import type { TaskfoldHost, TaskfoldHostEvent } from "./host.ts";
+import type { TaskfoldHost, TaskfoldHostEvent, TaskfoldRoute } from "./host.ts";
 import { resolveInitialTaskfoldLocale, type TaskfoldLocalePreference } from "./i18n/index.ts";
 import { getSafeLocalStorage } from "./local-storage.ts";
 
@@ -84,7 +84,7 @@ export function createOpenClawLocalePreference(readHostLocale: () => unknown): T
   };
 }
 
-export function createOpenClawTaskfoldHost(host: ControlUiHost): TaskfoldHost {
+export function createOpenClawTaskfoldHost(host: ControlUiHost, route?: TaskfoldRoute): TaskfoldHost {
   const listeners = new Set<(event: TaskfoldHostEvent) => void>();
   let unsubscribeHost: (() => void) | undefined;
   // 长轮询看到的连接状态，只在 `syncConnection()` 里更新，与原先组件里的
@@ -168,13 +168,15 @@ export function createOpenClawTaskfoldHost(host: ControlUiHost): TaskfoldHost {
       return host.connection.connected;
     },
     locale: createOpenClawLocalePreference(() => host.locale),
+    ...(route ? { route } : {}),
     confirm: async (message) => window.confirm(message),
     capabilities: {
       execution: true,
-      // 网关的 move / moveMilestone 不接收 expectedRevision；前端 CAS 与编辑模式等 OpenClaw
-      // 后端改到文件存储后再一起打开（TASK-8）。
+      // 网关的 move / moveMilestone 不接收 expectedRevision，所以拖拽、状态下拉不做 CAS。
+      // `cards.update` 接收 expectedRevision，冲突时返回错误（"reload it before saving"）：
+      // 编辑模式保存时带上基准 revision，冲突原因显示在编辑表单里，草稿保留。
       cardRevisionCheck: false,
-      cardEditing: false,
+      cardEditing: true,
       projectManagement: true,
       documents: true,
       openCardFile: false,

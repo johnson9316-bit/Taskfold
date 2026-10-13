@@ -16,6 +16,7 @@ import {
   writeFileAtomic,
 } from "./file-store-atomic.js";
 import { allocateNextTaskfoldCardId } from "./file-store-card-id.js";
+import { removeTaskfoldCardImageDir } from "./file-store-card-images.js";
 import {
   cardRuntimePath,
   hashCardFileContent,
@@ -312,6 +313,8 @@ export function createTaskfoldFileCardStore(options: {
       for (const attachment of card.card?.metadata?.attachments ?? []) {
         removeFileIfExists(path.join(attachmentsDir, attachment.id));
       }
+      // 卡片图片（粘贴进 notes / 评论的截图）：整个 `attachments/<卡 uuid>/` 文件夹一起删。
+      removeTaskfoldCardImageDir(attachmentsDir, key);
       return true;
     },
 

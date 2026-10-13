@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
-import { assertTaskfoldFormatWritable, TASKFOLD_FORMAT_VERSION } from "@taskfold/core/file-store-format.js";
+import { assertTaskfoldFormatWritable, TASKFOLD_BASE_FORMAT_VERSION } from "@taskfold/core/file-store-format.js";
 import { resolveTaskfoldMainCheckoutPath } from "@taskfold/core/file-store-path-resolver.js";
 import { TaskfoldProjectStore } from "@taskfold/core/store-projects.js";
 import { TaskfoldCliError } from "./errors.js";
@@ -105,7 +105,7 @@ export function initTaskfoldProject(cwd: string): TaskfoldInitResult {
     assertTaskfoldFormatWritable(path.join(dataDir, "config.yml"));
   }
   createTaskfoldFileStores({ dataDir }).close();
-  return { dataDir, created: !existed, formatVersion: TASKFOLD_FORMAT_VERSION };
+  return { dataDir, created: !existed, formatVersion: TASKFOLD_BASE_FORMAT_VERSION };
 }
 
 export type TaskfoldProject = {

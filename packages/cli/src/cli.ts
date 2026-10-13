@@ -549,6 +549,94 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     });
 
   program
+    .command("attach")
+    .argument("<id>", "card UUID, unique UUID prefix, or card-N display number")
+    .argument("<file...>", "image file(s): png, jpg, gif, webp, avif or bmp")
+    .description(
+      "store image(s) in the card's folder under .taskfold/attachments/ and print the Markdown to reference them",
+    )
+    .option("--append-notes", "also append the image Markdown to the card body")
+    .option("--json", "print one JSON object (kind: card-images)")
+    .addHelpText(
+      "after",
+      helpText({
+        reads: "the image files you pass, and the card's file under .taskfold/cards/",
+        writes:
+          ".taskfold/attachments/<card uuid>/<name>.<ext> (the first image upgrades the project to\n" +
+          "          format_version 3: older Taskfold clients become read-only for it). With --append-notes,\n" +
+          "          also the card's file. There is no size limit.",
+        examples: [
+          "taskfold attach card-3 shot.png",
+          "taskfold attach card-3 a.png b.png --append-notes --json",
+        ],
+      }),
+    )
+    .action(async (id: string, files: string[], options: JsonFlag & { appendNotes?: boolean }) => {
+      await withProject(
+        run,
+        async (store, displayIds) => {
+          const target = await resolveCard(store, id, displayIds);
+          const images: Array<{
+            file: string;
+            name: string;
+            ref: string;
+            markdown: string;
+            mimeType: string;
+            byteSize: number;
+          }> = [];
+          for (const file of files) {
+            let bytes: Buffer;
+            try {
+              bytes = fs.readFileSync(path.resolve(run.cwd, file));
+            } catch (error) {
+              throw new TaskfoldCliError("INVALID_ARGUMENT", `cannot read ${file}: ${(error as Error).message}`);
+            }
+            let stored;
+            try {
+              stored = await store.addCardImage(target.id, {
+                fileName: path.basename(file),
+                contentBase64: bytes.toString("base64"),
+              });
+            } catch (error) {
+              // 非图片 / 空文件是输入问题，不是内部错误。
+              if (/^card image /.test((error as Error).message)) {
+                throw new TaskfoldCliError("INVALID_ARGUMENT", `${file}: ${(error as Error).message}`);
+              }
+              throw error;
+            }
+            const alt = path.basename(file, path.extname(file));
+            images.push({
+              file,
+              name: stored.name,
+              ref: stored.ref,
+              markdown: `![${alt}](${stored.ref})`,
+              mimeType: stored.mimeType,
+              byteSize: stored.byteSize,
+            });
+          }
+          let card: TaskfoldCard | undefined;
+          if (options.appendNotes) {
+            const addition = images.map((image) => image.markdown).join("\n\n");
+            card = await updateCardWithRetry(store, target.id, (current) => ({
+              notes: current.notes?.trim() ? `${current.notes.trimEnd()}\n\n${addition}` : addition,
+            }));
+          }
+          if (options.json) {
+            out.json("card-images", {
+              cardId: target.id,
+              images,
+              card: card ? toCardDetail(card, displayIds) : null,
+            });
+            return;
+          }
+          for (const image of images) {
+            out.line(image.markdown);
+          }
+        }
+      );
+    });
+
+  program
     .command("boards")
     .description("list the boards that have cards, with counts, and the default board for `create`")
     .option("--json", "print one JSON object (kind: board-list)")

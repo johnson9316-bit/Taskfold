@@ -370,14 +370,14 @@ export function createTaskfoldVscodeMethods(deps: {
     "taskfold.cards.create": async (params) => {
       const project = await registry.byKey(params.boardId);
       const card = await project.store.create({
-        ...pick(params, ["title", "notes", "status", "priority", "agentId", "milestoneId", "requirementId", "kind", "parents"]),
+        ...pick(params, ["title", "notes", "status", "priority", "agentId", "labels", "milestoneId", "requirementId", "kind", "parents"]),
         boardId: project.boardId,
       });
       return cardResult(project, card);
     },
 
     "taskfold.cards.update": cardMethod(async (project, card, params) => {
-      const patch = pick(params, ["title", "notes", "priority", "delivery"]);
+      const patch = pick(params, ["title", "notes", "priority", "agentId", "labels", "delivery"]);
       return await writeCard(
         project,
         card.id,
@@ -385,7 +385,7 @@ export function createTaskfoldVscodeMethods(deps: {
         async (expectedRevision) =>
           await project.store.update(card.id, patch, expectedRevision === undefined ? {} : { expectedRevision }),
         (latest) => {
-          const local: TaskfoldCard = { ...latest, ...pick(patch, ["title", "notes", "priority"]) };
+          const local: TaskfoldCard = { ...latest, ...pick(patch, ["title", "notes", "priority", "agentId", "labels"]) };
           if (patch.delivery !== undefined) {
             try {
               local.delivery = normalizeDelivery(patch.delivery, latest.delivery);
@@ -443,6 +443,29 @@ export function createTaskfoldVscodeMethods(deps: {
     "taskfold.cards.archive": cardMethod(async (project, card, params) =>
       cardResult(project, await project.store.archive(card.id, params.archived)),
     ),
+
+    "taskfold.cards.comment": cardMethod(async (project, card, params) =>
+      cardResult(project, await project.store.addComment(card.id, { body: params.body })),
+    ),
+
+    "taskfold.cards.delete": cardMethod(async (project, card) => await project.store.delete(card.id)),
+
+    // 卡片图片：存在 `.taskfold/attachments/<卡 uuid>/`，不动卡片本身（同 OpenClaw 网关的同名方法）。
+    "taskfold.cards.images.add": cardMethod(
+      async (project, card, params) => await project.store.addCardImage(card.id, params),
+    ),
+
+    "taskfold.cards.images.get": cardMethod(async (project, card, params) => {
+      const name = params.name;
+      if (typeof name !== "string" || !name.trim()) {
+        throw new Error("name is required.");
+      }
+      const image = await project.store.getCardImage(card.id, name);
+      if (!image) {
+        throw new Error(`card image not found: ${name.trim()}`);
+      }
+      return image;
+    }),
 
     "taskfold.cards.requirement.set": cardMethod(async (project, card, params) => {
       const raw = params.requirementId;

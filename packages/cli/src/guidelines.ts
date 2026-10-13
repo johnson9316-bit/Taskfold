@@ -162,7 +162,8 @@ user and do not rename existing items unless asked.
 | \`taskfold create <title...> [--notes t \\| --notes-file f] [--status s] [--priority p] [--labels a,b] [--agent id] [--board id]\` | creates a card |
 | \`taskfold update <id> [--title t] [--status s] [--priority p] [--add-label l] [--remove-label l] [--agent id] [--append-notes t \\| --append-notes-file f]\` | changes only the fields you pass |
 | \`taskfold update <id> --notes t --expect-revision N\` (or \`--notes-file f\`) | replaces the whole notes body |
-| \`taskfold delete <id>\` | deletes a card permanently |
+| \`taskfold delete <id>\` | deletes a card permanently (and its images) |
+| \`taskfold attach <id> <file...> [--append-notes]\` | stores image(s) in the card's folder and prints the Markdown to reference them |
 | \`taskfold boards\` | reads boards and card counts |
 | \`taskfold instructions\` | prints this text |
 | \`taskfold guidelines [file...]\` | writes the short Taskfold block into AGENTS.md / CLAUDE.md |
@@ -172,6 +173,10 @@ Run \`taskfold <command> --help\` for every flag and more examples.
 - Statuses: ${TASKFOLD_STATUSES.join(", ")}. New cards start as \`todo\`.
 - Priorities: ${TASKFOLD_PRIORITIES.join(", ")}.
 - \`--notes-file -\` / \`--append-notes-file -\` read the text from stdin.
+- Images: \`taskfold attach <id> shot.png\` copies the file to \`.taskfold/attachments/<card uuid>/\`
+  and prints \`![shot](../attachments/<card uuid>/<name>.png)\`; paste that line into the notes
+  (or pass \`--append-notes\`). The first image upgrades the project to format_version 3 (older
+  Taskfold clients then become read-only for it). Only png, jpg, gif, webp, avif and bmp.
 
 ## Editing rules
 
@@ -194,6 +199,7 @@ Run \`taskfold <command> --help\` for every flag and more examples.
 | \`card\` | show, create, update | \`card\`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | \`card-list\` | list | \`boardId\` (null = all boards), \`cards\`: the same fields as \`card\` without notes |
 | \`card-deleted\` | delete | \`id\` |
+| \`card-images\` | attach | \`cardId\`, \`images\`: file, name, ref, markdown, mimeType, byteSize; \`card\` (the updated card with \`--append-notes\`, otherwise null) |
 | \`board-list\` | boards | \`defaultBoardId\` (null if ambiguous), \`boards\`: id, total, active, archived, byStatus |
 | \`init\` | init | \`dataDir\`, \`created\`, \`formatVersion\` |
 | \`guidelines\` | guidelines | \`version\`, \`files\`: path, action (created / inserted / updated / unchanged) |

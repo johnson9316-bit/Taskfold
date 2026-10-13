@@ -52,7 +52,8 @@ and `.gitignore`; the rest is created on demand.
 | `taskfold create <title...> [--notes t \| --notes-file f] [--status s] [--priority p] [--labels a,b] [--agent id] [--board id]` | writes a new card |
 | `taskfold update <id> [--title t] [--status s] [--priority p] [--add-label l] [--remove-label l] [--agent id] [--append-notes t \| --append-notes-file f]` | writes the fields you pass |
 | `taskfold update <id> --notes t --expect-revision N` (or `--notes-file f`) | replaces the whole body |
-| `taskfold delete <id>` | deletes a card |
+| `taskfold delete <id>` | deletes a card (and its images) |
+| `taskfold attach <id> <file...> [--append-notes]` | copies image files into `.taskfold/attachments/<card uuid>/`; prints the Markdown to reference them |
 | `taskfold boards` | reads boards and counts |
 | `taskfold instructions` | prints the detailed guide for AI agents |
 | `taskfold guidelines [file...]` | writes the Taskfold block into AGENTS.md / CLAUDE.md |
@@ -94,6 +95,7 @@ Every command's `--help` lists its flags, what it reads and writes, and examples
 | `card` | show, create, update | `card`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | `card-list` | list | `boardId` (null = all), `cards` (same fields, without notes) |
 | `card-deleted` | delete | `id` |
+| `card-images` | attach | `cardId`, `images` (file, name, ref, markdown, mimeType, byteSize), `card` (updated card with `--append-notes`, else `null`) |
 | `board-list` | boards | `defaultBoardId` (null if ambiguous), `boards`: id, total, active, archived, byStatus |
 | `init` | init | `dataDir`, `created`, `formatVersion` |
 | `guidelines` | guidelines | `version`, `files`: path, action |

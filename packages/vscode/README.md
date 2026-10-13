@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/icon.png" alt="Taskfold" width="96" height="96">
+</p>
+
 # Taskfold for VS Code
 
 A kanban board for the Taskfold cards stored in a repository's `.taskfold/` directory. The board

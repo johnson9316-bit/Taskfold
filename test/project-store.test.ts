@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
+import { defaultTaskfoldBoardView } from "../packages/core/src/store-normalizers.js";
 
 function createStore() {
   const cards = keyedStore<PersistedTaskfoldCard>();
@@ -275,6 +276,23 @@ describe("Taskfold M2 project store", () => {
         boardView: { groupBy: "requirement", sortBy: "manual", sortDirection: "asc" },
       }),
     ).rejects.toThrow("manual sorting");
+  });
+
+  it("accepts assignee grouping and defaults new views to status columns", async () => {
+    const { store } = createStore();
+    await store.createProject({ id: "alpha", name: "Alpha" });
+
+    const board = await store.updateProject({
+      id: "alpha",
+      boardView: { groupBy: "assignee", sortBy: "priority", sortDirection: "asc" },
+    });
+
+    expect(board.boardView).toEqual({ groupBy: "assignee", sortBy: "priority", sortDirection: "asc" });
+    expect(defaultTaskfoldBoardView()).toEqual({
+      groupBy: "status",
+      sortBy: "priority",
+      sortDirection: "asc",
+    });
   });
 
   it("protects placement fields and archived project entry points", async () => {

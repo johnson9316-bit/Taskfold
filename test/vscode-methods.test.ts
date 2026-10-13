@@ -187,6 +187,54 @@ describe("projects", () => {
     expect(stored.metadata?.archivedAt).toBeUndefined();
   });
 
+  it("cards.create / update carry labels; comment appends to the card; delete removes it", async () => {
+    const repo = initRepo();
+    const { methods, registry } = setup([{ name: "alpha", path: repo }]);
+    const project = await firstProject(methods);
+    const card = await createCard(methods, project.id, { labels: ["bug"] });
+    expect(card.labels).toEqual(["bug"]);
+
+    const updated = (await methods.call("taskfold.cards.update", { id: card.id, labels: ["bug", "p0"] })) as any;
+    expect(updated.card.labels).toEqual(["bug", "p0"]);
+
+    const commented = (await methods.call("taskfold.cards.comment", { id: card.id, body: "looks good" })) as any;
+    expect(commented.card.metadata.comments.map((comment: { body: string }) => comment.body)).toEqual(["looks good"]);
+
+    await methods.call("taskfold.cards.delete", { id: card.id });
+    await expect(registry.byCardId(card.id)).rejects.toThrow();
+  });
+
+  it("cards.images.add / get store a pasted image under .taskfold/attachments/<card>/ without touching the card", async () => {
+    const repo = initRepo();
+    const { methods } = setup([{ name: "alpha", path: repo }]);
+    const project = await firstProject(methods);
+    const card = await createCard(methods, project.id);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+
+    const added = (await methods.call("taskfold.cards.images.add", {
+      id: card.id,
+      fileName: "paste.png",
+      mimeType: "image/png",
+      contentBase64: png.toString("base64"),
+    })) as { name: string; ref: string; mimeType: string };
+
+    expect(added.ref).toBe(`../attachments/${card.id}/${added.name}`);
+    expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", card.id, added.name))).toBe(true);
+    const got = (await methods.call("taskfold.cards.images.get", { id: card.id, name: added.name })) as {
+      mimeType: string;
+      contentBase64: string;
+    };
+    expect(got.mimeType).toBe("image/png");
+    expect(Buffer.from(got.contentBase64, "base64").equals(png)).toBe(true);
+    await expect(methods.call("taskfold.cards.images.get", { id: card.id, name: "img-nope-000000.png" })).rejects.toThrow(
+      /not found/,
+    );
+    await expect(methods.call("taskfold.cards.images.get", { id: card.id })).rejects.toThrow(/name is required/);
+
+    await methods.call("taskfold.cards.delete", { id: card.id });
+    expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", card.id))).toBe(false);
+  });
+
   it("board view settings are kept in workspace state and survive a new registry", async () => {
     const repo = initRepo();
     const first = setup([{ name: "alpha", path: repo }]);

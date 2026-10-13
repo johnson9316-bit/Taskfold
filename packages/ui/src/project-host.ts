@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import type {
   TaskfoldBoardSummary,
   TaskfoldBoardViewSettings,
+  TaskfoldPriority,
   TaskfoldProjectDocument,
   TaskfoldProjectDocumentRead,
   TaskfoldProjectView,
@@ -14,6 +15,7 @@ import {
   type TaskfoldHostEvent,
 } from "./host.ts";
 import { i18n, type TaskfoldLocale } from "./i18n/index.ts";
+import { createCardImageClient, isPendingImageRef } from "./lib/card-images.ts";
 import { taskfoldEditorHtmlToMarkdown } from "./lib/markdown.ts";
 import {
   createTaskfoldProjectUiState,
@@ -71,6 +73,10 @@ function normalizeProjectDocumentRead(
 }
 
 class TaskfoldProjectHost extends LitElement {
+  /** 卡片图片（粘贴进 notes / 评论的截图）：上传、取图缓存、新建卡片时的暂存。 */
+  private readonly cardImages = createCardImageClient((method, params) =>
+    taskfoldHost().request(method, params),
+  );
   private connectedToGateway = false;
   // 宿主能力开关在挂载时读一次；render() 不直接碰宿主（卸载后仍可能有一次待执行的渲染）。
   private executionEnabled = false;
@@ -87,6 +93,7 @@ class TaskfoldProjectHost extends LitElement {
   private executionRefreshTimer: number | null = null;
   private unsubscribeI18n?: () => void;
   private unsubscribeHost?: () => void;
+  private unsubscribeRoute?: () => void;
   private readonly state: TaskfoldProjectUiState = createTaskfoldProjectUiState();
 
   createRenderRoot() {
@@ -97,6 +104,15 @@ class TaskfoldProjectHost extends LitElement {
     super.connectedCallback();
     this.stopped = false;
     this.capabilities = { ...taskfoldHost().capabilities };
+    const route = taskfoldHost().route;
+    if (route) {
+      // 地址里带了项目就直接进它的看板；项目不存在时第一次 refresh 会退回总览并清掉地址里的参数。
+      if (route.projectId) {
+        this.state.selectedProjectId = route.projectId;
+        this.state.screen = "board";
+      }
+      this.unsubscribeRoute = route.subscribe(() => this.applyRoute());
+    }
     this.executionEnabled = this.capabilities.execution;
     this.unsubscribeI18n = i18n.subscribe((locale) => {
       document.documentElement.lang = locale;
@@ -133,6 +149,8 @@ class TaskfoldProjectHost extends LitElement {
     this.unsubscribeI18n = undefined;
     this.unsubscribeHost?.();
     this.unsubscribeHost = undefined;
+    this.unsubscribeRoute?.();
+    this.unsubscribeRoute = undefined;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     super.disconnectedCallback();
   }
@@ -218,6 +236,7 @@ class TaskfoldProjectHost extends LitElement {
         this.state.documentDraft = null;
         this.clearExecutionState();
         this.state.screen = "overview";
+        this.syncRoute();
       } else if (selectedId) {
         const project = await taskfoldHost().request<ProjectResponse>("taskfold.projects.get", {
           id: selectedId,
@@ -263,7 +282,28 @@ class TaskfoldProjectHost extends LitElement {
     }
   }
 
-  private selectProject(id: string) {
+  /** 把当前项目写进地址（总览页没有项目）。 */
+  private syncRoute() {
+    taskfoldHost().route?.setProject(
+      this.state.screen === "overview" ? undefined : (this.state.selectedProjectId ?? undefined),
+    );
+  }
+
+  /** 地址被外部改动：让界面跟上地址。 */
+  private applyRoute() {
+    const wanted = taskfoldHost().route?.projectId;
+    const current = this.state.screen === "overview" ? undefined : (this.state.selectedProjectId ?? undefined);
+    if (wanted === current) {
+      return;
+    }
+    if (wanted) {
+      this.selectProject(wanted, { syncRoute: false });
+    } else {
+      this.setScreen("overview", { syncRoute: false });
+    }
+  }
+
+  private selectProject(id: string, options: { syncRoute?: boolean } = {}) {
     this.state.selectedProjectId = id;
     this.state.screen = "board";
     this.state.documents = [];
@@ -272,10 +312,13 @@ class TaskfoldProjectHost extends LitElement {
     this.state.documentPreviewError = null;
     this.state.documentEditing = false;
     this.state.documentDraft = null;
+    if (options.syncRoute !== false) {
+      this.syncRoute();
+    }
     void this.refresh();
   }
 
-  private setScreen(screen: TaskfoldProjectUiState["screen"]) {
+  private setScreen(screen: TaskfoldProjectUiState["screen"], options: { syncRoute?: boolean } = {}) {
     if (
       (screen === "settings" && !this.capabilities.projectManagement) ||
       (screen === "documents" && !this.capabilities.documents)
@@ -288,6 +331,9 @@ class TaskfoldProjectHost extends LitElement {
       return;
     }
     this.state.screen = screen;
+    if (options.syncRoute !== false) {
+      this.syncRoute();
+    }
     if (screen === "documents") {
       void this.refresh();
     } else {
@@ -316,6 +362,8 @@ class TaskfoldProjectHost extends LitElement {
     this.state.cardDraft = null;
     this.state.cardDraftError = null;
     this.state.deliveryBaseRevision = null;
+    this.state.cardActivityTab = "comments";
+    this.state.cardMenuOpen = false;
   }
 
   /** 前端此刻读到的卡片 revision（拖拽、状态下拉这类即时操作用它做 CAS）。 */
@@ -507,10 +555,13 @@ class TaskfoldProjectHost extends LitElement {
     const relatedCardId = data.relatedCardId || undefined;
     const relation = relatedCardId ? data.relation : "";
     void this.mutate(async () => {
+      // 新建时还没有卡 id，粘贴的图片先暂存在内存里（`pending:<n>`）：卡创建好之后再上传、换成真实引用。
+      const notes = data.notes ?? "";
+      const hasPendingImages = this.cardImages.hasPending(notes);
       const response = await taskfoldHost().request<{ card: { id: string } }>("taskfold.cards.create", {
         boardId: project.board.id,
         title: data.title,
-        notes: data.notes,
+        notes: hasPendingImages ? this.cardImages.stripPending(notes) : notes,
         status: data.status,
         priority: data.priority,
         agentId: data.agentId,
@@ -526,6 +577,17 @@ class TaskfoldProjectHost extends LitElement {
           type: relation === "precedes" ? "parent" : relation,
         });
       }
+      if (hasPendingImages) {
+        try {
+          const withImages = await this.cardImages.flushPending(response.card.id, notes);
+          await taskfoldHost().request("taskfold.cards.update", { id: response.card.id, notes: withImages });
+        } catch (error) {
+          // 卡已经建好，只是图没传上去：留在弹窗之外，把原因告诉用户。
+          throw new Error(i18n.t("taskfoldProject.cardCreatedImagesFailed", { message: errorMessage(error) }));
+        } finally {
+          this.cardImages.clearPending();
+        }
+      }
     });
   }
 
@@ -539,6 +601,92 @@ class TaskfoldProjectHost extends LitElement {
       });
       await this.applyCardWriteResult(result, id, expectedRevision);
     }, { closeModal: false });
+  }
+
+  /** 负责人视图里把卡片拖到别的列：空串表示清空负责人。 */
+  private updateCardAgent(id: string, agentId: string) {
+    const expectedRevision = this.cardRevision(id);
+    void this.mutate(async () => {
+      const result = await taskfoldHost().request("taskfold.cards.update", {
+        id,
+        agentId,
+        ...this.casParams(expectedRevision),
+      });
+      await this.applyCardWriteResult(result, id, expectedRevision);
+    }, { closeModal: false });
+  }
+
+  private updateCardPriority(id: string, priority: TaskfoldPriority) {
+    this.patchCard(id, { priority });
+  }
+
+  private updateCardLabels(id: string, labels: string[]) {
+    this.patchCard(id, { labels });
+  }
+
+  /** 详情右栏的就地改属性：只发改动的字段，带前端读到的 revision 做 CAS。 */
+  private patchCard(id: string, patch: Record<string, unknown>) {
+    const expectedRevision = this.cardRevision(id);
+    void this.mutate(async () => {
+      const result = await taskfoldHost().request("taskfold.cards.update", {
+        id,
+        ...patch,
+        ...this.casParams(expectedRevision),
+      });
+      await this.applyCardWriteResult(result, id, expectedRevision);
+    }, { closeModal: false });
+  }
+
+  private addCardComment(id: string, body: string) {
+    const text = body.trim();
+    if (!text) {
+      return;
+    }
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.comment", { id, body: text });
+    }, { closeModal: false });
+  }
+
+  /** 复制：同项目新建一张卡，带走备注、优先级、负责人、标签、里程碑；状态回到 todo。 */
+  private duplicateCard(id: string) {
+    const project = this.state.project;
+    const card = project?.cards.find((candidate) => candidate.id === id);
+    if (!project || !card) {
+      return;
+    }
+    void this.mutate(async () => {
+      const response = await taskfoldHost().request<{ card: { id: string } }>("taskfold.cards.create", {
+        boardId: project.board.id,
+        title: i18n.t("taskfoldProject.duplicateTitle", { title: card.title }),
+        notes: card.notes,
+        status: "todo",
+        priority: card.priority,
+        agentId: card.agentId,
+        labels: card.labels,
+        ...(card.milestoneId ? { milestoneId: card.milestoneId } : {}),
+      });
+      // 备注里的图片引用指向原卡的文件夹，原卡一删就裂：把图拷到新卡，引用改成新卡的。
+      if (card.notes) {
+        const notes = await this.cardImages.copyImages(card.id, response.card.id, card.notes);
+        if (notes !== card.notes) {
+          await taskfoldHost().request("taskfold.cards.update", { id: response.card.id, notes });
+        }
+      }
+      this.state.modal = { kind: "card-detail", cardId: response.card.id };
+    }, { closeModal: false });
+  }
+
+  private async deleteCard(id: string) {
+    const card = this.state.project?.cards.find((candidate) => candidate.id === id);
+    if (!card) {
+      return;
+    }
+    if (!(await taskfoldHost().confirm(i18n.t("taskfoldProject.deleteCardConfirm", { title: card.title })))) {
+      return;
+    }
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.delete", { id });
+    });
   }
 
   private archiveCard(id: string, archived: boolean) {
@@ -992,7 +1140,9 @@ class TaskfoldProjectHost extends LitElement {
         const result = await taskfoldHost().request("taskfold.cards.update", {
           id: draft.cardId,
           ...patch,
-          ...this.casParams(draft.baseRevision),
+          // 编辑保存总是带基准 revision：`cards.update` 在所有宿主上都支持 CAS（没有冲突三选一的
+          // 宿主会把冲突当普通错误返回，显示在编辑表单里）。
+          expectedRevision: draft.baseRevision,
         });
         const conflict = await this.applyCardWriteResult(result, draft.cardId, draft.baseRevision);
         if (conflict !== "cancelled" && this.state.cardDraft === draft) {
@@ -1275,7 +1425,20 @@ class TaskfoldProjectHost extends LitElement {
       updateProject: (data) => this.updateProject(data),
       archiveProject: (archived) => this.archiveProject(archived),
       createCard: (data) => this.createCard(data),
+      cardImages: {
+        upload: (cardId, file) => this.cardImages.upload(cardId, file),
+        stage: (file) => this.cardImages.stage(file),
+        resolve: (ref) =>
+          isPendingImageRef(ref) ? this.cardImages.resolvePending(ref) : this.cardImages.resolve(ref),
+        isPending: isPendingImageRef,
+      },
       updateCardStatus: (id, status) => this.updateCardStatus(id, status),
+      updateCardAgent: (id, agentId) => this.updateCardAgent(id, agentId),
+      updateCardPriority: (id, priority) => this.updateCardPriority(id, priority),
+      updateCardLabels: (id, labels) => this.updateCardLabels(id, labels),
+      addCardComment: (id, body) => this.addCardComment(id, body),
+      duplicateCard: (id) => this.duplicateCard(id),
+      deleteCard: (id) => this.deleteCard(id),
       archiveCard: (id, archived) => this.archiveCard(id, archived),
       moveCardMilestone: (id, milestoneId, position) =>
         this.moveCardMilestone(id, milestoneId, position),

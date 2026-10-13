@@ -30,6 +30,7 @@ import {
 } from "@taskfold/core/file-store.js";
 import { ensureTaskfoldPluginDirectories, resolveTaskfoldFileStoreLayout } from "@taskfold/core/file-store-paths.js";
 import { createTaskfoldFileSubscriptionStore } from "@taskfold/core/file-store-subscriptions.js";
+import { copyTaskfoldCardImageDir, type TaskfoldCardImageStore } from "@taskfold/core/file-store-card-images.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -39,6 +40,7 @@ import type {
   PersistedTaskfoldProjectDocument,
   TaskfoldCompareAndSwapFailure,
   TaskfoldKeyedStore,
+  TaskfoldStatusConfigPort,
 } from "@taskfold/core/persistence-types.js";
 import { TaskfoldAggregatedChangeSource } from "./change-aggregator.js";
 import type { TaskfoldBackendStores } from "./store.js";
@@ -271,8 +273,9 @@ export function createTaskfoldProjectRoutedStores(options: {
     }
   }
 
-  /** 跨项目移卡：附件 blob 先复制到新数据根（旧副本删除时会连同 blob 一起删）。 */
+  /** 跨项目移卡：附件 blob 与卡片图片文件夹先复制到新数据根（旧副本删除时会连同它们一起删）。 */
   function copyAttachmentBlobs(card: TaskfoldCard, from: ProjectRoot, to: ProjectRoot): void {
+    copyTaskfoldCardImageDir(from.attachmentsDir, to.attachmentsDir, card.id);
     for (const attachment of card.metadata?.attachments ?? []) {
       const target = path.join(to.attachmentsDir, attachment.id);
       const content = readBufferIfExists(path.join(from.attachmentsDir, attachment.id));
@@ -460,6 +463,47 @@ export function createTaskfoldProjectRoutedStores(options: {
     compareAndSwap: unsupportedTaskfoldCompareAndSwap,
   };
 
+  // 卡片图片跟着它所属的卡片放：按卡片所在的数据根路由。
+  async function cardImageOwner(cardId: string): Promise<ProjectRoot> {
+    const owners = await locate(cardSpec, cardId);
+    if (owners.length === 0) {
+      throw new Error(`taskfold: card ${cardId} not found for card image`);
+    }
+    return (await choose(cardSpec, cardId, owners)).root;
+  }
+  const cardImages: TaskfoldCardImageStore = {
+    async put(cardId, extension, bytes) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.put(cardId, extension, bytes);
+    },
+    async get(cardId, name) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.get(cardId, name);
+    },
+    async list(cardId) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.list(cardId);
+    },
+    async removeCard(cardId) {
+      let removed = false;
+      for (const root of await openRoots()) {
+        removed = (await root.stores.cardImages.removeCard(cardId)) || removed;
+      }
+      return removed;
+    },
+  };
+
+  // 状态定义：按看板 id 路由到该项目的数据根。读路径不建目录（没有数据根 = 没有配置 = 默认集）。
+  const statusConfig: TaskfoldStatusConfigPort = {
+    async read(boardId) {
+      const root = openRoot(await dataDirForBoardId(boardId), false);
+      return root ? await root.stores.statusConfig.read(boardId) : undefined;
+    },
+    async write(boardId, definitions) {
+      const root = await targetRoot(boardId);
+      const saved = await root.stores.statusConfig.write(boardId, definitions);
+      markDirty(root);
+      return saved;
+    },
+  };
+
   // 注册表与订阅：写之前确保插件目录在（0700，与原 SQLite 目录同权限）。
   const boards: TaskfoldKeyedStore<PersistedTaskfoldBoard> = {
     ...rawBoards,
@@ -476,5 +520,5 @@ export function createTaskfoldProjectRoutedStores(options: {
     },
   };
 
-  return { cards, boards, milestones, documents, subscriptions, attachments, changeSource };
+  return { cards, boards, milestones, documents, subscriptions, attachments, cardImages, statusConfig, changeSource };
 }

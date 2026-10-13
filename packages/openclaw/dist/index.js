@@ -348,7 +348,7 @@ function assertTaskfoldFormatWritable(configPath) {
   }
 }
 function ensureTaskfoldFormatVersion(configPath) {
-  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}
+  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_BASE_FORMAT_VERSION}
 `;
   if (createFileExclusive(configPath, line)) {
     return;
@@ -360,21 +360,25 @@ function ensureTaskfoldFormatVersion(configPath) {
   const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
   fs4.appendFileSync(configPath, `${separator}${line}`);
 }
-function upgradeTaskfoldFormatVersion(configPath, assertHeld) {
+function upgradeTaskfoldFormatVersion(configPath, assertHeld, target = TASKFOLD_BASE_FORMAT_VERSION) {
   assertTaskfoldFormatWritable(configPath);
-  if (readFormatVersion(configPath) === TASKFOLD_FORMAT_VERSION) return;
+  const current = readFormatVersion(configPath);
+  if (typeof current === "number" && current >= target) return;
   const existing = readFileIfExists(configPath) ?? "";
-  const line = `${FORMAT_VERSION_KEY}: ${TASKFOLD_FORMAT_VERSION}`;
+  const line = `${FORMAT_VERSION_KEY}: ${target}`;
   const content = FORMAT_VERSION_LINE.test(existing) ? existing.replace(FORMAT_VERSION_LINE, (match) => line + (match.match(/\s+#.*$/)?.[0] ?? "")) : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${line}
 `;
   writeFileAtomic(configPath, content, void 0, assertHeld);
 }
-var TASKFOLD_FORMAT_VERSION, FORMAT_VERSION_KEY, FORMAT_VERSION_LINE, TaskfoldFormatTooNewError;
+var TASKFOLD_FORMAT_VERSION, TASKFOLD_BASE_FORMAT_VERSION, TASKFOLD_CARD_IMAGES_FORMAT_VERSION, TASKFOLD_STATUS_MODEL_FORMAT_VERSION, FORMAT_VERSION_KEY, FORMAT_VERSION_LINE, TaskfoldFormatTooNewError;
 var init_file_store_format = __esm({
   "../core/src/file-store-format.ts"() {
     "use strict";
     init_file_store_atomic();
-    TASKFOLD_FORMAT_VERSION = 2;
+    TASKFOLD_FORMAT_VERSION = 4;
+    TASKFOLD_BASE_FORMAT_VERSION = 2;
+    TASKFOLD_CARD_IMAGES_FORMAT_VERSION = 3;
+    TASKFOLD_STATUS_MODEL_FORMAT_VERSION = 4;
     FORMAT_VERSION_KEY = "format_version";
     FORMAT_VERSION_LINE = /^format_version:(.*)$/m;
     TaskfoldFormatTooNewError = class extends Error {
@@ -415,54 +419,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module.exports = patch;
-    function patch(fs14) {
+    function patch(fs16) {
       if (constants.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs14);
+        patchLchmod(fs16);
       }
-      if (!fs14.lutimes) {
-        patchLutimes(fs14);
+      if (!fs16.lutimes) {
+        patchLutimes(fs16);
       }
-      fs14.chown = chownFix(fs14.chown);
-      fs14.fchown = chownFix(fs14.fchown);
-      fs14.lchown = chownFix(fs14.lchown);
-      fs14.chmod = chmodFix(fs14.chmod);
-      fs14.fchmod = chmodFix(fs14.fchmod);
-      fs14.lchmod = chmodFix(fs14.lchmod);
-      fs14.chownSync = chownFixSync(fs14.chownSync);
-      fs14.fchownSync = chownFixSync(fs14.fchownSync);
-      fs14.lchownSync = chownFixSync(fs14.lchownSync);
-      fs14.chmodSync = chmodFixSync(fs14.chmodSync);
-      fs14.fchmodSync = chmodFixSync(fs14.fchmodSync);
-      fs14.lchmodSync = chmodFixSync(fs14.lchmodSync);
-      fs14.stat = statFix(fs14.stat);
-      fs14.fstat = statFix(fs14.fstat);
-      fs14.lstat = statFix(fs14.lstat);
-      fs14.statSync = statFixSync(fs14.statSync);
-      fs14.fstatSync = statFixSync(fs14.fstatSync);
-      fs14.lstatSync = statFixSync(fs14.lstatSync);
-      if (fs14.chmod && !fs14.lchmod) {
-        fs14.lchmod = function(path21, mode, cb) {
+      fs16.chown = chownFix(fs16.chown);
+      fs16.fchown = chownFix(fs16.fchown);
+      fs16.lchown = chownFix(fs16.lchown);
+      fs16.chmod = chmodFix(fs16.chmod);
+      fs16.fchmod = chmodFix(fs16.fchmod);
+      fs16.lchmod = chmodFix(fs16.lchmod);
+      fs16.chownSync = chownFixSync(fs16.chownSync);
+      fs16.fchownSync = chownFixSync(fs16.fchownSync);
+      fs16.lchownSync = chownFixSync(fs16.lchownSync);
+      fs16.chmodSync = chmodFixSync(fs16.chmodSync);
+      fs16.fchmodSync = chmodFixSync(fs16.fchmodSync);
+      fs16.lchmodSync = chmodFixSync(fs16.lchmodSync);
+      fs16.stat = statFix(fs16.stat);
+      fs16.fstat = statFix(fs16.fstat);
+      fs16.lstat = statFix(fs16.lstat);
+      fs16.statSync = statFixSync(fs16.statSync);
+      fs16.fstatSync = statFixSync(fs16.fstatSync);
+      fs16.lstatSync = statFixSync(fs16.lstatSync);
+      if (fs16.chmod && !fs16.lchmod) {
+        fs16.lchmod = function(path22, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs14.lchmodSync = function() {
+        fs16.lchmodSync = function() {
         };
       }
-      if (fs14.chown && !fs14.lchown) {
-        fs14.lchown = function(path21, uid, gid, cb) {
+      if (fs16.chown && !fs16.lchown) {
+        fs16.lchown = function(path22, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs14.lchownSync = function() {
+        fs16.lchownSync = function() {
         };
       }
       if (platform === "win32") {
-        fs14.rename = typeof fs14.rename !== "function" ? fs14.rename : (function(fs$rename) {
+        fs16.rename = typeof fs16.rename !== "function" ? fs16.rename : (function(fs$rename) {
           function rename(from, to, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to, function CB(er) {
               if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs14.stat(to, function(stater, st) {
+                  fs16.stat(to, function(stater, st) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to, CB);
                     else
@@ -478,9 +482,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename, fs$rename);
           return rename;
-        })(fs14.rename);
+        })(fs16.rename);
       }
-      fs14.read = typeof fs14.read !== "function" ? fs14.read : (function(fs$read) {
+      fs16.read = typeof fs16.read !== "function" ? fs16.read : (function(fs$read) {
         function read(fd, buffer, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -488,22 +492,22 @@ var require_polyfills = __commonJS({
             callback = function(er, _, __) {
               if (er && er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs14, fd, buffer, offset, length, position, callback);
+                return fs$read.call(fs16, fd, buffer, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs14, fd, buffer, offset, length, position, callback);
+          return fs$read.call(fs16, fd, buffer, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      })(fs14.read);
-      fs14.readSync = typeof fs14.readSync !== "function" ? fs14.readSync : /* @__PURE__ */ (function(fs$readSync) {
+      })(fs16.read);
+      fs16.readSync = typeof fs16.readSync !== "function" ? fs16.readSync : /* @__PURE__ */ (function(fs$readSync) {
         return function(fd, buffer, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs14, fd, buffer, offset, length, position);
+              return fs$readSync.call(fs16, fd, buffer, offset, length, position);
             } catch (er) {
               if (er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -513,11 +517,11 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      })(fs14.readSync);
-      function patchLchmod(fs15) {
-        fs15.lchmod = function(path21, mode, callback) {
-          fs15.open(
-            path21,
+      })(fs16.readSync);
+      function patchLchmod(fs17) {
+        fs17.lchmod = function(path22, mode, callback) {
+          fs17.open(
+            path22,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -525,80 +529,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err);
                 return;
               }
-              fs15.fchmod(fd, mode, function(err2) {
-                fs15.close(fd, function(err22) {
+              fs17.fchmod(fd, mode, function(err2) {
+                fs17.close(fd, function(err22) {
                   if (callback) callback(err2 || err22);
                 });
               });
             }
           );
         };
-        fs15.lchmodSync = function(path21, mode) {
-          var fd = fs15.openSync(path21, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs17.lchmodSync = function(path22, mode) {
+          var fd = fs17.openSync(path22, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs15.fchmodSync(fd, mode);
+            ret = fs17.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs15.closeSync(fd);
+                fs17.closeSync(fd);
               } catch (er) {
               }
             } else {
-              fs15.closeSync(fd);
+              fs17.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs15) {
-        if (constants.hasOwnProperty("O_SYMLINK") && fs15.futimes) {
-          fs15.lutimes = function(path21, at, mt, cb) {
-            fs15.open(path21, constants.O_SYMLINK, function(er, fd) {
+      function patchLutimes(fs17) {
+        if (constants.hasOwnProperty("O_SYMLINK") && fs17.futimes) {
+          fs17.lutimes = function(path22, at, mt, cb) {
+            fs17.open(path22, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
               }
-              fs15.futimes(fd, at, mt, function(er2) {
-                fs15.close(fd, function(er22) {
+              fs17.futimes(fd, at, mt, function(er2) {
+                fs17.close(fd, function(er22) {
                   if (cb) cb(er2 || er22);
                 });
               });
             });
           };
-          fs15.lutimesSync = function(path21, at, mt) {
-            var fd = fs15.openSync(path21, constants.O_SYMLINK);
+          fs17.lutimesSync = function(path22, at, mt) {
+            var fd = fs17.openSync(path22, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs15.futimesSync(fd, at, mt);
+              ret = fs17.futimesSync(fd, at, mt);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs15.closeSync(fd);
+                  fs17.closeSync(fd);
                 } catch (er) {
                 }
               } else {
-                fs15.closeSync(fd);
+                fs17.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs15.futimes) {
-          fs15.lutimes = function(_a, _b, _c, cb) {
+        } else if (fs17.futimes) {
+          fs17.lutimes = function(_a, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs15.lutimesSync = function() {
+          fs17.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs14, target, mode, function(er) {
+          return orig.call(fs16, target, mode, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -608,7 +612,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs14, target, mode);
+            return orig.call(fs16, target, mode);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -617,7 +621,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs14, target, uid, gid, function(er) {
+          return orig.call(fs16, target, uid, gid, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -627,7 +631,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs14, target, uid, gid);
+            return orig.call(fs16, target, uid, gid);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -647,13 +651,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options ? orig.call(fs14, target, options, callback) : orig.call(fs14, target, callback);
+          return options ? orig.call(fs16, target, options, callback) : orig.call(fs16, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options) {
-          var stats = options ? orig.call(fs14, target, options) : orig.call(fs14, target);
+          var stats = options ? orig.call(fs16, target, options) : orig.call(fs16, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -682,16 +686,16 @@ var require_legacy_streams = __commonJS({
   "../../node_modules/graceful-fs/legacy-streams.js"(exports, module) {
     var Stream = __require("stream").Stream;
     module.exports = legacy;
-    function legacy(fs14) {
+    function legacy(fs16) {
       return {
         ReadStream,
         WriteStream
       };
-      function ReadStream(path21, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path21, options);
+      function ReadStream(path22, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path22, options);
         Stream.call(this);
         var self = this;
-        this.path = path21;
+        this.path = path22;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -725,7 +729,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs14.open(this.path, this.flags, this.mode, function(err, fd) {
+        fs16.open(this.path, this.flags, this.mode, function(err, fd) {
           if (err) {
             self.emit("error", err);
             self.readable = false;
@@ -736,10 +740,10 @@ var require_legacy_streams = __commonJS({
           self._read();
         });
       }
-      function WriteStream(path21, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path21, options);
+      function WriteStream(path22, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path22, options);
         Stream.call(this);
-        this.path = path21;
+        this.path = path22;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -764,7 +768,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs14.open;
+          this._open = fs16.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -799,7 +803,7 @@ var require_clone = __commonJS({
 // ../../node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "../../node_modules/graceful-fs/graceful-fs.js"(exports, module) {
-    var fs14 = __require("fs");
+    var fs16 = __require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone = require_clone();
@@ -831,12 +835,12 @@ var require_graceful_fs = __commonJS({
         m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
         console.error(m);
       };
-    if (!fs14[gracefulQueue]) {
+    if (!fs16[gracefulQueue]) {
       queue = global[gracefulQueue] || [];
-      publishQueue(fs14, queue);
-      fs14.close = (function(fs$close) {
+      publishQueue(fs16, queue);
+      fs16.close = (function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs14, fd, function(err) {
+          return fs$close.call(fs16, fd, function(err) {
             if (!err) {
               resetQueue();
             }
@@ -848,48 +852,48 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      })(fs14.close);
-      fs14.closeSync = (function(fs$closeSync) {
+      })(fs16.close);
+      fs16.closeSync = (function(fs$closeSync) {
         function closeSync(fd) {
-          fs$closeSync.apply(fs14, arguments);
+          fs$closeSync.apply(fs16, arguments);
           resetQueue();
         }
         Object.defineProperty(closeSync, previousSymbol, {
           value: fs$closeSync
         });
         return closeSync;
-      })(fs14.closeSync);
+      })(fs16.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug(fs14[gracefulQueue]);
-          __require("assert").equal(fs14[gracefulQueue].length, 0);
+          debug(fs16[gracefulQueue]);
+          __require("assert").equal(fs16[gracefulQueue].length, 0);
         });
       }
     }
     var queue;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs14[gracefulQueue]);
+      publishQueue(global, fs16[gracefulQueue]);
     }
-    module.exports = patch(clone(fs14));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs14.__patched) {
-      module.exports = patch(fs14);
-      fs14.__patched = true;
+    module.exports = patch(clone(fs16));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs16.__patched) {
+      module.exports = patch(fs16);
+      fs16.__patched = true;
     }
-    function patch(fs15) {
-      polyfills(fs15);
-      fs15.gracefulify = patch;
-      fs15.createReadStream = createReadStream;
-      fs15.createWriteStream = createWriteStream;
-      var fs$readFile = fs15.readFile;
-      fs15.readFile = readFile;
-      function readFile(path21, options, cb) {
+    function patch(fs17) {
+      polyfills(fs17);
+      fs17.gracefulify = patch;
+      fs17.createReadStream = createReadStream;
+      fs17.createWriteStream = createWriteStream;
+      var fs$readFile = fs17.readFile;
+      fs17.readFile = readFile;
+      function readFile(path22, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path21, options, cb);
-        function go$readFile(path22, options2, cb2, startTime) {
-          return fs$readFile(path22, options2, function(err) {
+        return go$readFile(path22, options, cb);
+        function go$readFile(path23, options2, cb2, startTime) {
+          return fs$readFile(path23, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path22, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path23, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -897,16 +901,16 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs15.writeFile;
-      fs15.writeFile = writeFile;
-      function writeFile(path21, data, options, cb) {
+      var fs$writeFile = fs17.writeFile;
+      fs17.writeFile = writeFile;
+      function writeFile(path22, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path21, data, options, cb);
-        function go$writeFile(path22, data2, options2, cb2, startTime) {
-          return fs$writeFile(path22, data2, options2, function(err) {
+        return go$writeFile(path22, data, options, cb);
+        function go$writeFile(path23, data2, options2, cb2, startTime) {
+          return fs$writeFile(path23, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path23, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -914,17 +918,17 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs15.appendFile;
+      var fs$appendFile = fs17.appendFile;
       if (fs$appendFile)
-        fs15.appendFile = appendFile;
-      function appendFile(path21, data, options, cb) {
+        fs17.appendFile = appendFile;
+      function appendFile(path22, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path21, data, options, cb);
-        function go$appendFile(path22, data2, options2, cb2, startTime) {
-          return fs$appendFile(path22, data2, options2, function(err) {
+        return go$appendFile(path22, data, options, cb);
+        function go$appendFile(path23, data2, options2, cb2, startTime) {
+          return fs$appendFile(path23, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path23, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -932,9 +936,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs15.copyFile;
+      var fs$copyFile = fs17.copyFile;
       if (fs$copyFile)
-        fs15.copyFile = copyFile;
+        fs17.copyFile = copyFile;
       function copyFile(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -952,34 +956,34 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs15.readdir;
-      fs15.readdir = readdir;
+      var fs$readdir = fs17.readdir;
+      fs17.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path21, options, cb) {
+      function readdir(path22, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path22, options2, cb2, startTime) {
-          return fs$readdir(path22, fs$readdirCallback(
-            path22,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path23, options2, cb2, startTime) {
+          return fs$readdir(path23, fs$readdirCallback(
+            path23,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path22, options2, cb2, startTime) {
-          return fs$readdir(path22, options2, fs$readdirCallback(
-            path22,
+        } : function go$readdir2(path23, options2, cb2, startTime) {
+          return fs$readdir(path23, options2, fs$readdirCallback(
+            path23,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path21, options, cb);
-        function fs$readdirCallback(path22, options2, cb2, startTime) {
+        return go$readdir(path22, options, cb);
+        function fs$readdirCallback(path23, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path22, options2, cb2],
+                [path23, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -994,21 +998,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs15);
+        var legStreams = legacy(fs17);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs15.ReadStream;
+      var fs$ReadStream = fs17.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs15.WriteStream;
+      var fs$WriteStream = fs17.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs15, "ReadStream", {
+      Object.defineProperty(fs17, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -1018,7 +1022,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs15, "WriteStream", {
+      Object.defineProperty(fs17, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -1029,7 +1033,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs15, "FileReadStream", {
+      Object.defineProperty(fs17, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -1040,7 +1044,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs15, "FileWriteStream", {
+      Object.defineProperty(fs17, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -1050,7 +1054,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path21, options) {
+      function ReadStream(path22, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -1070,7 +1074,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path21, options) {
+      function WriteStream(path22, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -1088,22 +1092,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path21, options) {
-        return new fs15.ReadStream(path21, options);
+      function createReadStream(path22, options) {
+        return new fs17.ReadStream(path22, options);
       }
-      function createWriteStream(path21, options) {
-        return new fs15.WriteStream(path21, options);
+      function createWriteStream(path22, options) {
+        return new fs17.WriteStream(path22, options);
       }
-      var fs$open = fs15.open;
-      fs15.open = open;
-      function open(path21, flags, mode, cb) {
+      var fs$open = fs17.open;
+      fs17.open = open;
+      function open(path22, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path21, flags, mode, cb);
-        function go$open(path22, flags2, mode2, cb2, startTime) {
-          return fs$open(path22, flags2, mode2, function(err, fd) {
+        return go$open(path22, flags, mode, cb);
+        function go$open(path23, flags2, mode2, cb2, startTime) {
+          return fs$open(path23, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path22, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path23, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -1111,20 +1115,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs15;
+      return fs17;
     }
     function enqueue(elem) {
       debug("ENQUEUE", elem[0].name, elem[1]);
-      fs14[gracefulQueue].push(elem);
+      fs16[gracefulQueue].push(elem);
       retry();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i = 0; i < fs14[gracefulQueue].length; ++i) {
-        if (fs14[gracefulQueue][i].length > 2) {
-          fs14[gracefulQueue][i][3] = now;
-          fs14[gracefulQueue][i][4] = now;
+      for (var i = 0; i < fs16[gracefulQueue].length; ++i) {
+        if (fs16[gracefulQueue][i].length > 2) {
+          fs16[gracefulQueue][i][3] = now;
+          fs16[gracefulQueue][i][4] = now;
         }
       }
       retry();
@@ -1132,9 +1136,9 @@ var require_graceful_fs = __commonJS({
     function retry() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs14[gracefulQueue].length === 0)
+      if (fs16[gracefulQueue].length === 0)
         return;
-      var elem = fs14[gracefulQueue].shift();
+      var elem = fs16[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err = elem[2];
@@ -1156,7 +1160,7 @@ var require_graceful_fs = __commonJS({
           debug("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs14[gracefulQueue].push(elem);
+          fs16[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -1591,10 +1595,10 @@ var require_mtime_precision = __commonJS({
   "../../node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
     "use strict";
     var cacheSymbol = Symbol();
-    function probe(file, fs14, callback) {
-      const cachedPrecision = fs14[cacheSymbol];
+    function probe(file, fs16, callback) {
+      const cachedPrecision = fs16[cacheSymbol];
       if (cachedPrecision) {
-        return fs14.stat(file, (err, stat2) => {
+        return fs16.stat(file, (err, stat2) => {
           if (err) {
             return callback(err);
           }
@@ -1602,16 +1606,16 @@ var require_mtime_precision = __commonJS({
         });
       }
       const mtime = new Date(Math.ceil(Date.now() / 1e3) * 1e3 + 5);
-      fs14.utimes(file, mtime, mtime, (err) => {
+      fs16.utimes(file, mtime, mtime, (err) => {
         if (err) {
           return callback(err);
         }
-        fs14.stat(file, (err2, stat2) => {
+        fs16.stat(file, (err2, stat2) => {
           if (err2) {
             return callback(err2);
           }
           const precision = stat2.mtime.getTime() % 1e3 === 0 ? "s" : "ms";
-          Object.defineProperty(fs14, cacheSymbol, { value: precision });
+          Object.defineProperty(fs16, cacheSymbol, { value: precision });
           callback(null, stat2.mtime, precision);
         });
       });
@@ -1632,8 +1636,8 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "../../node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path21 = __require("path");
-    var fs14 = require_graceful_fs();
+    var path22 = __require("path");
+    var fs16 = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
     var mtimePrecision = require_mtime_precision();
@@ -1643,7 +1647,7 @@ var require_lockfile = __commonJS({
     }
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path21.resolve(file));
+        return callback(null, path22.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -1764,7 +1768,7 @@ var require_lockfile = __commonJS({
         update: null,
         realpath: true,
         retries: 0,
-        fs: fs14,
+        fs: fs16,
         onCompromised: (err) => {
           throw err;
         },
@@ -1808,7 +1812,7 @@ var require_lockfile = __commonJS({
     }
     function unlock(file, options, callback) {
       options = {
-        fs: fs14,
+        fs: fs16,
         realpath: true,
         ...options
       };
@@ -1830,7 +1834,7 @@ var require_lockfile = __commonJS({
       options = {
         stale: 1e4,
         realpath: true,
-        fs: fs14,
+        fs: fs16,
         ...options
       };
       options.stale = Math.max(options.stale || 0, 2e3);
@@ -1869,16 +1873,16 @@ var require_lockfile = __commonJS({
 var require_adapter = __commonJS({
   "../../node_modules/proper-lockfile/lib/adapter.js"(exports, module) {
     "use strict";
-    var fs14 = require_graceful_fs();
-    function createSyncFs(fs15) {
+    var fs16 = require_graceful_fs();
+    function createSyncFs(fs17) {
       const methods = ["mkdir", "realpath", "stat", "rmdir", "utimes"];
-      const newFs = { ...fs15 };
+      const newFs = { ...fs17 };
       methods.forEach((method) => {
         newFs[method] = (...args) => {
           const callback = args.pop();
           let ret;
           try {
-            ret = fs15[`${method}Sync`](...args);
+            ret = fs17[`${method}Sync`](...args);
           } catch (err) {
             return callback(err);
           }
@@ -1916,7 +1920,7 @@ var require_adapter = __commonJS({
     }
     function toSyncOptions(options) {
       options = { ...options };
-      options.fs = createSyncFs(options.fs || fs14);
+      options.fs = createSyncFs(options.fs || fs16);
       if (typeof options.retries === "number" && options.retries > 0 || options.retries && typeof options.retries.retries === "number" && options.retries.retries > 0) {
         throw Object.assign(new Error("Cannot use retries with the sync api"), { code: "ESYNC" });
       }
@@ -2582,7 +2586,7 @@ var init_file_store_card_runtime = __esm({
 function isValidTaskfoldBoardId(value) {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
-var TASKFOLD_STATUSES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
+var TASKFOLD_STATUSES, TASKFOLD_STATUS_CATEGORIES, TASKFOLD_STATUS_ROLES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
 var init_contract = __esm({
   "../core/src/contract/index.ts"() {
     "use strict";
@@ -2597,6 +2601,8 @@ var init_contract = __esm({
       "blocked",
       "done"
     ];
+    TASKFOLD_STATUS_CATEGORIES = ["unstarted", "started", "completed", "cancelled"];
+    TASKFOLD_STATUS_ROLES = ["review", "intake"];
     TASKFOLD_PRIORITIES = ["low", "normal", "high", "urgent"];
     TASKFOLD_EXECUTION_MODES = ["autonomous", "manual"];
     TASKFOLD_EXECUTION_STATUSES = [
@@ -2650,7 +2656,7 @@ var init_contract = __esm({
       "relates_to"
     ];
     TASKFOLD_CARD_KINDS = ["task", "requirement"];
-    TASKFOLD_BOARD_GROUP_BY = ["milestone", "requirement", "status"];
+    TASKFOLD_BOARD_GROUP_BY = ["status", "milestone", "requirement", "assignee"];
     TASKFOLD_BOARD_SORT_BY = ["manual", "priority", "createdAt", "updatedAt"];
     TASKFOLD_BOARD_SORT_DIRECTIONS = ["asc", "desc"];
     TASKFOLD_PROOF_STATUSES = ["passed", "failed", "skipped", "unknown"];
@@ -3658,8 +3664,161 @@ var init_file_store_card_id = __esm({
   }
 });
 
-// ../core/src/file-store-cards.ts
+// ../core/src/card-image-ref.ts
+function taskfoldCardImageMimeType(extension) {
+  return TASKFOLD_CARD_IMAGE_MIME_BY_EXTENSION[extension.toLowerCase()];
+}
+function taskfoldCardImageExtensionForMime(mimeType) {
+  return MIME_TO_EXTENSION[mimeType.trim().toLowerCase()];
+}
+function isAllowedImageName(name) {
+  return TASKFOLD_CARD_IMAGE_NAME_PATTERN.test(name) && taskfoldCardImageMimeType(name.slice(name.lastIndexOf(".") + 1)) !== void 0;
+}
+function assertTaskfoldCardId(cardId) {
+  if (!TASKFOLD_CARD_ID_PATTERN.test(cardId)) {
+    throw new Error(`taskfold card image: invalid card id "${cardId}"`);
+  }
+}
+function assertTaskfoldCardImageName(name) {
+  if (!isAllowedImageName(name)) {
+    throw new Error(`taskfold card image: invalid image name "${name}"`);
+  }
+}
+function taskfoldCardImageRef(cardId, name) {
+  assertTaskfoldCardId(cardId);
+  assertTaskfoldCardImageName(name);
+  return `../attachments/${cardId}/${name}`;
+}
+var TASKFOLD_CARD_IMAGE_MIME_BY_EXTENSION, MIME_TO_EXTENSION, SEGMENT, TASKFOLD_CARD_ID_PATTERN, TASKFOLD_CARD_IMAGE_NAME_PATTERN, IMAGE_REF_PATTERN;
+var init_card_image_ref = __esm({
+  "../core/src/card-image-ref.ts"() {
+    "use strict";
+    TASKFOLD_CARD_IMAGE_MIME_BY_EXTENSION = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      avif: "image/avif",
+      bmp: "image/bmp"
+    };
+    MIME_TO_EXTENSION = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/jpg": "jpg",
+      "image/gif": "gif",
+      "image/webp": "webp",
+      "image/avif": "avif",
+      "image/bmp": "bmp"
+    };
+    SEGMENT = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}";
+    TASKFOLD_CARD_ID_PATTERN = new RegExp(`^${SEGMENT}$`);
+    TASKFOLD_CARD_IMAGE_NAME_PATTERN = new RegExp(`^${SEGMENT}\\.([A-Za-z0-9]{2,5})$`);
+    IMAGE_REF_PATTERN = new RegExp(`^\\.\\./attachments/(${SEGMENT})/(${SEGMENT}\\.[A-Za-z0-9]{2,5})$`);
+  }
+});
+
+// ../core/src/file-store-card-images.ts
+import { randomBytes } from "node:crypto";
+import fs8 from "node:fs";
 import path8 from "node:path";
+function taskfoldCardImageDir(attachmentsDir, cardId) {
+  assertTaskfoldCardId(cardId);
+  return path8.join(attachmentsDir, cardId);
+}
+function removeTaskfoldCardImageDir(attachmentsDir, cardId) {
+  if (!TASKFOLD_CARD_ID_PATTERN.test(cardId)) {
+    return false;
+  }
+  const dir = path8.join(attachmentsDir, cardId);
+  if (!fs8.existsSync(dir)) {
+    return false;
+  }
+  fs8.rmSync(dir, { recursive: true, force: true });
+  return true;
+}
+function copyTaskfoldCardImageDir(fromAttachmentsDir, toAttachmentsDir, cardId) {
+  const from = taskfoldCardImageDir(fromAttachmentsDir, cardId);
+  if (!fs8.existsSync(from)) {
+    return;
+  }
+  const to = taskfoldCardImageDir(toAttachmentsDir, cardId);
+  fs8.mkdirSync(to, { recursive: true });
+  for (const entry of fs8.readdirSync(from, { withFileTypes: true })) {
+    const target = path8.join(to, entry.name);
+    if (entry.isFile() && !entry.name.startsWith(".") && !fs8.existsSync(target)) {
+      writeFileAtomic(target, fs8.readFileSync(path8.join(from, entry.name)));
+    }
+  }
+}
+function newImageName(extension) {
+  return `img-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}.${extension}`;
+}
+function createTaskfoldFileCardImageStore(options) {
+  const { attachmentsDir, locksDir, configPath } = options;
+  return {
+    async put(cardId, extension, bytes) {
+      const ext = extension.toLowerCase();
+      if (taskfoldCardImageMimeType(ext) === void 0) {
+        throw new Error(`taskfold card image: unsupported image type "${extension}"`);
+      }
+      if (bytes.byteLength === 0) {
+        throw new Error("taskfold card image: image is empty");
+      }
+      const dir = taskfoldCardImageDir(attachmentsDir, cardId);
+      assertTaskfoldFormatWritable(configPath);
+      await withTaskfoldGlobalLock(locksDir, (guard) => {
+        upgradeTaskfoldFormatVersion(configPath, guard.assertHeld, TASKFOLD_CARD_IMAGES_FORMAT_VERSION);
+      });
+      const name = newImageName(ext);
+      writeFileAtomic(path8.join(dir, name), bytes);
+      return name;
+    },
+    async get(cardId, name) {
+      assertTaskfoldCardId(cardId);
+      assertTaskfoldCardImageName(name);
+      let bytes;
+      try {
+        bytes = fs8.readFileSync(path8.join(attachmentsDir, cardId, name));
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return void 0;
+        }
+        throw err;
+      }
+      const mimeType = taskfoldCardImageMimeType(name.slice(name.lastIndexOf(".") + 1));
+      return { bytes, mimeType };
+    },
+    async list(cardId) {
+      const dir = taskfoldCardImageDir(attachmentsDir, cardId);
+      try {
+        return fs8.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.name.startsWith(".") && TASKFOLD_CARD_IMAGE_NAME_PATTERN.test(entry.name)).map((entry) => entry.name).sort();
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return [];
+        }
+        throw err;
+      }
+    },
+    async removeCard(cardId) {
+      assertTaskfoldFormatWritable(configPath);
+      return removeTaskfoldCardImageDir(attachmentsDir, cardId);
+    }
+  };
+}
+var init_file_store_card_images = __esm({
+  "../core/src/file-store-card-images.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_card_image_ref();
+    init_file_store_format();
+    init_file_store_locks();
+    init_card_image_ref();
+  }
+});
+
+// ../core/src/file-store-cards.ts
+import path9 from "node:path";
 function assertValidCardPayload(key, value) {
   if (value.version !== 1 || value.card.id !== key) {
     throw new Error("invalid taskfold card payload");
@@ -3673,7 +3832,7 @@ function findCardFilePath(cardsDir, id) {
     if (!fileName.endsWith(CARD_EXTENSION2)) {
       continue;
     }
-    const filePath = path8.join(cardsDir, fileName);
+    const filePath = path9.join(cardsDir, fileName);
     const content = readFileIfExists(filePath);
     if (content === void 0) {
       continue;
@@ -3691,7 +3850,7 @@ function allocateNewCardFile(cardsDir, archiveCardsDir, card) {
   if (!displayId) {
     throw new Error(`taskfold file store: \u5206\u914D\u5668\u8FD4\u56DE\u4E86\u65E0\u6CD5\u89E3\u6790\u7684\u5C55\u793A ID "${displayIdText}"`);
   }
-  return { path: path8.join(cardsDir, cardFileName(displayIdText, card.title)), displayId };
+  return { path: path9.join(cardsDir, cardFileName(displayIdText, card.title)), displayId };
 }
 function readCardStateFromContent(content, codec, runtimeCardsDir, key) {
   const parsed = codec.parse(content);
@@ -3797,8 +3956,9 @@ function createTaskfoldFileCardStore(options) {
         return false;
       }
       for (const attachment of card.card?.metadata?.attachments ?? []) {
-        removeFileIfExists(path8.join(attachmentsDir, attachment.id));
+        removeFileIfExists(path9.join(attachmentsDir, attachment.id));
       }
+      removeTaskfoldCardImageDir(attachmentsDir, key);
       return true;
     },
     async entries() {
@@ -3807,7 +3967,7 @@ function createTaskfoldFileCardStore(options) {
         if (!fileName.endsWith(CARD_EXTENSION2)) {
           continue;
         }
-        const filePath = path8.join(cardsDir, fileName);
+        const filePath = path9.join(cardsDir, fileName);
         const content = readFileIfExists(filePath);
         if (content === void 0) {
           continue;
@@ -3895,6 +4055,7 @@ var init_file_store_cards = __esm({
     "use strict";
     init_file_store_atomic();
     init_file_store_card_id();
+    init_file_store_card_images();
     init_file_store_card_runtime();
     init_file_store_locks();
     init_markdown_card_format();
@@ -3903,20 +4064,20 @@ var init_file_store_cards = __esm({
 });
 
 // ../core/src/file-store-project-paths.ts
-import path9 from "node:path";
+import path10 from "node:path";
 function projectPath(root, value, direction) {
   if (direction === "read") {
     if (!value.startsWith("./")) return value;
-    const resolved = path9.resolve(root, value);
-    const relative2 = path9.relative(root, resolved);
-    if (relative2 === ".." || relative2.startsWith(`..${path9.sep}`)) {
+    const resolved = path10.resolve(root, value);
+    const relative2 = path10.relative(root, resolved);
+    if (relative2 === ".." || relative2.startsWith(`..${path10.sep}`)) {
       throw new Error("project-relative path escapes the project root.");
     }
     return resolved;
   }
-  if (!path9.isAbsolute(value)) return value;
-  const relative = path9.relative(root, value);
-  return relative !== ".." && !relative.startsWith(`..${path9.sep}`) ? `./${relative.split(path9.sep).join("/")}` : value;
+  if (!path10.isAbsolute(value)) return value;
+  const relative = path10.relative(root, value);
+  return relative !== ".." && !relative.startsWith(`..${path10.sep}`) ? `./${relative.split(path10.sep).join("/")}` : value;
 }
 function mapCardProjectPaths(root, card, direction) {
   const references = card.sourceReferences?.map((reference) => ({
@@ -3970,8 +4131,8 @@ var init_file_store_cas = __esm({
 });
 
 // ../core/src/file-store-milestones.ts
-import fs8 from "node:fs";
-import path10 from "node:path";
+import fs9 from "node:fs";
+import path11 from "node:path";
 import { createHash as createHash2 } from "node:crypto";
 function milestoneFileStem(title) {
   let stem = "";
@@ -4003,7 +4164,7 @@ function selectMilestoneFileName(milestone, occupied, existingName, previousTitl
 function findMilestoneFilePath(milestonesDir, id, codec) {
   for (const fileName of listFileNamesSafe(milestonesDir)) {
     if (!fileName.endsWith(MILESTONE_EXTENSION)) continue;
-    const filePath = path10.join(milestonesDir, fileName);
+    const filePath = path11.join(milestonesDir, fileName);
     const content = readFileIfExists(filePath);
     if (content === void 0) continue;
     try {
@@ -4019,19 +4180,19 @@ function writeTaskfoldMilestoneFile(options) {
   const content = codec.serialize(milestone, baseline);
   const fileName = selectMilestoneFileName(
     milestone,
-    new Set(fs8.readdirSync(milestonesDir)),
-    existingPath && path10.basename(existingPath),
+    new Set(fs9.readdirSync(milestonesDir)),
+    existingPath && path11.basename(existingPath),
     baseline === void 0 ? void 0 : codec.parse(baseline).title
   );
-  const target = path10.join(milestonesDir, fileName);
+  const target = path11.join(milestonesDir, fileName);
   guard.assertHeld();
   if (!existingPath) {
     if (!createFileExclusive(target, content)) throw new Error(`\u9636\u6BB5\u6587\u4EF6\u5DF2\u5B58\u5728\uFF1A${target}`);
     return;
   }
   if (existingPath !== target) {
-    if (fs8.existsSync(target)) throw new Error(`\u9636\u6BB5\u6587\u4EF6\u5DF2\u5B58\u5728\uFF1A${target}`);
-    fs8.renameSync(existingPath, target);
+    if (fs9.existsSync(target)) throw new Error(`\u9636\u6BB5\u6587\u4EF6\u5DF2\u5B58\u5728\uFF1A${target}`);
+    fs9.renameSync(existingPath, target);
   }
   writeFileAtomic(target, content, void 0, guard.assertHeld);
 }
@@ -4065,7 +4226,7 @@ function createTaskfoldFileMilestoneStore(options) {
         if (!fileName.endsWith(MILESTONE_EXTENSION)) {
           continue;
         }
-        const filePath = path10.join(milestonesDir, fileName);
+        const filePath = path11.join(milestonesDir, fileName);
         const content = readFileIfExists(filePath);
         if (content === void 0) {
           continue;
@@ -4100,7 +4261,7 @@ var init_file_store_milestones = __esm({
 });
 
 // ../core/src/file-store-documents.ts
-import path11 from "node:path";
+import path12 from "node:path";
 function assertValidDocumentPayload(key, value) {
   if (value.version !== 1 || value.document.id !== key) {
     throw new Error("invalid taskfold project document payload");
@@ -4123,7 +4284,7 @@ function listDocumentFiles(documentsDir) {
 }
 function findDocumentFilePathById(documentsDir, projectRoot, id) {
   for (const fileName of listDocumentFiles(documentsDir)) {
-    const filePath = path11.join(documentsDir, fileName);
+    const filePath = path12.join(documentsDir, fileName);
     if (readDocumentAt(filePath, projectRoot)?.id === id) {
       return filePath;
     }
@@ -4136,7 +4297,7 @@ function createTaskfoldFileDocumentStore(options) {
     async register(key, value) {
       assertValidDocumentPayload(key, value);
       const existingPath = findDocumentFilePathById(documentsDir, projectRoot, key);
-      const newPath = path11.join(documentsDir, documentFileName(value.document));
+      const newPath = path12.join(documentsDir, documentFileName(value.document));
       writeFileAtomic(newPath, JSON.stringify(mapDocumentProjectPath(projectRoot, value.document, "write"), null, 2));
       if (existingPath && existingPath !== newPath) {
         removeFileIfExists(existingPath);
@@ -4157,7 +4318,7 @@ function createTaskfoldFileDocumentStore(options) {
     async entries() {
       const results = [];
       for (const fileName of listDocumentFiles(documentsDir)) {
-        const document = readDocumentAt(path11.join(documentsDir, fileName), projectRoot);
+        const document = readDocumentAt(path12.join(documentsDir, fileName), projectRoot);
         if (document) {
           results.push({ key: document.id, value: { version: 1, document } });
         }
@@ -4180,14 +4341,14 @@ var init_file_store_documents = __esm({
 });
 
 // ../core/src/file-store-subscriptions.ts
-import path12 from "node:path";
+import path13 from "node:path";
 function assertValidSubscriptionPayload(key, value) {
   if (value.version !== 1 || value.subscription.id !== key) {
     throw new Error("invalid taskfold notification subscription payload");
   }
 }
 function subscriptionFilePath(subscriptionsDir, id) {
-  return path12.join(subscriptionsDir, `${id}${SUBSCRIPTION_EXTENSION}`);
+  return path13.join(subscriptionsDir, `${id}${SUBSCRIPTION_EXTENSION}`);
 }
 function createTaskfoldFileSubscriptionStore(options) {
   const { subscriptionsDir } = options;
@@ -4212,7 +4373,7 @@ function createTaskfoldFileSubscriptionStore(options) {
         if (!fileName.endsWith(SUBSCRIPTION_EXTENSION)) {
           continue;
         }
-        const content = readFileIfExists(path12.join(subscriptionsDir, fileName));
+        const content = readFileIfExists(path13.join(subscriptionsDir, fileName));
         if (content !== void 0) {
           const subscription = JSON.parse(content);
           results.push({ key: subscription.id, value: { version: 1, subscription } });
@@ -4235,7 +4396,7 @@ var init_file_store_subscriptions = __esm({
 });
 
 // ../core/src/file-store-attachments.ts
-import path13 from "node:path";
+import path14 from "node:path";
 function assertValidAttachmentPayload(key, value) {
   if (value.version !== 1 || value.attachment.id !== key) {
     throw new Error("invalid taskfold attachment payload");
@@ -4246,7 +4407,7 @@ function findAttachmentMetadata(cardsDir, cardCodec, attachmentId) {
     if (!fileName.endsWith(".md")) {
       continue;
     }
-    const content = readBufferIfExists(path13.join(cardsDir, fileName))?.toString("utf8");
+    const content = readBufferIfExists(path14.join(cardsDir, fileName))?.toString("utf8");
     if (content === void 0) {
       continue;
     }
@@ -4266,7 +4427,7 @@ function findAttachmentMetadata(cardsDir, cardCodec, attachmentId) {
 function createTaskfoldFileAttachmentStore(options) {
   const { attachmentsDir, cardsDir, cardCodec } = options;
   function blobPath(id) {
-    return path13.join(attachmentsDir, id);
+    return path14.join(attachmentsDir, id);
   }
   function lookupJoined(id) {
     const blob = readBufferIfExists(blobPath(id));
@@ -4372,14 +4533,306 @@ var init_file_store_boards = __esm({
   }
 });
 
+// ../core/src/status-registry.ts
+function validateStatusDefinitions(input) {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new TaskfoldStatusConfigError("must be a non-empty list.");
+  }
+  if (input.length > TASKFOLD_STATUS_MAX_COUNT) {
+    throw new TaskfoldStatusConfigError(`at most ${TASKFOLD_STATUS_MAX_COUNT} statuses are allowed.`);
+  }
+  const seenIds = /* @__PURE__ */ new Set();
+  const seenRoles = /* @__PURE__ */ new Set();
+  let seenDefault = false;
+  const result = [];
+  for (const [index, raw] of input.entries()) {
+    const where = `statuses[${index}]`;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new TaskfoldStatusConfigError(`${where} must be an object.`);
+    }
+    const record = raw;
+    const id = record.id;
+    if (typeof id !== "string" || !TASKFOLD_STATUS_ID_PATTERN.test(id)) {
+      throw new TaskfoldStatusConfigError(
+        `${where}.id must match ${TASKFOLD_STATUS_ID_PATTERN} (lowercase letters, digits, "_" or "-").`
+      );
+    }
+    if (seenIds.has(id)) {
+      throw new TaskfoldStatusConfigError(`duplicate status id "${id}".`);
+    }
+    seenIds.add(id);
+    const category = record.category;
+    if (!TASKFOLD_STATUS_CATEGORIES.includes(category)) {
+      throw new TaskfoldStatusConfigError(
+        `${where}.category must be one of: ${TASKFOLD_STATUS_CATEGORIES.join(", ")}.`
+      );
+    }
+    const definition = {
+      id,
+      category
+    };
+    if (record.name !== void 0) {
+      const name = typeof record.name === "string" ? record.name.trim() : "";
+      if (!name || name.length > TASKFOLD_STATUS_NAME_MAX_LENGTH) {
+        throw new TaskfoldStatusConfigError(
+          `${where}.name must be 1-${TASKFOLD_STATUS_NAME_MAX_LENGTH} characters.`
+        );
+      }
+      definition.name = name;
+    }
+    if (record.color !== void 0) {
+      const color = typeof record.color === "string" ? record.color.trim() : "";
+      if (!/^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20})$/.test(color)) {
+        throw new TaskfoldStatusConfigError(`${where}.color must be a #hex value or a CSS color name.`);
+      }
+      definition.color = color;
+    }
+    if (record.role !== void 0) {
+      const role = record.role;
+      if (!TASKFOLD_STATUS_ROLES.includes(role)) {
+        throw new TaskfoldStatusConfigError(`${where}.role must be one of: ${TASKFOLD_STATUS_ROLES.join(", ")}.`);
+      }
+      if (seenRoles.has(role)) {
+        throw new TaskfoldStatusConfigError(`role "${String(role)}" is assigned to more than one status.`);
+      }
+      seenRoles.add(role);
+      definition.role = role;
+    }
+    if (record.default !== void 0 && record.default !== false && record.default !== "false") {
+      if (record.default !== true && record.default !== "true") {
+        throw new TaskfoldStatusConfigError(`${where}.default must be true or false.`);
+      }
+      if (definition.category !== "unstarted") {
+        throw new TaskfoldStatusConfigError(`${where}.default is only allowed on an "unstarted" status.`);
+      }
+      if (seenDefault) {
+        throw new TaskfoldStatusConfigError("only one status can be the default.");
+      }
+      seenDefault = true;
+      definition.default = true;
+    }
+    result.push(definition);
+  }
+  for (const required of ["unstarted", "completed"]) {
+    if (!result.some((status) => status.category === required)) {
+      throw new TaskfoldStatusConfigError(`at least one "${required}" status is required.`);
+    }
+  }
+  return result;
+}
+function createStatusRegistry(definitions) {
+  const list = Object.freeze([...definitions]);
+  const byId = new Map(list.map((definition) => [definition.id, definition]));
+  const category = (id) => byId.get(id)?.category;
+  const unstarted = list.filter((definition) => definition.category === "unstarted");
+  const defaultStatus = (unstarted.find((definition) => definition.default) ?? unstarted.find((definition) => definition.role !== "intake") ?? unstarted[0])?.id;
+  if (defaultStatus === void 0) {
+    throw new TaskfoldStatusConfigError('at least one "unstarted" status is required.');
+  }
+  return {
+    defaultStatus,
+    list,
+    ids: Object.freeze(list.map((definition) => definition.id)),
+    has: (id) => byId.has(id),
+    get: (id) => byId.get(id),
+    category,
+    firstOf: (wanted) => list.find((definition) => definition.category === wanted)?.id,
+    withRole: (role) => list.find((definition) => definition.role === role)?.id,
+    isUnstarted: (id) => category(id) === "unstarted",
+    isStarted: (id) => category(id) === "started",
+    isCompleted: (id) => category(id) === "completed",
+    isCancelled: (id) => category(id) === "cancelled",
+    isTerminal: (id) => {
+      const value = category(id);
+      return value === "completed" || value === "cancelled";
+    },
+    rank: (id) => {
+      const index = list.findIndex((definition) => definition.id === id);
+      return index === -1 ? list.length : index;
+    }
+  };
+}
+function resolveStatusRegistry(configured) {
+  return createStatusRegistry(configured ?? LEGACY_TASKFOLD_STATUSES);
+}
+var TASKFOLD_STATUS_ID_PATTERN, TASKFOLD_STATUS_NAME_MAX_LENGTH, TASKFOLD_STATUS_MAX_COUNT, DEFAULT_TASKFOLD_STATUSES, LEGACY_TASKFOLD_STATUSES, TaskfoldStatusConfigError, LEGACY_STATUS_REGISTRY;
+var init_status_registry = __esm({
+  "../core/src/status-registry.ts"() {
+    "use strict";
+    init_contract();
+    TASKFOLD_STATUS_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+    TASKFOLD_STATUS_NAME_MAX_LENGTH = 40;
+    TASKFOLD_STATUS_MAX_COUNT = 24;
+    DEFAULT_TASKFOLD_STATUSES = Object.freeze([
+      { id: "todo", category: "unstarted" },
+      { id: "running", category: "started" },
+      { id: "review", category: "started", role: "review" },
+      { id: "done", category: "completed" },
+      { id: "cancelled", category: "cancelled" }
+    ]);
+    LEGACY_TASKFOLD_STATUSES = Object.freeze([
+      { id: "triage", category: "unstarted", role: "intake" },
+      { id: "backlog", category: "unstarted" },
+      { id: "todo", category: "unstarted", default: true },
+      { id: "scheduled", category: "unstarted" },
+      { id: "ready", category: "unstarted" },
+      { id: "running", category: "started" },
+      { id: "review", category: "started", role: "review" },
+      { id: "blocked", category: "started" },
+      { id: "done", category: "completed" }
+    ]);
+    TaskfoldStatusConfigError = class extends Error {
+      constructor(message) {
+        super(`taskfold statuses: ${message}`);
+        this.name = "TaskfoldStatusConfigError";
+      }
+    };
+    LEGACY_STATUS_REGISTRY = createStatusRegistry(LEGACY_TASKFOLD_STATUSES);
+  }
+});
+
+// ../core/src/file-store-statuses.ts
+import fs10 from "node:fs";
+function unquote(raw) {
+  const value = raw.trim();
+  if (value.startsWith('"')) {
+    const match = /^("(?:[^"\\]|\\.)*")\s*(#.*)?$/.exec(value);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (typeof parsed === "string") return parsed;
+      } catch {
+      }
+    }
+    throw new TaskfoldStatusConfigError(`cannot parse quoted value ${value}.`);
+  }
+  if (value.startsWith("'")) {
+    const match = /^'((?:[^']|'')*)'\s*(#.*)?$/.exec(value);
+    if (match) return match[1].replaceAll("''", "'");
+    throw new TaskfoldStatusConfigError(`cannot parse quoted value ${value}.`);
+  }
+  return value.replace(/\s+#.*$/, "").trim();
+}
+function findStatusesBlock(lines) {
+  const start = lines.findIndex((line) => STATUSES_KEY.test(line));
+  if (start === -1) return void 0;
+  let end = start + 1;
+  while (end < lines.length && !TOP_LEVEL_KEY.test(lines[end])) {
+    end += 1;
+  }
+  while (end > start + 1 && /^\s*(#.*)?$/.test(lines[end - 1])) {
+    end -= 1;
+  }
+  return { start, end };
+}
+function parseStatusesBlock(blockLines) {
+  const items = [];
+  for (const line of blockLines) {
+    if (/^\s*(#.*)?$/.test(line)) continue;
+    const item = /^\s*-\s+([A-Za-z_]+):\s*(.*)$/.exec(line);
+    if (item) {
+      items.push({ [item[1]]: unquote(item[2]) });
+      continue;
+    }
+    const field = /^\s+([A-Za-z_]+):\s*(.*)$/.exec(line);
+    if (field && items.length > 0) {
+      items[items.length - 1][field[1]] = unquote(field[2]);
+      continue;
+    }
+    throw new TaskfoldStatusConfigError(`unsupported line in statuses: ${line.trim()}`);
+  }
+  return items;
+}
+function parseTaskfoldStatusesConfig(content) {
+  const lines = content.split(/\r?\n/);
+  const block = findStatusesBlock(lines);
+  if (!block) return void 0;
+  const header = lines[block.start];
+  if (!/^statuses:\s*(#.*)?$/.test(header)) {
+    throw new TaskfoldStatusConfigError("inline values are not supported; use a block list.");
+  }
+  return validateStatusDefinitions(parseStatusesBlock(lines.slice(block.start + 1, block.end)));
+}
+function renderStatusesBlock(definitions) {
+  const lines = ["statuses:"];
+  for (const definition of definitions) {
+    lines.push(`  - id: ${definition.id}`);
+    if (definition.name !== void 0) lines.push(`    name: ${JSON.stringify(definition.name)}`);
+    lines.push(`    category: ${definition.category}`);
+    if (definition.color !== void 0) lines.push(`    color: ${JSON.stringify(definition.color)}`);
+    if (definition.role !== void 0) lines.push(`    role: ${definition.role}`);
+    if (definition.default) lines.push("    default: true");
+  }
+  return lines;
+}
+function renderTaskfoldStatusesConfig(content, definitions) {
+  const lines = content.length === 0 ? [] : content.replace(/\n$/, "").split(/\r?\n/);
+  const block = findStatusesBlock(lines);
+  const rendered = renderStatusesBlock(definitions);
+  if (block) {
+    lines.splice(block.start, block.end - block.start, ...rendered);
+  } else {
+    lines.push(...rendered);
+  }
+  return `${lines.join("\n")}
+`;
+}
+function createTaskfoldFileStatusConfigStore(options) {
+  const { configPath, locksDir } = options;
+  let cache;
+  const stampOf = () => {
+    try {
+      const stat2 = fs10.statSync(configPath);
+      return `${stat2.mtimeMs}:${stat2.size}`;
+    } catch {
+      return "missing";
+    }
+  };
+  return {
+    read() {
+      const stamp = stampOf();
+      if (cache && cache.stamp === stamp) {
+        return cache.value ? structuredClone(cache.value) : void 0;
+      }
+      const content = readFileIfExists(configPath);
+      const value = content === void 0 ? void 0 : parseTaskfoldStatusesConfig(content);
+      cache = { stamp, value };
+      return value ? structuredClone(value) : void 0;
+    },
+    async write(definitions) {
+      const validated = validateStatusDefinitions(definitions);
+      assertTaskfoldFormatWritable(configPath);
+      await withTaskfoldGlobalLock(locksDir, (guard) => {
+        upgradeTaskfoldFormatVersion(configPath, guard.assertHeld, TASKFOLD_STATUS_MODEL_FORMAT_VERSION);
+        const existing = readFileIfExists(configPath) ?? "";
+        writeFileAtomic(configPath, renderTaskfoldStatusesConfig(existing, validated), void 0, guard.assertHeld);
+      });
+      cache = void 0;
+      return validated;
+    }
+  };
+}
+var STATUSES_KEY, TOP_LEVEL_KEY;
+var init_file_store_statuses = __esm({
+  "../core/src/file-store-statuses.ts"() {
+    "use strict";
+    init_file_store_atomic();
+    init_file_store_format();
+    init_file_store_locks();
+    init_status_registry();
+    STATUSES_KEY = /^statuses:/;
+    TOP_LEVEL_KEY = /^[^\s#-][^:]*:/;
+  }
+});
+
 // ../core/src/file-store.ts
-import path14 from "node:path";
+import path15 from "node:path";
 function createTaskfoldFileStores(options) {
   const layout = resolveTaskfoldFileStoreLayout({
     dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
     ...options.pluginDir === void 0 ? {} : { pluginDir: options.pluginDir }
   });
-  const projectRoot = path14.basename(layout.dataDir) === ".taskfold" ? path14.dirname(layout.dataDir) : layout.dataDir;
+  const projectRoot = path15.basename(layout.dataDir) === ".taskfold" ? path15.dirname(layout.dataDir) : layout.dataDir;
   const canWrite = () => isTaskfoldFormatWritable(layout.configPath);
   const assertWritable = () => assertTaskfoldFormatWritable(layout.configPath);
   const writableAtOpen = canWrite();
@@ -4422,6 +4875,19 @@ function createTaskfoldFileStores(options) {
     cardsDir: layout.cardsDir,
     cardCodec
   }));
+  const cardImages = createTaskfoldFileCardImageStore({
+    attachmentsDir: layout.attachmentsDir,
+    locksDir: layout.locksDir,
+    configPath: layout.configPath
+  });
+  const statusConfigStore = createTaskfoldFileStatusConfigStore({
+    configPath: layout.configPath,
+    locksDir: layout.locksDir
+  });
+  const statusConfig = {
+    read: async () => statusConfigStore.read(),
+    write: async (_boardId, definitions) => await statusConfigStore.write(definitions)
+  };
   const changeEpoch = ensureFileChangeEpoch(layout.changesLogPath, layout.locksDir, writableAtOpen);
   const changeSource = createTaskfoldFileChangeSource({
     changesLogPath: layout.changesLogPath,
@@ -4436,6 +4902,8 @@ function createTaskfoldFileStores(options) {
     documents,
     subscriptions,
     attachments,
+    cardImages,
+    statusConfig,
     dataVersion: externalChangeReconciler.dataVersion,
     changeEpoch,
     reserveChangeRevisions: (count) => {
@@ -4508,6 +4976,8 @@ var init_file_store = __esm({
     init_file_store_subscriptions();
     init_file_store_attachments();
     init_file_store_boards();
+    init_file_store_card_images();
+    init_file_store_statuses();
     init_file_store_paths();
     init_file_store_card_id();
     init_file_store_path_resolver();
@@ -4634,10 +5104,10 @@ var init_change_aggregator = __esm({
 });
 
 // src/backend/src/project-routed-stores.ts
-import fs10 from "node:fs";
-import path17 from "node:path";
+import fs12 from "node:fs";
+import path18 from "node:path";
 function taskfoldPluginProjectDataDir(pluginDir, boardId) {
-  return path17.join(pluginDir, "projects", boardId);
+  return path18.join(pluginDir, "projects", boardId);
 }
 function taskfoldProjectDataDir(pluginDir, boardId, board) {
   const workspace = board?.defaultWorkspace;
@@ -4648,14 +5118,14 @@ function taskfoldProjectDataDir(pluginDir, boardId, board) {
 }
 function isDirectory(target) {
   try {
-    return fs10.statSync(target).isDirectory();
+    return fs12.statSync(target).isDirectory();
   } catch {
     return false;
   }
 }
 function listDirectoryNames(dir) {
   try {
-    return fs10.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    return fs12.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   } catch {
     return [];
   }
@@ -4664,9 +5134,9 @@ function cardBoardId2(value) {
   return value.card.metadata?.automation?.boardId ?? "default";
 }
 function createTaskfoldProjectRoutedStores(options) {
-  const pluginDir = path17.resolve(options.pluginDir);
+  const pluginDir = path18.resolve(options.pluginDir);
   const warn = options.warn ?? ((message) => console.warn(message));
-  const projectsRootDir = path17.join(pluginDir, "projects");
+  const projectsRootDir = path18.join(pluginDir, "projects");
   const pluginLayout = resolveTaskfoldFileStoreLayout({ dataDir: projectsRootDir, pluginDir });
   const ensurePluginDir = () => ensureTaskfoldPluginDirectories(pluginLayout);
   const rawBoards = createTaskfoldFileBoardStore({ projectsJsonPath: pluginLayout.projectsJsonPath });
@@ -4696,7 +5166,7 @@ function createTaskfoldProjectRoutedStores(options) {
     }
     for (const name of listDirectoryNames(projectsRootDir)) {
       if (BOARD_DIR_NAME.test(name)) {
-        dirs.add(path17.join(projectsRootDir, name));
+        dirs.add(path18.join(projectsRootDir, name));
       }
     }
     return [...dirs];
@@ -4709,7 +5179,7 @@ function createTaskfoldProjectRoutedStores(options) {
     if (!create && !isDirectory(dataDir)) {
       return void 0;
     }
-    if (dataDir.startsWith(`${projectsRootDir}${path17.sep}`)) {
+    if (dataDir.startsWith(`${projectsRootDir}${path18.sep}`)) {
       ensurePluginDir();
     }
     const stores = createTaskfoldFileStores({ dataDir });
@@ -4794,10 +5264,11 @@ function createTaskfoldProjectRoutedStores(options) {
     }
   }
   function copyAttachmentBlobs(card, from, to) {
+    copyTaskfoldCardImageDir(from.attachmentsDir, to.attachmentsDir, card.id);
     for (const attachment of card.metadata?.attachments ?? []) {
-      const target = path17.join(to.attachmentsDir, attachment.id);
-      const content = readBufferIfExists(path17.join(from.attachmentsDir, attachment.id));
-      if (content !== void 0 && !fs10.existsSync(target)) {
+      const target = path18.join(to.attachmentsDir, attachment.id);
+      const content = readBufferIfExists(path18.join(from.attachmentsDir, attachment.id));
+      if (content !== void 0 && !fs12.existsSync(target)) {
         writeFileAtomic(target, content);
       }
     }
@@ -4960,6 +5431,43 @@ function createTaskfoldProjectRoutedStores(options) {
     // 附件没有条件写的调用方（需求/16 R1 只要求卡片）；显式拒绝，绝不静默穿透。
     compareAndSwap: unsupportedTaskfoldCompareAndSwap
   };
+  async function cardImageOwner(cardId) {
+    const owners = await locate(cardSpec, cardId);
+    if (owners.length === 0) {
+      throw new Error(`taskfold: card ${cardId} not found for card image`);
+    }
+    return (await choose(cardSpec, cardId, owners)).root;
+  }
+  const cardImages = {
+    async put(cardId, extension, bytes) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.put(cardId, extension, bytes);
+    },
+    async get(cardId, name) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.get(cardId, name);
+    },
+    async list(cardId) {
+      return await (await cardImageOwner(cardId)).stores.cardImages.list(cardId);
+    },
+    async removeCard(cardId) {
+      let removed = false;
+      for (const root of await openRoots()) {
+        removed = await root.stores.cardImages.removeCard(cardId) || removed;
+      }
+      return removed;
+    }
+  };
+  const statusConfig = {
+    async read(boardId) {
+      const root = openRoot(await dataDirForBoardId(boardId), false);
+      return root ? await root.stores.statusConfig.read(boardId) : void 0;
+    },
+    async write(boardId, definitions) {
+      const root = await targetRoot(boardId);
+      const saved = await root.stores.statusConfig.write(boardId, definitions);
+      markDirty(root);
+      return saved;
+    }
+  };
   const boards = {
     ...rawBoards,
     async register(key, value) {
@@ -4974,7 +5482,7 @@ function createTaskfoldProjectRoutedStores(options) {
       await rawSubscriptions.register(key, value);
     }
   };
-  return { cards, boards, milestones, documents, subscriptions, attachments, changeSource };
+  return { cards, boards, milestones, documents, subscriptions, attachments, cardImages, statusConfig, changeSource };
 }
 var BOARD_DIR_NAME;
 var init_project_routed_stores = __esm({
@@ -4986,6 +5494,7 @@ var init_project_routed_stores = __esm({
     init_file_store();
     init_file_store_paths();
     init_file_store_subscriptions();
+    init_file_store_card_images();
     init_change_aggregator();
     BOARD_DIR_NAME = /^[a-z0-9][a-z0-9._-]{0,79}$/;
   }
@@ -5658,9 +6167,9 @@ __export(sqlite_migration_exports, {
   formatTaskfoldSqliteMigrationReport: () => formatTaskfoldSqliteMigrationReport,
   runTaskfoldSqliteMigration: () => runTaskfoldSqliteMigration
 });
-import fs13 from "node:fs";
+import fs15 from "node:fs";
 import os from "node:os";
-import path20 from "node:path";
+import path21 from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 function zeroCounts() {
   return Object.fromEntries(COUNT_KEYS.map((key) => [key, 0]));
@@ -5669,7 +6178,7 @@ function cardBoardId3(card) {
   return card.metadata?.automation?.boardId ?? "default";
 }
 function isAbsolutePath(value) {
-  return typeof value === "string" && path20.isAbsolute(value);
+  return typeof value === "string" && path21.isAbsolute(value);
 }
 function countCards(cards, counts) {
   for (const card of cards) {
@@ -5698,27 +6207,27 @@ function localTimestamp(date) {
 }
 function fileSignature(file) {
   try {
-    const stat2 = fs13.statSync(file);
+    const stat2 = fs15.statSync(file);
     return `${stat2.size}:${stat2.mtimeMs}`;
   } catch {
     return "missing";
   }
 }
 function copySqliteFiles(sqlitePath, destDir, baseName) {
-  fs13.mkdirSync(destDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+  fs15.mkdirSync(destDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
   const watched = [sqlitePath, `${sqlitePath}-wal`];
   const before = watched.map(fileSignature);
   const copied = [];
   try {
     for (const suffix of SQLITE_SUFFIXES) {
       const source = `${sqlitePath}${suffix}`;
-      if (!fs13.existsSync(source)) {
+      if (!fs15.existsSync(source)) {
         continue;
       }
-      const target = path20.join(destDir, `${baseName}.sqlite${suffix}`);
-      fs13.copyFileSync(source, target, fs13.constants.COPYFILE_EXCL);
+      const target = path21.join(destDir, `${baseName}.sqlite${suffix}`);
+      fs15.copyFileSync(source, target, fs15.constants.COPYFILE_EXCL);
       copied.push(target);
-      fs13.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
+      fs15.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
     }
     if (!isDeepStrictEqual3(watched.map(fileSignature), before)) {
       throw new TaskfoldSqliteMigrationError(
@@ -5728,7 +6237,7 @@ function copySqliteFiles(sqlitePath, destDir, baseName) {
     return copied;
   } catch (error) {
     for (const file of copied) {
-      fs13.rmSync(file, { force: true });
+      fs15.rmSync(file, { force: true });
     }
     throw error;
   }
@@ -5866,14 +6375,14 @@ async function writeAndVerifyRoot(plan, stagingDir) {
     counts.attachmentBlobs = blobBoards.get(boardId) ?? 0;
     written.set(boardId, counts);
   }
-  const cardsDir = path20.join(stagingDir, "cards");
-  const files = fs13.existsSync(cardsDir) ? fs13.readdirSync(cardsDir).filter((name) => name.endsWith(".md")) : [];
+  const cardsDir = path21.join(stagingDir, "cards");
+  const files = fs15.existsSync(cardsDir) ? fs15.readdirSync(cardsDir).filter((name) => name.endsWith(".md")) : [];
   const idOf = (name) => name.split(" - ")[0];
   const numberOf = (name) => Number.parseInt(idOf(name).replace(/^\D+-/, ""), 10);
   for (const boardId of plan.boardIds) {
     const own = new Set(storedCards.filter((card) => cardBoardId3(card) === boardId).map((card) => card.id));
     const mine = files.filter((name) => {
-      const content = fs13.readFileSync(path20.join(cardsDir, name), "utf8");
+      const content = fs15.readFileSync(path21.join(cardsDir, name), "utf8");
       return [...own].some((id) => content.includes(`"uuid": ${JSON.stringify(id)}`));
     }).toSorted((a, b) => numberOf(a) - numberOf(b));
     if (mine.length > 0) {
@@ -5883,37 +6392,37 @@ async function writeAndVerifyRoot(plan, stagingDir) {
   return { written, displayIds, milestoneUpdatedAtTruncated };
 }
 function stagingPathFor(dataDir, stamp) {
-  return path20.join(path20.dirname(dataDir), `.${path20.basename(dataDir).replace(/^\./, "")}.migrating-${stamp}`);
+  return path21.join(path21.dirname(dataDir), `.${path21.basename(dataDir).replace(/^\./, "")}.migrating-${stamp}`);
 }
 async function runTaskfoldSqliteMigration(options) {
-  const pluginDir = path20.resolve(options.pluginDir);
+  const pluginDir = path21.resolve(options.pluginDir);
   const { mode } = options;
   const stamp = localTimestamp(options.now ?? /* @__PURE__ */ new Date());
-  const sqlitePath = path20.join(pluginDir, "taskfold.sqlite");
-  const projectsJsonPath = path20.join(pluginDir, "projects.json");
-  const markerPath = path20.join(pluginDir, TASKFOLD_SQLITE_MIGRATION_MARKER);
-  const projectsRootDir = path20.join(pluginDir, "projects");
-  if (!fs13.existsSync(sqlitePath)) {
+  const sqlitePath = path21.join(pluginDir, "taskfold.sqlite");
+  const projectsJsonPath = path21.join(pluginDir, "projects.json");
+  const markerPath = path21.join(pluginDir, TASKFOLD_SQLITE_MIGRATION_MARKER);
+  const projectsRootDir = path21.join(pluginDir, "projects");
+  if (!fs15.existsSync(sqlitePath)) {
     throw new TaskfoldSqliteMigrationError(`no SQLite database at ${sqlitePath}; nothing to migrate.`);
   }
   const blockers = [];
-  if (fs13.existsSync(markerPath)) {
+  if (fs15.existsSync(markerPath)) {
     blockers.push(`${markerPath} already exists (this state directory was already migrated)`);
   }
-  if (fs13.existsSync(projectsJsonPath)) {
+  if (fs15.existsSync(projectsJsonPath)) {
     blockers.push(`${projectsJsonPath} already exists`);
   }
-  const workDir = fs13.mkdtempSync(path20.join(os.tmpdir(), "taskfold-migrate-sqlite-"));
+  const workDir = fs15.mkdtempSync(path21.join(os.tmpdir(), "taskfold-migrate-sqlite-"));
   const created = [];
   let applied = false;
   try {
-    const pristine = copySqliteFiles(sqlitePath, path20.join(workDir, "pristine"), "taskfold");
-    const readDir = path20.join(workDir, "read");
-    fs13.mkdirSync(readDir);
+    const pristine = copySqliteFiles(sqlitePath, path21.join(workDir, "pristine"), "taskfold");
+    const readDir = path21.join(workDir, "read");
+    fs15.mkdirSync(readDir);
     for (const file of pristine) {
-      fs13.copyFileSync(file, path20.join(readDir, path20.basename(file)));
+      fs15.copyFileSync(file, path21.join(readDir, path21.basename(file)));
     }
-    const source = await readSource(path20.join(readDir, "taskfold.sqlite"));
+    const source = await readSource(path21.join(readDir, "taskfold.sqlite"));
     const mainCheckoutCache = /* @__PURE__ */ new Map();
     const dataDirOf = (boardId) => {
       const board = source.boards.get(boardId)?.board;
@@ -5951,7 +6460,7 @@ async function runTaskfoldSqliteMigration(options) {
         ...board?.name ? { name: board.name } : {},
         archived: Boolean(board?.archivedAt),
         dataDir,
-        location: dataDir.startsWith(`${projectsRootDir}${path20.sep}`) ? "plugin" : "repository",
+        location: dataDir.startsWith(`${projectsRootDir}${path21.sep}`) ? "plugin" : "repository",
         skipped,
         source: source.counts.get(boardId) ?? zeroCounts(),
         absolutePaths: {
@@ -5978,7 +6487,7 @@ async function runTaskfoldSqliteMigration(options) {
       plans.set(dataDir, plan);
     }
     for (const plan of plans.values()) {
-      if (fs13.existsSync(plan.dataDir)) {
+      if (fs15.existsSync(plan.dataDir)) {
         blockers.push(`${plan.dataDir} already exists`);
       }
     }
@@ -5998,23 +6507,23 @@ async function runTaskfoldSqliteMigration(options) {
       throw new TaskfoldSqliteMigrationError(`refusing to migrate: ${blockers.join("; ")}`, report);
     }
     if (mode === "apply") {
-      const backupDir = path20.join(pluginDir, "backup");
-      fs13.mkdirSync(backupDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+      const backupDir = path21.join(pluginDir, "backup");
+      fs15.mkdirSync(backupDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
       for (const file of pristine) {
-        const target = path20.join(backupDir, path20.basename(file).replace(/^taskfold\./, `taskfold-premigrate-${stamp}.`));
-        fs13.copyFileSync(file, target, fs13.constants.COPYFILE_EXCL);
-        fs13.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
+        const target = path21.join(backupDir, path21.basename(file).replace(/^taskfold\./, `taskfold-premigrate-${stamp}.`));
+        fs15.copyFileSync(file, target, fs15.constants.COPYFILE_EXCL);
+        fs15.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
         report.backupFiles.push(target);
       }
     }
     const staged = [];
-    const projectsRootExisted = fs13.existsSync(projectsRootDir);
+    const projectsRootExisted = fs15.existsSync(projectsRootDir);
     let index = 0;
     for (const plan of plans.values()) {
       index += 1;
-      const stagingDir = mode === "apply" ? stagingPathFor(plan.dataDir, stamp) : path20.join(workDir, "stage", String(index), ".taskfold");
+      const stagingDir = mode === "apply" ? stagingPathFor(plan.dataDir, stamp) : path21.join(workDir, "stage", String(index), ".taskfold");
       if (mode === "apply") {
-        if (!projectsRootExisted && plan.dataDir.startsWith(`${projectsRootDir}${path20.sep}`) && !created.includes(projectsRootDir)) {
+        if (!projectsRootExisted && plan.dataDir.startsWith(`${projectsRootDir}${path21.sep}`) && !created.includes(projectsRootDir)) {
           created.push(projectsRootDir);
         }
         created.push(stagingDir);
@@ -6042,18 +6551,18 @@ async function runTaskfoldSqliteMigration(options) {
     }
     if (mode === "apply") {
       for (const { plan, stagingDir } of staged) {
-        if (fs13.existsSync(plan.dataDir)) {
+        if (fs15.existsSync(plan.dataDir)) {
           throw new TaskfoldSqliteMigrationError(`${plan.dataDir} appeared during the migration; nothing was committed.`);
         }
-        fs13.renameSync(stagingDir, plan.dataDir);
+        fs15.renameSync(stagingDir, plan.dataDir);
         created[created.indexOf(stagingDir)] = plan.dataDir;
       }
-      fs13.mkdirSync(pluginDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
+      fs15.mkdirSync(pluginDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
       created.push(projectsJsonPath);
       writeFileAtomic(projectsJsonPath, JSON.stringify(Object.fromEntries(source.boards), null, 2));
       if (source.subscriptions.length > 0) {
-        const subscriptionsDir = path20.join(pluginDir, "subscriptions");
-        if (!fs13.existsSync(subscriptionsDir)) {
+        const subscriptionsDir = path21.join(pluginDir, "subscriptions");
+        if (!fs15.existsSync(subscriptionsDir)) {
           created.push(subscriptionsDir);
         }
         const subscriptions = createTaskfoldFileSubscriptionStore({ subscriptionsDir });
@@ -6082,12 +6591,12 @@ async function runTaskfoldSqliteMigration(options) {
   } catch (error) {
     if (!applied) {
       for (const target of created.toReversed()) {
-        fs13.rmSync(target, { recursive: true, force: true });
+        fs15.rmSync(target, { recursive: true, force: true });
       }
     }
     throw error;
   } finally {
-    fs13.rmSync(workDir, { recursive: true, force: true });
+    fs15.rmSync(workDir, { recursive: true, force: true });
   }
 }
 function formatCounts(counts) {
@@ -6530,14 +7039,15 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor4
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2 } from "openclaw/plugin-sdk/security-runtime";
 
 // ../core/src/store-card-helpers.ts
-init_contract();
 init_sdk_utils();
+init_status_registry();
 init_store_constants();
 import { randomUUID as randomUUID4 } from "node:crypto";
 
 // ../core/src/store-normalizers.ts
 init_contract();
 init_store_constants();
+init_file_store_card_images();
 import { randomUUID as randomUUID3 } from "node:crypto";
 
 // ../core/src/workspace-path.ts
@@ -6546,6 +7056,7 @@ function isAbsoluteWorkspacePath(value) {
 }
 
 // ../core/src/store-normalizers.ts
+init_status_registry();
 function normalizeOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
@@ -6619,7 +7130,7 @@ function normalizeBoardMetadata(input, fallback, now = Date.now()) {
   };
 }
 function defaultTaskfoldBoardView() {
-  return { groupBy: "milestone", sortBy: "manual", sortDirection: "asc" };
+  return { groupBy: "status", sortBy: "priority", sortDirection: "asc" };
 }
 function normalizeBoardView(value, fallback) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -6629,7 +7140,7 @@ function normalizeBoardView(value, fallback) {
     throw new Error("board view must be an object.");
   }
   const record = value;
-  const groupBy = typeof record.groupBy === "string" && TASKFOLD_BOARD_GROUP_BY.includes(record.groupBy) ? record.groupBy : fallback?.groupBy ?? "milestone";
+  const groupBy = typeof record.groupBy === "string" && TASKFOLD_BOARD_GROUP_BY.includes(record.groupBy) ? record.groupBy : fallback?.groupBy ?? "status";
   const defaultSortBy = groupBy === "milestone" ? "manual" : "priority";
   const sortBy = typeof record.sortBy === "string" && TASKFOLD_BOARD_SORT_BY.includes(record.sortBy) ? record.sortBy : fallback?.groupBy === groupBy ? fallback.sortBy : defaultSortBy;
   if (groupBy !== "milestone" && sortBy === "manual") {
@@ -6827,14 +7338,14 @@ function normalizeExternalUrl(value, fallback, fieldName) {
   }
   return parsed.toString();
 }
-function normalizeStatus(value, fallback) {
+function normalizeStatus(value, fallback, registry = LEGACY_STATUS_REGISTRY) {
   if (typeof value !== "string" || !value.trim()) {
     return fallback;
   }
-  if (TASKFOLD_STATUSES.includes(value)) {
+  if (registry.has(value)) {
     return value;
   }
-  throw new Error(`status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`);
+  throw new Error(`status must be one of: ${registry.ids.join(", ")}.`);
 }
 function normalizeCardKind(value, fallback = "task") {
   if (value === void 0 || value === null || value === "") {
@@ -7100,8 +7611,8 @@ function normalizeEvent(value) {
   if (!id || !kind || !at) {
     return null;
   }
-  const fromStatus = typeof record.fromStatus === "string" && TASKFOLD_STATUSES.includes(record.fromStatus) ? record.fromStatus : void 0;
-  const toStatus = typeof record.toStatus === "string" && TASKFOLD_STATUSES.includes(record.toStatus) ? record.toStatus : void 0;
+  const fromStatus = typeof record.fromStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.fromStatus) ? record.fromStatus : void 0;
+  const toStatus = typeof record.toStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.toStatus) ? record.toStatus : void 0;
   const fromMilestoneId = normalizeBoundedString(
     record.fromMilestoneId,
     void 0,
@@ -7351,6 +7862,29 @@ function normalizeAttachmentInput(cardId, input, now) {
     ...note ? { note } : {}
   };
   return { attachment, contentBase64 };
+}
+function normalizeCardImageInput(input) {
+  const contentBase64 = typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : void 0;
+  if (!contentBase64) {
+    throw new Error("card image contentBase64 is required.");
+  }
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== contentBase64) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const declaredMime = typeof input.mimeType === "string" ? input.mimeType.trim() : "";
+  const fileName = typeof input.fileName === "string" ? input.fileName.trim() : "";
+  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
+  const extension = (declaredMime ? taskfoldCardImageExtensionForMime(declaredMime) : void 0) ?? (taskfoldCardImageMimeType(fileExtension) ? fileExtension : void 0);
+  if (!extension) {
+    throw new Error(
+      "card image must be png, jpeg, gif, webp, avif or bmp (set mimeType or a matching fileName extension)."
+    );
+  }
+  return { extension, mimeType: taskfoldCardImageMimeType(extension), bytes };
 }
 function normalizeClaim(value, fallback) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -7744,9 +8278,9 @@ function trimMetadataToBudget(metadata, options = {}) {
 }
 
 // ../core/src/store-card-helpers.ts
-function compareCards(left, right) {
+function compareCards(left, right, statusRank = LEGACY_STATUS_REGISTRY.rank) {
   if (left.status !== right.status) {
-    return TASKFOLD_STATUSES.indexOf(left.status) - TASKFOLD_STATUSES.indexOf(right.status);
+    return statusRank(left.status) - statusRank(right.status);
   }
   if (left.position !== right.position) {
     return left.position - right.position;
@@ -8611,7 +9145,7 @@ async function assertRestrictedTaskfoldTarget(params) {
 }
 
 // src/backend/src/dispatcher.ts
-import path15 from "node:path";
+import path16 from "node:path";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
@@ -8835,7 +9369,7 @@ async function materializeWorkspace(params) {
   }
   const sourcePath = workspace.sourcePath ?? workspace.path;
   const sourceBranch = workspace.sourcePath ? workspace.sourceBranch : workspace.branch;
-  if (!sourcePath || !path15.isAbsolute(sourcePath)) {
+  if (!sourcePath || !path16.isAbsolute(sourcePath)) {
     throw new Error("worktree workspace path must be an absolute git checkout path");
   }
   const canonicalSourcePath = await assertTaskfoldWorkspaceSourceAccess(
@@ -9225,9 +9759,9 @@ function readOptionalString(value, maxLength = 4e3) {
 function activeExecution(card) {
   return card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
-async function gitCheckout(path21) {
+async function gitCheckout(path22) {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", path21, "rev-parse", "--show-toplevel"], {
+    const { stdout } = await execFileAsync("git", ["-C", path22, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       maxBuffer: 16 * 1024
     });
@@ -9750,6 +10284,7 @@ function createTaskfoldDispatchHandler(params) {
 }
 
 // ../core/src/store-core.ts
+init_status_registry();
 import { createHash as createHash3, randomUUID as randomUUID6 } from "node:crypto";
 
 // ../core/src/store-automation.ts
@@ -10145,6 +10680,10 @@ var TaskfoldCoreStore = class {
   documentStore;
   subscriptionStore;
   attachmentStore;
+  /** 卡片图片（`attachments/<卡 uuid>/`）；只有文件后端提供，内存 store 等没有。 */
+  cardImageStore;
+  /** 项目的状态定义；没有（内存 store 等）时所有项目用过渡默认集。 */
+  statusConfig;
   constructor(store, stores = {}) {
     this.changes = new TaskfoldChangeTracker(
       stores.changeSource ?? createTaskfoldReservedChangeSource({
@@ -10165,6 +10704,44 @@ var TaskfoldCoreStore = class {
     );
     this.subscriptionStore = stores.subscriptions ?? store;
     this.attachmentStore = stores.attachments ?? store;
+    this.cardImageStore = stores.cardImages;
+    this.statusConfig = stores.statusConfig;
+  }
+  /** 该项目当前生效的状态注册表；`config.yml` 里的 `statuses` 不合法时抛 {@link TaskfoldStatusConfigError}。 */
+  async statusRegistryFor(boardId) {
+    const configured = await this.statusConfig?.read(normalizeBoardId(boardId) ?? "default");
+    return resolveStatusRegistry(configured);
+  }
+  /** 该项目的状态定义，按看板列顺序。 */
+  async listStatuses(boardId) {
+    return [...(await this.statusRegistryFor(boardId)).list];
+  }
+  /**
+   * 整体保存该项目的状态定义。还有卡片在用、却不在新列表里的状态时拒绝（先把卡移走），这样
+   * 不会留下"状态不存在"的孤儿卡。需要项目已有可写的 `.taskfold/`（格式版本比本版新时拒绝）。
+   */
+  async saveStatuses(boardId, definitions) {
+    if (!this.statusConfig) {
+      throw new Error("this store does not support custom statuses.");
+    }
+    const id = normalizeBoardId(boardId) ?? "default";
+    const next = validateStatusDefinitions(definitions);
+    return await this.enqueueMutation(async () => {
+      const nextIds = new Set(next.map((definition) => definition.id));
+      const stranded = /* @__PURE__ */ new Map();
+      for (const card of await this.list({ boardId: id })) {
+        if (!nextIds.has(card.status)) {
+          stranded.set(card.status, (stranded.get(card.status) ?? 0) + 1);
+        }
+      }
+      if (stranded.size > 0) {
+        const detail = [...stranded].map(([status, count]) => `${status} (${count})`).join(", ");
+        throw new Error(`cannot remove statuses that cards still use: ${detail}. Move those cards first.`);
+      }
+      const saved = await this.statusConfig.write(id, next);
+      await this.changes.recordChange();
+      return saved;
+    });
   }
   announceChangeEpoch() {
     this.changes.announceEpoch();
@@ -10395,11 +10972,12 @@ var TaskfoldCoreStore = class {
   }
   async createDirect(input, scope, options = {}) {
     const now = Date.now();
-    const requestedStatus = normalizeStatus(input.status, "todo");
     const kind = normalizeCardKind(input.kind);
     const cards = await this.list();
     const parents = normalizeStringList(input.parents, "parents", 120);
     const automation = normalizeCardAutomation(input);
+    const statusRegistry = await this.statusRegistryFor(automation?.boardId);
+    const requestedStatus = normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
     const heldBySchedule = Boolean(automation?.scheduledAt && automation.scheduledAt > now) && requestedStatus !== "blocked";
     let status = heldBySchedule ? "scheduled" : requestedStatus;
     let heldByDependencies = false;
@@ -10609,7 +11187,11 @@ var TaskfoldCoreStore = class {
         return existing;
       }
     }
-    const status = normalizeStatus(effectivePatch.status, existing.status);
+    const status = normalizeStatus(
+      effectivePatch.status,
+      existing.status,
+      await this.statusRegistryFor(cardBoardId(existing))
+    );
     const now = Date.now();
     const startedAt = effectivePatch.startedAt === void 0 ? status === "running" ? existing.startedAt ?? now : existing.startedAt : normalizeTimestamp(effectivePatch.startedAt, 0) || void 0;
     const completedAt = effectivePatch.completedAt === void 0 ? status === "done" ? existing.completedAt ?? now : void 0 : normalizeTimestamp(effectivePatch.completedAt, 0) || void 0;
@@ -11502,9 +12084,10 @@ function registerTaskfoldWorkspaceWorkflowMethods(params) {
 }
 
 // ../core/src/project-document-reader.ts
+init_card_image_ref();
 import { createHash as createHash4, randomUUID as randomUUID7 } from "node:crypto";
-import fs9 from "node:fs/promises";
-import path16 from "node:path";
+import fs11 from "node:fs/promises";
+import path17 from "node:path";
 var MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;
 var MARKDOWN_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown"]);
 function documentRevision(bytes) {
@@ -11539,11 +12122,11 @@ function assertMarkdownPath(document) {
   if (document.type !== "path" || !document.target) {
     throw new Error("only Markdown documents and Markdown file paths can be previewed.");
   }
-  const fileName = path16.basename(document.target).toLowerCase();
+  const fileName = path17.basename(document.target).toLowerCase();
   if (fileName === ".env" || fileName.startsWith(".env.")) {
     throw new Error("environment files cannot be previewed as project documents.");
   }
-  if (!MARKDOWN_EXTENSIONS.has(path16.extname(document.target).toLowerCase())) {
+  if (!MARKDOWN_EXTENSIONS.has(path17.extname(document.target).toLowerCase())) {
     throw new Error("project document paths must reference a Markdown file.");
   }
   return document.target;
@@ -11552,14 +12135,14 @@ async function resolveProjectDocumentFile(params) {
   const target = assertMarkdownPath(params.document);
   let resolvedPath;
   try {
-    resolvedPath = await fs9.realpath(target);
+    resolvedPath = await fs11.realpath(target);
   } catch {
     throw new Error("project document file does not exist.");
   }
   await params.assertPathAllowed(resolvedPath);
   let stat2;
   try {
-    stat2 = await fs9.stat(resolvedPath);
+    stat2 = await fs11.stat(resolvedPath);
   } catch {
     throw new Error("project document file cannot be read.");
   }
@@ -11571,7 +12154,7 @@ async function resolveProjectDocumentFile(params) {
   }
   let bytes;
   try {
-    bytes = await fs9.readFile(resolvedPath);
+    bytes = await fs11.readFile(resolvedPath);
   } catch {
     throw new Error("project document file cannot be read.");
   }
@@ -11607,24 +12190,24 @@ async function writeTaskfoldProjectDocumentPath(params) {
   if (documentRevision(current.bytes) !== params.expectedRevision) {
     throw new Error("project document changed on disk; reload it before saving.");
   }
-  const directory = path16.dirname(current.path);
-  const temporaryPath = path16.join(
+  const directory = path17.dirname(current.path);
+  const temporaryPath = path17.join(
     directory,
-    `.${path16.basename(current.path)}.taskfold-${randomUUID7()}.tmp`
+    `.${path17.basename(current.path)}.taskfold-${randomUUID7()}.tmp`
   );
   const originalMode = Number(current.stat.mode) & 4095;
   try {
-    const handle = await fs9.open(temporaryPath, "wx", originalMode);
+    const handle = await fs11.open(temporaryPath, "wx", originalMode);
     try {
       await handle.writeFile(content);
       await handle.sync();
     } finally {
       await handle.close();
     }
-    await fs9.chmod(temporaryPath, originalMode);
-    await fs9.rename(temporaryPath, current.path);
+    await fs11.chmod(temporaryPath, originalMode);
+    await fs11.rename(temporaryPath, current.path);
   } catch (error) {
-    await fs9.rm(temporaryPath, { force: true }).catch(() => void 0);
+    await fs11.rm(temporaryPath, { force: true }).catch(() => void 0);
     throw error;
   }
   return await readTaskfoldProjectDocument({
@@ -11632,6 +12215,7 @@ async function writeTaskfoldProjectDocumentPath(params) {
     assertPathAllowed: params.assertPathAllowed
   });
 }
+var MAX_DOCUMENT_IMAGE_BYTES = 16 * 1024 * 1024;
 
 // src/backend/src/project-document-reader.ts
 function pathAccess(access) {
@@ -12774,6 +13358,36 @@ function registerTaskfoldGatewayMethods(params) {
     { scope: WRITE_SCOPE3 }
   );
   api.registerGatewayMethod(
+    "taskfold.cards.images.add",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, await store.addCardImage(readId(requestParams), requestParams));
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE3 }
+  );
+  api.registerGatewayMethod(
+    "taskfold.cards.images.get",
+    async ({ params: requestParams, respond }) => {
+      try {
+        const name = requestParams.name;
+        if (typeof name !== "string" || !name.trim()) {
+          throw new Error("name is required.");
+        }
+        const image = await store.getCardImage(readId(requestParams), name);
+        if (!image) {
+          throw new Error(`card image not found: ${name.trim()}`);
+        }
+        respond(true, image);
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE2 }
+  );
+  api.registerGatewayMethod(
     "taskfold.cards.workerLog",
     async ({ params: requestParams, respond }) => {
       try {
@@ -13398,15 +14012,15 @@ function createTaskfoldReconcilerService(params) {
 }
 
 // src/backend/src/sqlite-migration-check.ts
-import fs11 from "node:fs";
-import path18 from "node:path";
+import fs13 from "node:fs";
+import path19 from "node:path";
 function createTaskfoldSqliteMigrationCheckService(pluginDir) {
   return {
     id: "taskfold-sqlite-migration-check",
     start(ctx) {
-      const sqlitePath = path18.join(pluginDir, "taskfold.sqlite");
-      const projectsJsonPath = path18.join(pluginDir, "projects.json");
-      if (fs11.existsSync(sqlitePath) && !fs11.existsSync(projectsJsonPath)) {
+      const sqlitePath = path19.join(pluginDir, "taskfold.sqlite");
+      const projectsJsonPath = path19.join(pluginDir, "projects.json");
+      if (fs13.existsSync(sqlitePath) && !fs13.existsSync(projectsJsonPath)) {
         ctx.logger.warn(
           `taskfold: ${sqlitePath} exists but ${projectsJsonPath} does not: Taskfold now stores data in files and your SQLite data has not been migrated yet. Run "openclaw taskfold migrate-sqlite --dry-run" to preview, then "openclaw taskfold migrate-sqlite --apply".`
         );
@@ -13436,6 +14050,7 @@ import { randomUUID as randomUUID10 } from "node:crypto";
 init_store_constants();
 
 // ../core/src/store-enrichment.ts
+init_file_store_card_images();
 import { randomUUID as randomUUID9 } from "node:crypto";
 init_store_constants();
 var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
@@ -13549,6 +14164,38 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
         throw error;
       }
     }));
+  }
+  /**
+   * 给卡片存一张图（粘贴进 notes / 评论的截图），写到 `attachments/<卡 uuid>/`。
+   * 不动卡片本身（不涨 revision）：文件夹就是真相，引用由调用方写进 Markdown。
+   * `id` 必须是卡 uuid。大小不设业务上限（受调用方传输层限制）。
+   */
+  async addCardImage(id, input) {
+    const images = this.requireCardImageStore();
+    const card = await this.get(id);
+    if (!card) {
+      throw new Error(`card not found: ${id}`);
+    }
+    const { extension, bytes, mimeType } = normalizeCardImageInput(input);
+    const name = await images.put(card.id, extension, bytes);
+    return {
+      cardId: card.id,
+      name,
+      ref: taskfoldCardImageRef(card.id, name),
+      mimeType,
+      byteSize: bytes.byteLength
+    };
+  }
+  async getCardImage(id, name) {
+    const images = this.requireCardImageStore();
+    const image = await images.get(id.trim(), name.trim());
+    return image ? { name: name.trim(), mimeType: image.mimeType, contentBase64: Buffer.from(image.bytes).toString("base64") } : void 0;
+  }
+  requireCardImageStore() {
+    if (!this.cardImageStore) {
+      throw new Error("card images are not supported by this store backend");
+    }
+    return this.cardImageStore;
   }
   async listAttachments(id) {
     const card = await this.get(id);
@@ -14253,7 +14900,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       if (!existing) {
         throw new Error(`card not found: ${id}`);
       }
-      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status);
+      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const claim = existing.metadata?.claim;
       if (claim) {
         assertClaimIdentity(claim, input);
@@ -14416,7 +15063,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       }
       assertCanMutateClaimedCard(existing, scope === null ? void 0 : scope);
       const agentId = input.agentId === void 0 ? existing.agentId : normalizeOptionalString(input.agentId);
-      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status);
+      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "reassign reason");
       const shouldResetFailures = input.resetFailures !== false;
       const baseMetadata = shouldResetFailures ? clearDiagnostics(existing.metadata, ["blocked_too_long", "repeated_failures"]) : existing.metadata;
@@ -14444,7 +15091,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       assertCanMutateClaimedCard(existing, scope === null ? void 0 : scope);
       const now = Date.now();
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "reclaim reason") ?? "Taskfold claim reclaimed.";
-      const targetStatus = input.status === void 0 ? existing.status === "running" ? "ready" : existing.status : normalizeStatus(input.status, existing.status);
+      const targetStatus = input.status === void 0 ? existing.status === "running" ? "ready" : existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
       const reclaimed = await this.updateCard(
         id,
         {
@@ -14484,7 +15131,8 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       if (existing.status !== "triage" && existing.status !== "backlog" && existing.status !== "todo") {
         throw new Error("only triage, backlog, or todo cards can be specified.");
       }
-      const requestedStatus = normalizeStatus(input.status, "todo");
+      const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
+      const requestedStatus = normalizeStatus(input.status, "todo", statusRegistry);
       if (requestedStatus !== "todo") {
         throw new Error("specified cards must move to todo.");
       }
@@ -14753,8 +15401,8 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
 
 // ../core/src/project-document-discovery.ts
 import { createHash as createHash5 } from "node:crypto";
-import fs12 from "node:fs/promises";
-import path19 from "node:path";
+import fs14 from "node:fs/promises";
+import path20 from "node:path";
 var MAX_DISCOVERED_DOCUMENTS = 500;
 var MARKDOWN_EXTENSIONS2 = /* @__PURE__ */ new Set([".md", ".markdown"]);
 var TOP_LEVEL_AI_INSTRUCTION_NAMES = /* @__PURE__ */ new Set(["agents.md", "claude.md"]);
@@ -14776,14 +15424,14 @@ var EXTRA_DOCUMENT_PATHS = [
   ".claude/skills/deploy-prod/SKILL.md"
 ];
 function isPathInside2(root, candidate) {
-  const relative = path19.relative(root, candidate);
-  return relative === "" || !relative.startsWith(`..${path19.sep}`) && relative !== "..";
+  const relative = path20.relative(root, candidate);
+  return relative === "" || !relative.startsWith(`..${path20.sep}`) && relative !== "..";
 }
 function normalizedRelativePath(root, target) {
-  return path19.relative(root, target).split(path19.sep).join("/");
+  return path20.relative(root, target).split(path20.sep).join("/");
 }
 function isMarkdownPath(relativePath) {
-  return MARKDOWN_EXTENSIONS2.has(path19.extname(relativePath).toLocaleLowerCase());
+  return MARKDOWN_EXTENSIONS2.has(path20.extname(relativePath).toLocaleLowerCase());
 }
 function sourceForDocument(relativePath) {
   const normalized2 = relativePath.toLocaleLowerCase();
@@ -14813,11 +15461,11 @@ function candidateKey(relativePath, source) {
   return `file.${createHash5("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
 }
 function candidateTitle(relativePath) {
-  return path19.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
+  return path20.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
 }
 async function directoryEntries(directory) {
   try {
-    return await fs12.readdir(directory, { encoding: "utf8", withFileTypes: true });
+    return await fs14.readdir(directory, { encoding: "utf8", withFileTypes: true });
   } catch {
     return [];
   }
@@ -14826,10 +15474,10 @@ async function addCandidate(params) {
   if (params.results.length >= MAX_DISCOVERED_DOCUMENTS || !isMarkdownPath(params.relativePath)) {
     return;
   }
-  const candidatePath = path19.join(params.root, params.relativePath);
+  const candidatePath = path20.join(params.root, params.relativePath);
   let target;
   try {
-    target = await fs12.realpath(candidatePath);
+    target = await fs14.realpath(candidatePath);
   } catch {
     return;
   }
@@ -14838,7 +15486,7 @@ async function addCandidate(params) {
   }
   let stat2;
   try {
-    stat2 = await fs12.stat(target);
+    stat2 = await fs14.stat(target);
   } catch {
     return;
   }
@@ -14859,12 +15507,12 @@ async function addCandidate(params) {
   params.targets.add(target);
 }
 async function addDirectoryMarkdownFiles(params) {
-  const directory = path19.join(params.root, params.relativeDirectory);
+  const directory = path20.join(params.root, params.relativeDirectory);
   const entries = await directoryEntries(directory);
   for (const entry of entries.filter((entry2) => entry2.isFile() && isMarkdownPath(entry2.name)).toSorted((left, right) => left.name.localeCompare(right.name))) {
     await addCandidate({
       ...params,
-      relativePath: path19.join(params.relativeDirectory, entry.name)
+      relativePath: path20.join(params.relativeDirectory, entry.name)
     });
   }
 }
@@ -14873,13 +15521,13 @@ async function addTopLevelModuleAiInstructions(params) {
   for (const entry of entries.filter(
     (entry2) => entry2.isDirectory() && !entry2.isSymbolicLink() && !entry2.name.startsWith(".") && !EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES.has(entry2.name)
   ).toSorted((left, right) => left.name.localeCompare(right.name))) {
-    const moduleEntries = await directoryEntries(path19.join(params.root, entry.name));
+    const moduleEntries = await directoryEntries(path20.join(params.root, entry.name));
     for (const instruction of moduleEntries.filter(
       (moduleEntry) => moduleEntry.isFile() && TOP_LEVEL_AI_INSTRUCTION_NAMES.has(moduleEntry.name.toLocaleLowerCase())
     ).toSorted((left, right) => left.name.localeCompare(right.name))) {
       await addCandidate({
         ...params,
-        relativePath: path19.join(entry.name, instruction.name)
+        relativePath: path20.join(entry.name, instruction.name)
       });
     }
   }
@@ -14887,13 +15535,13 @@ async function addTopLevelModuleAiInstructions(params) {
 async function resolveTaskfoldProjectDocumentWorkspacePath(workspacePath) {
   let root;
   try {
-    root = await fs12.realpath(workspacePath);
+    root = await fs14.realpath(workspacePath);
   } catch {
     throw new Error("project default workspace does not exist.");
   }
   let rootStat;
   try {
-    rootStat = await fs12.stat(root);
+    rootStat = await fs14.stat(root);
   } catch {
     throw new Error("project default workspace cannot be read.");
   }
@@ -14903,11 +15551,11 @@ async function resolveTaskfoldProjectDocumentWorkspacePath(workspacePath) {
   return root;
 }
 function isTaskfoldProjectDocumentDiscoveryPath(workspaceRoot, target) {
-  if (!target || !path19.isAbsolute(target)) {
+  if (!target || !path20.isAbsolute(target)) {
     return false;
   }
-  const root = path19.resolve(workspaceRoot);
-  const resolvedTarget = path19.resolve(target);
+  const root = path20.resolve(workspaceRoot);
+  const resolvedTarget = path20.resolve(target);
   if (!isPathInside2(root, resolvedTarget)) {
     return false;
   }
@@ -14941,7 +15589,7 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   for (const directory of PLANNING_DOCUMENT_DIRECTORIES) {
     await addDirectoryMarkdownFiles({
       ...params,
-      relativeDirectory: path19.join(".planning", directory)
+      relativeDirectory: path20.join(".planning", directory)
     });
   }
   for (const relativePath of EXTRA_DOCUMENT_PATHS) {
@@ -15943,6 +16591,8 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldDispatchStore {
       documents: stores.documents,
       subscriptions: stores.subscriptions,
       attachments: stores.attachments,
+      ...stores.cardImages ? { cardImages: stores.cardImages } : {},
+      ...stores.statusConfig ? { statusConfig: stores.statusConfig } : {},
       dataVersion: stores.dataVersion,
       changeEpoch: stores.changeEpoch,
       reserveChangeRevisions: stores.reserveChangeRevisions,

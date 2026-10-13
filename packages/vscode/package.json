@@ -5,6 +5,7 @@
   "version": "0.2.0",
   "publisher": "johnson9316-bit",
   "license": "MIT",
+  "icon": "resources/icon.png",
   "private": true,
   "repository": {
     "type": "git",
@@ -58,7 +59,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "package": "node scripts/build.mjs && vsce package --no-dependencies --out taskfold-0.2.0.vsix",
+    "package": "node scripts/build.mjs && vsce package --no-dependencies --baseContentUrl https://github.com/johnson9316-bit/Taskfold/blob/main/packages/vscode --baseImagesUrl https://raw.githubusercontent.com/johnson9316-bit/Taskfold/main/packages/vscode --out taskfold-0.2.0.vsix",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

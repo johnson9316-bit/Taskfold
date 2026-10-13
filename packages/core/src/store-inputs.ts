@@ -89,6 +89,26 @@ export type TaskfoldAttachmentInput = {
   mimeType?: unknown;
   note?: unknown;
 };
+/** 卡片图片：扩展名取 `mimeType`，没有就取 `fileName` 的扩展名。 */
+export type TaskfoldCardImageInput = {
+  fileName?: unknown;
+  contentBase64?: unknown;
+  mimeType?: unknown;
+};
+export type TaskfoldCardImageResult = {
+  cardId: string;
+  /** 文件夹内的文件名，如 `img-lq3x9a-1f2e3d.png`。 */
+  name: string;
+  /** 写进 Markdown 的相对路径：`../attachments/<卡 uuid>/<文件名>`。 */
+  ref: string;
+  mimeType: string;
+  byteSize: number;
+};
+export type TaskfoldCardImageContent = {
+  name: string;
+  mimeType: string;
+  contentBase64: string;
+};
 export type TaskfoldWorkerLogInput = {
   level?: unknown;
   message?: unknown;

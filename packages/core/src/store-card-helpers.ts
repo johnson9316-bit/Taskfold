@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  TASKFOLD_STATUSES,
   type TaskfoldAttemptStatus,
   type TaskfoldCard,
   type TaskfoldDiagnostic,
@@ -15,6 +14,7 @@ import {
   type TaskfoldStatus,
 } from "./contract/index.js";
 import { safeEqualSecret, truncateUtf16Safe } from "./sdk-utils.js";
+import { LEGACY_STATUS_REGISTRY } from "./status-registry.js";
 import {
   BLOCKED_TOO_LONG_MS,
   TASKFOLD_PROMPT_VERSION,
@@ -32,9 +32,17 @@ import {
   removeUndefinedMetadataFields,
 } from "./store-normalizers.js";
 
-export function compareCards(left: TaskfoldCard, right: TaskfoldCard): number {
+/**
+ * 卡片排序：先按状态（看板列顺序），再按列内位置。`statusRank` 默认用过渡默认集的顺序；
+ * 项目有自己的状态列表时传 `registry.rank`，未知状态排在最后。
+ */
+export function compareCards(
+  left: TaskfoldCard,
+  right: TaskfoldCard,
+  statusRank: (status: TaskfoldStatus) => number = LEGACY_STATUS_REGISTRY.rank,
+): number {
   if (left.status !== right.status) {
-    return TASKFOLD_STATUSES.indexOf(left.status) - TASKFOLD_STATUSES.indexOf(right.status);
+    return statusRank(left.status) - statusRank(right.status);
   }
   if (left.position !== right.position) {
     return left.position - right.position;

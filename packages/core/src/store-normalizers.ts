@@ -18,7 +18,6 @@ import {
   TASKFOLD_NOTIFICATION_KINDS,
   TASKFOLD_PRIORITIES,
   TASKFOLD_PROOF_STATUSES,
-  TASKFOLD_STATUSES,
   TASKFOLD_TEMPLATE_IDS,
   type TaskfoldArtifact,
   type TaskfoldAttachment,
@@ -80,10 +79,17 @@ import {
 import type {
   TaskfoldAttachmentInput,
   TaskfoldBoardInput,
+  TaskfoldCardImageInput,
   TaskfoldNotificationSubscribeInput,
   TaskfoldProofInput,
 } from "./store-inputs.js";
+import { taskfoldCardImageExtensionForMime, taskfoldCardImageMimeType } from "./file-store-card-images.js";
 import { isAbsoluteWorkspacePath } from "./workspace-path.js";
+import {
+  LEGACY_STATUS_REGISTRY,
+  TASKFOLD_STATUS_ID_PATTERN,
+  type TaskfoldStatusRegistry,
+} from "./status-registry.js";
 
 export function normalizeOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -184,7 +190,7 @@ export function normalizeBoardMetadata(
 }
 
 export function defaultTaskfoldBoardView(): TaskfoldBoardViewSettings {
-  return { groupBy: "milestone", sortBy: "manual", sortDirection: "asc" };
+  return { groupBy: "status", sortBy: "priority", sortDirection: "asc" };
 }
 
 export function normalizeBoardView(
@@ -202,7 +208,7 @@ export function normalizeBoardView(
     typeof record.groupBy === "string" &&
     (TASKFOLD_BOARD_GROUP_BY as readonly string[]).includes(record.groupBy)
       ? (record.groupBy as TaskfoldBoardGroupBy)
-      : fallback?.groupBy ?? "milestone";
+      : fallback?.groupBy ?? "status";
   const defaultSortBy: TaskfoldBoardSortBy =
     groupBy === "milestone" ? "manual" : "priority";
   const sortBy =
@@ -478,14 +484,22 @@ export function normalizeExternalUrl(
   return parsed.toString();
 }
 
-export function normalizeStatus(value: unknown, fallback: TaskfoldStatus): TaskfoldStatus {
+/**
+ * 状态 id 必须属于该项目的状态集（`registry`，默认是过渡默认集）。`fallback` 在没有给值时使用，
+ * 不做校验：调用方传的是卡片现有状态或项目的默认状态。
+ */
+export function normalizeStatus(
+  value: unknown,
+  fallback: TaskfoldStatus,
+  registry: TaskfoldStatusRegistry = LEGACY_STATUS_REGISTRY,
+): TaskfoldStatus {
   if (typeof value !== "string" || !value.trim()) {
     return fallback;
   }
-  if ((TASKFOLD_STATUSES as readonly string[]).includes(value)) {
-    return value as TaskfoldStatus;
+  if (registry.has(value)) {
+    return value;
   }
-  throw new Error(`status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`);
+  throw new Error(`status must be one of: ${registry.ids.join(", ")}.`);
 }
 
 export function normalizeCardKind(value: unknown, fallback: TaskfoldCardKind = "task"): TaskfoldCardKind {
@@ -854,15 +868,14 @@ function normalizeEvent(value: unknown): TaskfoldEvent | null {
   if (!id || !kind || !at) {
     return null;
   }
+  // 事件是历史记录：状态可能后来被项目删除或改名，所以只校验形状，不要求仍在当前状态集里。
   const fromStatus =
-    typeof record.fromStatus === "string" &&
-    TASKFOLD_STATUSES.includes(record.fromStatus as TaskfoldStatus)
-      ? (record.fromStatus as TaskfoldStatus)
+    typeof record.fromStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.fromStatus)
+      ? record.fromStatus
       : undefined;
   const toStatus =
-    typeof record.toStatus === "string" &&
-    TASKFOLD_STATUSES.includes(record.toStatus as TaskfoldStatus)
-      ? (record.toStatus as TaskfoldStatus)
+    typeof record.toStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.toStatus)
+      ? record.toStatus
       : undefined;
   const fromMilestoneId = normalizeBoundedString(
     record.fromMilestoneId,
@@ -1167,6 +1180,38 @@ export function normalizeAttachmentInput(
     ...(note ? { note } : {}),
   };
   return { attachment, contentBase64 };
+}
+
+/** 卡片图片入参：不设大小上限（传输层自有限制），只校验 base64 规范与图片类型白名单。 */
+export function normalizeCardImageInput(input: TaskfoldCardImageInput): {
+  extension: string;
+  mimeType: string;
+  bytes: Buffer;
+} {
+  const contentBase64 =
+    typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : undefined;
+  if (!contentBase64) {
+    throw new Error("card image contentBase64 is required.");
+  }
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== contentBase64) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const declaredMime = typeof input.mimeType === "string" ? input.mimeType.trim() : "";
+  const fileName = typeof input.fileName === "string" ? input.fileName.trim() : "";
+  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
+  const extension =
+    (declaredMime ? taskfoldCardImageExtensionForMime(declaredMime) : undefined) ??
+    (taskfoldCardImageMimeType(fileExtension) ? fileExtension : undefined);
+  if (!extension) {
+    throw new Error(
+      "card image must be png, jpeg, gif, webp, avif or bmp (set mimeType or a matching fileName extension).",
+    );
+  }
+  return { extension, mimeType: taskfoldCardImageMimeType(extension)!, bytes };
 }
 
 function normalizeClaim(value: unknown, fallback?: TaskfoldClaim): TaskfoldClaim | undefined {

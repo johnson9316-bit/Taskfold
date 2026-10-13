@@ -11,6 +11,17 @@ export const TASKFOLD_STATUSES = [
   "done",
 ] as const;
 
+/**
+ * 状态模型（需求/22-状态模型）：类别固定，状态名由项目在 `.taskfold/config.yml` 的 `statuses`
+ * 里自定义。引擎只认类别（与少量 role），不认状态名。
+ *
+ * `TASKFOLD_STATUSES` 是改造前的九个固定状态，现在只作为未配置 `statuses` 的项目的过渡默认集
+ * 与迁移时的旧值清单（见 status-registry.ts）；新代码不要再用它校验状态。
+ */
+export const TASKFOLD_STATUS_CATEGORIES = ["unstarted", "started", "completed", "cancelled"] as const;
+/** `review`：run 成功结束后卡移到哪；`intake`：自动拆解与 specify 的入口。 */
+export const TASKFOLD_STATUS_ROLES = ["review", "intake"] as const;
+
 export const TASKFOLD_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 /** Built-in launch choices. Persisted execution engines remain an open runtime identifier. */
 export const TASKFOLD_EXECUTION_ENGINES = ["codex", "claude"] as const;
@@ -66,7 +77,7 @@ export const TASKFOLD_LINK_TYPES = [
   "relates_to",
 ] as const;
 export const TASKFOLD_CARD_KINDS = ["task", "requirement"] as const;
-export const TASKFOLD_BOARD_GROUP_BY = ["milestone", "requirement", "status"] as const;
+export const TASKFOLD_BOARD_GROUP_BY = ["status", "milestone", "requirement", "assignee"] as const;
 export const TASKFOLD_BOARD_SORT_BY = ["manual", "priority", "createdAt", "updatedAt"] as const;
 export const TASKFOLD_BOARD_SORT_DIRECTIONS = ["asc", "desc"] as const;
 export const TASKFOLD_PROOF_STATUSES = ["passed", "failed", "skipped", "unknown"] as const;
@@ -126,7 +137,21 @@ export function isValidTaskfoldBoardId(value: unknown): value is string {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
 
-export type TaskfoldStatus = (typeof TASKFOLD_STATUSES)[number];
+/** 项目自定义状态的 id（`.taskfold/config.yml` 的 `statuses[].id`）；合法取值随项目而变。 */
+export type TaskfoldStatus = string;
+export type TaskfoldStatusCategory = (typeof TASKFOLD_STATUS_CATEGORIES)[number];
+export type TaskfoldStatusRole = (typeof TASKFOLD_STATUS_ROLES)[number];
+export type TaskfoldStatusDefinition = {
+  id: TaskfoldStatus;
+  /** 缺省时由界面按内置 id 取译名；用户改过才写。 */
+  name?: string;
+  category: TaskfoldStatusCategory;
+  /** 看板列的强调色（CSS 颜色字面量）。 */
+  color?: string;
+  role?: TaskfoldStatusRole;
+  /** 新建卡片的默认状态，只能设在 `unstarted` 类别里，至多一个；没设时取第一个非 intake 的 unstarted。 */
+  default?: boolean;
+};
 export type TaskfoldPriority = (typeof TASKFOLD_PRIORITIES)[number];
 export type TaskfoldExecutionEngine = string;
 export type TaskfoldExecutionMode = (typeof TASKFOLD_EXECUTION_MODES)[number];
@@ -574,5 +599,5 @@ export type TaskfoldBoardViewSettings = {
 
 export type TaskfoldListResult = {
   cards: TaskfoldCard[];
-  statuses: readonly TaskfoldStatus[];
+  statuses: readonly TaskfoldStatusDefinition[];
 };

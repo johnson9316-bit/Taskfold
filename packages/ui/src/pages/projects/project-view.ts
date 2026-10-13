@@ -1,4 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
+import { ref } from "lit/directives/ref.js";
 import type {
   TaskfoldBoardMetadata,
   TaskfoldBoardGroupBy,
@@ -10,6 +11,7 @@ import type {
   TaskfoldCardKind,
   TaskfoldDeliveryImplementationState,
   TaskfoldDeliveryReleaseState,
+  TaskfoldEvent,
   TaskfoldDeliveryVerificationState,
   TaskfoldExecution,
   TaskfoldMilestone,
@@ -23,14 +25,19 @@ import type {
   TaskfoldStatus,
 } from "@taskfold/core/contract/index.js";
 import "../../components/modal-dialog.ts";
+import "../../components/markdown-editor.ts";
 import "./graph-canvas.ts";
 import { buildGraphModel, resolveGraphDrop, type GraphFilter, type GraphRelation } from "./graph-model.ts";
 import { t, type TaskfoldLocale } from "../../i18n/index.ts";
 import {
   taskfoldEditorHtmlToMarkdown,
   taskfoldMarkdownToEditorHtml,
+  hydrateMarkdownImages,
+  plainTextFromMarkdown,
   renderTaskfoldMarkdown,
 } from "../../lib/markdown.ts";
+import { buildCardTimeline, cardComments } from "../../lib/card-timeline.ts";
+import { fitToViewport } from "../../lib/fit-viewport.ts";
 import { styleProperties } from "../../lib/style-properties.ts";
 import "../../styles/taskfold-project.css";
 
@@ -46,7 +53,7 @@ const STATUSES: readonly TaskfoldStatus[] = [
   "done",
 ];
 const PRIORITIES: readonly TaskfoldPriority[] = ["low", "normal", "high", "urgent"];
-const BOARD_GROUPS: readonly TaskfoldBoardGroupBy[] = ["milestone", "requirement", "status"];
+const BOARD_GROUPS: readonly TaskfoldBoardGroupBy[] = ["status", "milestone", "requirement", "assignee"];
 const BOARD_SORTS: readonly TaskfoldBoardSortBy[] = ["manual", "priority", "createdAt", "updatedAt"];
 const BOARD_SORT_DIRECTIONS: readonly TaskfoldBoardSortDirection[] = ["asc", "desc"];
 const DOCUMENT_SECTIONS: readonly TaskfoldProjectDocumentSection[] = [
@@ -163,6 +170,18 @@ export type TaskfoldProjectUiState = {
   screen: "overview" | "board" | "graph" | "settings" | "documents";
   modal: TaskfoldProjectModal | null;
   draggedCardId: string | null;
+  /** 拖拽经过、需要高亮的列。 */
+  dragOverColumnId: string | null;
+  /** 正在列底就地新建卡片的列。 */
+  quickAddColumnId: string | null;
+  /** 卡片详情里评论 / 变更历史页签。 */
+  cardActivityTab: "comments" | "history";
+  /** 卡片详情头部「更多」菜单是否展开。 */
+  cardMenuOpen: boolean;
+  /** 展开了「⋮」菜单的看板列（列 id）。 */
+  columnMenuId: string | null;
+  /** 顶栏「全部项目」下拉是否展开。 */
+  projectMenuOpen: boolean;
   graphMode: "mindmap" | "flow";
   graphZoom: number;
   graphFilter: GraphFilter;
@@ -222,7 +241,21 @@ export type TaskfoldProjectViewController = {
   updateProject: (data: Record<string, string>) => void;
   archiveProject: (archived: boolean) => void;
   createCard: (data: Record<string, string>) => void;
+  /** 卡片图片：粘贴进 notes / 评论的截图经宿主存到 `.taskfold/attachments/<卡 uuid>/`。 */
+  cardImages: {
+    upload: (cardId: string, file: File) => Promise<string>;
+    /** 新建卡片时还没有卡 id：暂存在内存里，建好卡后才上传。 */
+    stage: (file: File) => string;
+    resolve: (ref: string) => Promise<string | undefined>;
+    isPending: (ref: string) => boolean;
+  };
   updateCardStatus: (id: string, status: TaskfoldStatus) => void;
+  updateCardAgent: (id: string, agentId: string) => void;
+  updateCardPriority: (id: string, priority: TaskfoldPriority) => void;
+  updateCardLabels: (id: string, labels: string[]) => void;
+  addCardComment: (id: string, body: string) => void;
+  duplicateCard: (id: string) => void;
+  deleteCard: (id: string) => void;
   archiveCard: (id: string, archived: boolean) => void;
   moveCardMilestone: (id: string, milestoneId?: string, position?: number) => void;
   moveCardRequirement: (id: string, requirementId?: string) => void;
@@ -305,6 +338,12 @@ export function createTaskfoldProjectUiState(): TaskfoldProjectUiState {
     screen: "overview",
     modal: null,
     draggedCardId: null,
+    dragOverColumnId: null,
+    quickAddColumnId: null,
+    cardActivityTab: "comments",
+    cardMenuOpen: false,
+    columnMenuId: null,
+    projectMenuOpen: false,
     graphMode: "mindmap",
     graphZoom: 1,
     graphFilter: { query: "", milestoneId: "", status: "", tag: "", relation: "all", focusCardId: "" },
@@ -325,7 +364,7 @@ function boardName(board: Pick<TaskfoldBoardSummary | TaskfoldBoardMetadata, "id
 }
 
 function boardView(board: TaskfoldBoardMetadata): TaskfoldBoardViewSettings {
-  return board.boardView ?? { groupBy: "milestone", sortBy: "manual", sortDirection: "asc" };
+  return board.boardView ?? { groupBy: "status", sortBy: "priority", sortDirection: "asc" };
 }
 
 function cardRequirementId(card: TaskfoldCard): string | undefined {
@@ -524,7 +563,7 @@ function renderStatusOptions(selected: TaskfoldStatus) {
 function renderPriorityOptions(selected: TaskfoldPriority) {
   return PRIORITIES.map(
     (priority) =>
-      html`<option value=${priority} ?selected=${priority === selected}>${priority}</option>`,
+      html`<option value=${priority} ?selected=${priority === selected}>${t(`taskfoldProject.priorityValue.${priority}`)}</option>`,
   );
 }
 
@@ -590,8 +629,10 @@ function renderOrderControls(params: {
   `;
 }
 
-function renderProjectToolbar(controller: TaskfoldProjectViewController) {
+/** 顶栏「全部项目」下拉：搜索、切换项目、调整顺序、显示已归档，替代原来占一整行的项目工具栏。 */
+function renderProjectSwitcher(controller: TaskfoldProjectViewController) {
   const { state } = controller;
+  const open = state.projectMenuOpen;
   const query = state.query.trim().toLocaleLowerCase();
   const projects = state.projects.filter((project) => {
     if (!state.showArchivedProjects && project.archivedAt) {
@@ -599,71 +640,122 @@ function renderProjectToolbar(controller: TaskfoldProjectViewController) {
     }
     return !query || `${project.name ?? ""} ${project.id}`.toLocaleLowerCase().includes(query);
   });
+  const close = () => {
+    if (state.projectMenuOpen) {
+      state.projectMenuOpen = false;
+      controller.requestUpdate();
+    }
+  };
   return html`
-    <nav class="taskfold-project__project-toolbar" aria-label=${t("taskfoldProject.allProjects")}>
-      <label class="taskfold-project__search">
-        <span class="taskfold-project__sr-only">${t("taskfoldProject.searchProjects")}</span>
-        <input
-          type="search"
-          placeholder=${t("taskfoldProject.searchProjects")}
-          .value=${state.query}
-          @input=${(event: InputEvent) => {
-            state.query = (event.currentTarget as HTMLInputElement).value;
-            controller.requestUpdate();
-          }}
-        />
-      </label>
-      ${controller.projectManagementEnabled
+    <div
+      class="taskfold-project__switcher"
+      @focusout=${(event: FocusEvent) => {
+        if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+          close();
+        }
+      }}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          close();
+        }
+      }}
+    >
+      <button
+        class="tf-btn taskfold-project__all-projects ${state.screen === "overview" ? "tf-is-active" : ""}"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded=${open}
+        @click=${(event: Event) => {
+          state.projectMenuOpen = !open;
+          controller.requestUpdate();
+          if (!open) {
+            const root = (event.currentTarget as HTMLElement).parentElement;
+            setTimeout(() => root?.querySelector<HTMLInputElement>("input[type=search]")?.focus(), 0);
+          }
+        }}
+      >
+        <span>${t("taskfoldProject.allProjects")}</span>
+        <strong>${state.projects.length}</strong>
+        <span aria-hidden="true">&#9662;</span>
+      </button>
+      ${open
         ? html`
-            <label class="taskfold-project__checkbox">
-              <input
-                type="checkbox"
-                .checked=${state.showArchivedProjects}
-                @change=${(event: Event) => {
-                  state.showArchivedProjects = (event.currentTarget as HTMLInputElement).checked;
-                  controller.requestUpdate();
+            <div class="taskfold-project__switcher-menu" role="listbox">
+              <button
+                class="taskfold-project__nav-item ${state.screen === "overview" ? "tf-is-active" : ""}"
+                type="button"
+                @click=${() => {
+                  close();
+                  controller.setScreen("overview");
                 }}
-              />
-              ${t("taskfoldProject.includeArchived")}
-            </label>
+              >${t("taskfoldProject.overview")}</button>
+              <label class="taskfold-project__search">
+                <span class="taskfold-project__sr-only">${t("taskfoldProject.searchProjects")}</span>
+                <input
+                  type="search"
+                  placeholder=${t("taskfoldProject.searchProjects")}
+                  .value=${state.query}
+                  @input=${(event: InputEvent) => {
+                    state.query = (event.currentTarget as HTMLInputElement).value;
+                    controller.requestUpdate();
+                  }}
+                />
+              </label>
+              <div class="taskfold-project__project-list" role="list">
+                ${projects.length
+                  ? projects.map((project) => {
+                      const moveUp = reorderVisibleItemIds(state.projects, projects, project.id, -1);
+                      const moveDown = reorderVisibleItemIds(state.projects, projects, project.id, 1);
+                      return html`
+                        <div class="taskfold-project__project-row" role="listitem">
+                          <button
+                            class="taskfold-project__nav-project ${state.selectedProjectId === project.id
+                              ? "tf-is-selected"
+                              : ""}"
+                            type="button"
+                            @click=${() => {
+                              close();
+                              controller.selectProject(project.id);
+                            }}
+                          >
+                            <span class="taskfold-project__project-color" ${styleProperties({ "--project-color": project.color })}></span>
+                            <span class="taskfold-project__nav-project-name">${boardName(project)}</span>
+                            ${project.archivedAt
+                              ? html`<small>${t("taskfoldProject.archived")}</small>`
+                              : html`<small>${projectCardCount(project)}</small>`}
+                          </button>
+                          ${controller.projectManagementEnabled
+                            ? renderOrderControls({
+                                canMoveUp: Boolean(moveUp),
+                                canMoveDown: Boolean(moveDown),
+                                onMoveUp: () => moveUp && controller.reorderProjects(moveUp),
+                                onMoveDown: () => moveDown && controller.reorderProjects(moveDown),
+                              })
+                            : nothing}
+                        </div>
+                      `;
+                    })
+                  : html`<p class="taskfold-project__empty-side">${t("taskfoldProject.emptyProject")}</p>`}
+              </div>
+              ${controller.projectManagementEnabled
+                ? html`
+                    <label class="taskfold-project__checkbox">
+                      <input
+                        type="checkbox"
+                        .checked=${state.showArchivedProjects}
+                        @change=${(event: Event) => {
+                          state.showArchivedProjects = (event.currentTarget as HTMLInputElement).checked;
+                          controller.requestUpdate();
+                        }}
+                      />
+                      ${t("taskfoldProject.includeArchived")}
+                    </label>
+                  `
+                : nothing}
+            </div>
           `
         : nothing}
-      <div class="taskfold-project__project-list" role="list">
-        ${projects.length
-          ? projects.map(
-              (project) => {
-                const moveUp = reorderVisibleItemIds(state.projects, projects, project.id, -1);
-                const moveDown = reorderVisibleItemIds(state.projects, projects, project.id, 1);
-                return html`
-                  <div class="taskfold-project__project-row" role="listitem">
-                    <button
-                      class="taskfold-project__nav-project ${state.selectedProjectId === project.id
-                        ? "tf-is-selected"
-                        : ""}"
-                      type="button"
-                      @click=${() => controller.selectProject(project.id)}
-                    >
-                      <span class="taskfold-project__project-color" ${styleProperties({ "--project-color": project.color })}></span>
-                      <span class="taskfold-project__nav-project-name">${boardName(project)}</span>
-                      ${project.archivedAt
-                        ? html`<small>${t("taskfoldProject.archived")}</small>`
-                        : html`<small>${projectCardCount(project)}</small>`}
-                    </button>
-                    ${controller.projectManagementEnabled
-                      ? renderOrderControls({
-                          canMoveUp: Boolean(moveUp),
-                          canMoveDown: Boolean(moveDown),
-                          onMoveUp: () => moveUp && controller.reorderProjects(moveUp),
-                          onMoveDown: () => moveDown && controller.reorderProjects(moveDown),
-                        })
-                      : nothing}
-                  </div>
-                `;
-              },
-            )
-          : html`<p class="taskfold-project__empty-side">${t("taskfoldProject.emptyProject")}</p>`}
-      </div>
-    </nav>
+    </div>
   `;
 }
 
@@ -759,7 +851,39 @@ type TaskfoldBoardColumn = {
   manualOrder?: { milestoneId?: string; cards: TaskfoldCard[] };
   onDrop: (cardId: string) => void;
   onCreate: () => void;
+  /** 列底就地新建时附带的字段（状态 / 里程碑 / 需求 / 负责人）。 */
+  quickCreate: Record<string, string>;
 };
+
+const LABEL_COLOR_COUNT = 6;
+const MAX_VISIBLE_LABELS = 3;
+
+/** 标签没有颜色存储：用文本哈希得到稳定的色号，同一标签在任何卡片上颜色一致。 */
+function labelColorIndex(label: string): number {
+  let hash = 0;
+  for (const char of label) {
+    hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
+  }
+  return hash % LABEL_COLOR_COUNT;
+}
+
+function renderCardLabels(labels: readonly string[]) {
+  if (labels.length === 0) {
+    return nothing;
+  }
+  const hidden = labels.length - MAX_VISIBLE_LABELS;
+  return html`
+    <span class="taskfold-project__card-labels">
+      ${labels.slice(0, MAX_VISIBLE_LABELS).map(
+        (label) =>
+          html`<span class="taskfold-project__label tf-label-${labelColorIndex(label)}" title=${label}>${label}</span>`,
+      )}
+      ${hidden > 0
+        ? html`<span class="taskfold-project__label tf-label-more" title=${labels.slice(MAX_VISIBLE_LABELS).join(", ")}>+${hidden}</span>`
+        : nothing}
+    </span>
+  `;
+}
 
 function renderCard(
   controller: TaskfoldProjectViewController,
@@ -773,13 +897,14 @@ function renderCard(
   }
   const archived = isArchivedCard(card);
   const isProjectArchived = Boolean(project.board.archivedAt);
+  const done = card.status === "done";
   const orderedCards = options.manualOrder?.cards ?? [];
   const cardIndex = orderedCards.findIndex((candidate) => candidate.id === card.id);
   const previousCard = orderedCards[cardIndex - 1];
   const nextCard = orderedCards[cardIndex + 1];
   return html`
     <article
-      class="taskfold-project__card ${archived ? "tf-is-archived" : ""} ${isRequirementCard(card) ? "tf-is-requirement" : ""}"
+      class="taskfold-project__card ${archived ? "tf-is-archived" : ""} ${isRequirementCard(card) ? "tf-is-requirement" : ""} ${done ? "tf-is-done" : ""} ${state.draggedCardId === card.id ? "tf-is-dragging" : ""}"
       draggable=${!archived && !isProjectArchived}
       @dragstart=${(event: DragEvent) => {
         state.draggedCardId = card.id;
@@ -789,14 +914,20 @@ function renderCard(
       }}
       @dragend=${() => {
         state.draggedCardId = null;
+        state.dragOverColumnId = null;
         controller.requestUpdate();
       }}
       @dragover=${(event: DragEvent) => event.preventDefault()}
       @drop=${(event: DragEvent) => {
+        // 只有手动排序（里程碑分组）才在卡片上处理落点；其余情况让事件冒泡到列，由列处理跨列移动。
+        if (!options.manualOrder) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
+        state.dragOverColumnId = null;
         const id = event.dataTransfer?.getData("text/plain") || state.draggedCardId;
-        if (options.manualOrder && id && id !== card.id) {
+        if (id && id !== card.id) {
           controller.moveCardMilestone(
             id,
             options.manualOrder.milestoneId,
@@ -805,6 +936,19 @@ function renderCard(
         }
       }}
     >
+      <input
+        class="taskfold-project__card-check"
+        type="checkbox"
+        aria-label=${t("taskfoldProject.markDone")}
+        title=${t("taskfoldProject.markDone")}
+        .checked=${done}
+        ?disabled=${archived || isProjectArchived || !controller.connected}
+        @change=${(event: Event) =>
+          controller.updateCardStatus(
+            card.id,
+            (event.currentTarget as HTMLInputElement).checked ? "done" : "todo",
+          )}
+      />
       <button
         class="taskfold-project__card-main"
         type="button"
@@ -812,7 +956,8 @@ function renderCard(
       >
         <span class="taskfold-project__priority tf-priority-${card.priority}"></span>
         <span class="taskfold-project__card-title">${card.title}</span>
-        ${card.notes ? html`<span class="taskfold-project__card-notes" title=${card.notes}>${card.notes}</span>` : nothing}
+        ${card.notes ? html`<span class="taskfold-project__card-notes" title=${plainTextFromMarkdown(card.notes)}>${plainTextFromMarkdown(card.notes)}</span>` : nothing}
+        ${renderCardLabels(card.labels)}
         ${card.delivery
           ? html`
               <span class="taskfold-project__delivery-badges">
@@ -835,41 +980,9 @@ function renderCard(
             `
           : nothing}
       </button>
-      <div class="taskfold-project__card-footer">
-        <select
-          class="taskfold-project__compact-select"
-          aria-label=${t("taskfoldProject.status")}
-          .value=${card.status}
-          @change=${(event: Event) =>
-            controller.updateCardStatus(
-              card.id,
-              (event.currentTarget as HTMLSelectElement).value as TaskfoldStatus,
-            )}
-        >
-          ${renderStatusOptions(card.status)}
-        </select>
-        <select
-          class="taskfold-project__compact-select taskfold-project__move-card"
-          title=${project.milestones.find((milestone) => milestone.id === card.milestoneId)?.title ?? t("taskfoldProject.unassigned")}
-          aria-label=${t("taskfoldProject.moveTo")}
-          ?disabled=${isProjectArchived}
-          @change=${(event: Event) =>
-            controller.moveCardMilestone(
-              card.id,
-              (event.currentTarget as HTMLSelectElement).value || undefined,
-            )}
-        >
-          <option value="" ?selected=${!card.milestoneId}>${t("taskfoldProject.unassigned")}</option>
-          ${project.milestones
-            .filter((milestone) => milestone.state === "active")
-            .map(
-              (milestone) => html`
-                <option value=${milestone.id} ?selected=${milestone.id === card.milestoneId}>${milestone.title}</option>
-              `,
-            )}
-        </select>
-        ${options.manualOrder
-          ? renderOrderControls({
+      ${options.manualOrder
+        ? html`<div class="taskfold-project__card-order">
+            ${renderOrderControls({
               canMoveUp: !archived && !isProjectArchived && Boolean(previousCard),
               canMoveDown: !archived && !isProjectArchived && Boolean(nextCard),
               onMoveUp: () =>
@@ -886,11 +999,121 @@ function renderCard(
                   options.manualOrder?.milestoneId,
                   nextCard.position + 1,
                 ),
-            })
-          : nothing}
-      </div>
+            })}
+          </div>`
+        : nothing}
       ${archived ? html`<span class="taskfold-project__card-archived">${t("taskfoldProject.archived")}</span>` : nothing}
     </article>
+  `;
+}
+
+/** 列底的就地新建：按钮点开后是一行输入框，Enter 创建、Esc 取消。 */
+const ADD_MILESTONE_COLUMN = "__add-milestone";
+
+/** 里程碑分组末尾的虚线列：点开是行内输入框，回车创建里程碑。 */
+function renderAddMilestoneColumn(controller: TaskfoldProjectViewController) {
+  const { state } = controller;
+  const editing = state.quickAddColumnId === ADD_MILESTONE_COLUMN;
+  const close = () => {
+    state.quickAddColumnId = null;
+    controller.requestUpdate();
+  };
+  return html`
+    <section class="taskfold-project__add-column">
+      ${editing
+        ? html`
+            <input
+              class="taskfold-project__quick-input"
+              type="text"
+              placeholder=${t("taskfoldProject.addMilestonePlaceholder")}
+              aria-label=${t("taskfoldProject.newMilestone")}
+              @keydown=${(event: KeyboardEvent) => {
+                if (event.isComposing) {
+                  return;
+                }
+                if (event.key === "Escape") {
+                  close();
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  const title = (event.currentTarget as HTMLInputElement).value.trim();
+                  if (title) {
+                    controller.saveMilestone({ title });
+                  }
+                  close();
+                }
+              }}
+              @blur=${(event: FocusEvent) => {
+                if (!(event.currentTarget as HTMLInputElement).value.trim()) {
+                  close();
+                }
+              }}
+            />
+          `
+        : html`
+            <button
+              class="taskfold-project__quick-add"
+              type="button"
+              ?disabled=${!controller.connected}
+              @click=${(event: Event) => {
+                const section = (event.currentTarget as HTMLElement).closest("section");
+                state.quickAddColumnId = ADD_MILESTONE_COLUMN;
+                controller.requestUpdate();
+                setTimeout(() => section?.querySelector<HTMLInputElement>(".taskfold-project__quick-input")?.focus(), 0);
+              }}
+            >+ ${t("taskfoldProject.newMilestone")}</button>
+          `}
+    </section>
+  `;
+}
+
+function renderQuickAdd(controller: TaskfoldProjectViewController, column: TaskfoldBoardColumn, disabled: boolean) {
+  const { state } = controller;
+  if (state.quickAddColumnId !== column.id) {
+    return html`
+      <button
+        class="taskfold-project__quick-add"
+        type="button"
+        ?disabled=${disabled}
+        @click=${(event: Event) => {
+          const section = (event.currentTarget as HTMLElement).closest("section");
+          state.quickAddColumnId = column.id;
+          controller.requestUpdate();
+          setTimeout(() => section?.querySelector<HTMLInputElement>(".taskfold-project__quick-input")?.focus(), 0);
+        }}
+      >+ ${t("taskfoldProject.newCard")}</button>
+    `;
+  }
+  const close = () => {
+    state.quickAddColumnId = null;
+    controller.requestUpdate();
+  };
+  return html`
+    <input
+      class="taskfold-project__quick-input"
+      type="text"
+      placeholder=${t("taskfoldProject.quickAddPlaceholder")}
+      aria-label=${t("taskfoldProject.cardTitle")}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.isComposing) {
+          return;
+        }
+        if (event.key === "Escape") {
+          close();
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          const title = (event.currentTarget as HTMLInputElement).value.trim();
+          if (title) {
+            controller.createCard({ title, priority: "normal", ...column.quickCreate });
+          }
+          close();
+        }
+      }}
+      @blur=${(event: FocusEvent) => {
+        if (!(event.currentTarget as HTMLInputElement).value.trim()) {
+          close();
+        }
+      }}
+    />
   `;
 }
 
@@ -905,91 +1128,159 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
   const moveMilestoneDown = milestone
     ? reorderVisibleItemIds(milestones, milestones, milestone.id, 1)
     : undefined;
+  const menuOpen = state.columnMenuId === params.id;
+  const closeMenu = () => {
+    if (state.columnMenuId === params.id) {
+      state.columnMenuId = null;
+      controller.requestUpdate();
+    }
+  };
   return html`
     <section
-      class="taskfold-project__column ${milestone ? `tf-is-${milestone.state}` : "tf-is-unassigned"}"
-      @dragover=${(event: DragEvent) => event.preventDefault()}
+      class="taskfold-project__column ${milestone ? `tf-is-${milestone.state}` : "tf-is-unassigned"} ${state.dragOverColumnId === params.id ? "tf-is-drag-over" : ""}"
+      @dragover=${(event: DragEvent) => {
+        event.preventDefault();
+        if (state.draggedCardId && state.dragOverColumnId !== params.id) {
+          state.dragOverColumnId = params.id;
+          controller.requestUpdate();
+        }
+      }}
+      @dragleave=${(event: DragEvent) => {
+        const target = event.relatedTarget as Node | null;
+        if (state.dragOverColumnId === params.id && !(target && (event.currentTarget as HTMLElement).contains(target))) {
+          state.dragOverColumnId = null;
+          controller.requestUpdate();
+        }
+      }}
       @drop=${(event: DragEvent) => {
         event.preventDefault();
+        state.dragOverColumnId = null;
         const id = event.dataTransfer?.getData("text/plain") || state.draggedCardId;
         if (id) {
           params.onDrop(id);
         }
       }}
     >
-      <header class="taskfold-project__column-header">
-        <div class="taskfold-project__column-heading">
-          ${params.requirement
-            ? html`
-                <button
-                  class="taskfold-project__column-title-button"
-                  type="button"
-                  @click=${() =>
-                    controller.openModal({ kind: "card-detail", cardId: params.requirement!.id })}
-                >${params.title}</button>
-              `
-            : html`<h2>${params.title}</h2>`}
-          <span class="taskfold-project__column-subtitle">${params.subtitle || t("taskfoldProject.cards", { count: String(params.cards.length) })}</span>
-        </div>
-        <div class="taskfold-project__column-actions">
-          ${milestone
-            ? html`
-                ${renderOrderControls({
-                  canMoveUp: !projectArchived && Boolean(moveMilestoneUp),
-                  canMoveDown: !projectArchived && Boolean(moveMilestoneDown),
-                  onMoveUp: () => moveMilestoneUp && controller.reorderMilestones(moveMilestoneUp),
-                  onMoveDown: () =>
-                    moveMilestoneDown && controller.reorderMilestones(moveMilestoneDown),
-                })}
-                <button
-                  class="taskfold-project__icon-button"
-                  type="button"
-                  title=${t("taskfoldProject.editMilestone")}
-                  aria-label=${t("taskfoldProject.editMilestone")}
-                  @click=${() => controller.openModal({ kind: "milestone", milestone })}
-                >...</button>
-                ${milestone.state === "active"
-                  ? html`
-                      <button
-                        class="taskfold-project__icon-button"
-                        type="button"
-                        title=${t("taskfoldProject.completeMilestone")}
-                        aria-label=${t("taskfoldProject.completeMilestone")}
-                        @click=${() => controller.completeMilestone(milestone.id)}
-                      >&#10003;</button>
-                      <button
-                        class="taskfold-project__icon-button"
-                        type="button"
-                        title=${t("taskfoldProject.archiveMilestone")}
-                        aria-label=${t("taskfoldProject.archiveMilestone")}
-                        @click=${() => controller.archiveMilestone(milestone.id, true)}
-                      >&#8942;</button>
-                    `
-                  : html`
-                      <button
-                        class="taskfold-project__icon-button"
-                        type="button"
-                        title=${t("taskfoldProject.restoreMilestone")}
-                        aria-label=${t("taskfoldProject.restoreMilestone")}
-                        @click=${() => controller.archiveMilestone(milestone.id, false)}
-                      >&#8635;</button>
-                    `}
-              `
-            : nothing}
+      <header class="taskfold-project__column-header" title=${params.subtitle ?? ""}>
+        ${params.requirement
+          ? html`
+              <button
+                class="taskfold-project__column-title-button"
+                type="button"
+                @click=${() =>
+                  controller.openModal({ kind: "card-detail", cardId: params.requirement!.id })}
+              >${params.title}</button>
+            `
+          : html`<h2>${params.title}</h2>`}
+        <span class="taskfold-project__column-count">${params.cards.length}</span>
+        ${milestone && milestone.state !== "active" && params.subtitle
+          ? html`<span class="taskfold-project__column-state">${params.subtitle}</span>`
+          : nothing}
+        <div
+          class="taskfold-project__column-menu ${menuOpen ? "is-open" : ""}"
+          @focusout=${(event: FocusEvent) => {
+            if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+              closeMenu();
+            }
+          }}
+        >
           <button
             class="taskfold-project__icon-button"
             type="button"
-            title=${t("taskfoldProject.newCard")}
-            aria-label=${t("taskfoldProject.newCard")}
-            ?disabled=${!controller.connected || projectArchived || (milestone && milestone.state !== "active")}
-            @click=${params.onCreate}
-          >+</button>
+            aria-haspopup="menu"
+            aria-expanded=${menuOpen}
+            aria-label=${t("taskfoldProject.more")}
+            title=${t("taskfoldProject.more")}
+            @click=${() => {
+              state.columnMenuId = menuOpen ? null : params.id;
+              controller.requestUpdate();
+            }}
+          >&#8942;</button>
+          ${menuOpen
+            ? html`
+                <div class="taskfold-project__card-menu-list" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    ?disabled=${!controller.connected || projectArchived || (milestone && milestone.state !== "active")}
+                    @click=${() => {
+                      closeMenu();
+                      params.onCreate();
+                    }}
+                  >${t("taskfoldProject.newCard")}</button>
+                  ${milestone
+                    ? html`
+                        <button
+                          type="button"
+                          role="menuitem"
+                          ?disabled=${projectArchived || !moveMilestoneUp}
+                          @click=${() => {
+                            closeMenu();
+                            moveMilestoneUp && controller.reorderMilestones(moveMilestoneUp);
+                          }}
+                        >${t("taskfoldProject.moveUp")}</button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          ?disabled=${projectArchived || !moveMilestoneDown}
+                          @click=${() => {
+                            closeMenu();
+                            moveMilestoneDown && controller.reorderMilestones(moveMilestoneDown);
+                          }}
+                        >${t("taskfoldProject.moveDown")}</button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          @click=${() => {
+                            closeMenu();
+                            controller.openModal({ kind: "milestone", milestone });
+                          }}
+                        >${t("taskfoldProject.editMilestone")}</button>
+                        ${milestone.state === "active"
+                          ? html`
+                              <button
+                                type="button"
+                                role="menuitem"
+                                @click=${() => {
+                                  closeMenu();
+                                  controller.completeMilestone(milestone.id);
+                                }}
+                              >${t("taskfoldProject.completeMilestone")}</button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                @click=${() => {
+                                  closeMenu();
+                                  controller.archiveMilestone(milestone.id, true);
+                                }}
+                              >${t("taskfoldProject.archiveMilestone")}</button>
+                            `
+                          : html`
+                              <button
+                                type="button"
+                                role="menuitem"
+                                @click=${() => {
+                                  closeMenu();
+                                  controller.archiveMilestone(milestone.id, false);
+                                }}
+                              >${t("taskfoldProject.restoreMilestone")}</button>
+                            `}
+                      `
+                    : nothing}
+                </div>
+              `
+            : nothing}
         </div>
       </header>
       <div class="taskfold-project__card-list">
         ${params.cards.length
           ? params.cards.map((card) => renderCard(controller, card, { manualOrder: params.manualOrder }))
           : html`<p class="taskfold-project__empty-column">${t("taskfoldProject.emptyColumn")}</p>`}
+        ${renderQuickAdd(
+          controller,
+          params,
+          !controller.connected || projectArchived || Boolean(milestone && milestone.state !== "active"),
+        )}
       </div>
     </section>
   `;
@@ -1023,6 +1314,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         : {}),
       onDrop: (id) => controller.moveCardMilestone(id),
       onCreate: () => controller.openModal({ kind: "card" }),
+      quickCreate: {},
     });
     for (const milestone of project.milestones) {
       const columnCards = sorted(byMilestone.get(milestone.id) ?? []);
@@ -1035,6 +1327,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         ...(manualOrder ? { manualOrder: { milestoneId: milestone.id, cards: columnCards } } : {}),
         onDrop: (id) => controller.moveCardMilestone(id, milestone.id),
         onCreate: () => controller.openModal({ kind: "card", milestoneId: milestone.id }),
+        quickCreate: { milestoneId: milestone.id },
       });
     }
   } else if (view.groupBy === "requirement") {
@@ -1058,6 +1351,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
       cards: sorted(byRequirement.get(undefined) ?? []),
       onDrop: (id) => controller.moveCardRequirement(id),
       onCreate: () => controller.openModal({ kind: "card" }),
+      quickCreate: {},
     });
     for (const requirement of requirements) {
       columns.push({
@@ -1075,6 +1369,29 @@ function renderBoard(controller: TaskfoldProjectViewController) {
             requirementId: requirement.id,
             milestoneId: requirement.milestoneId,
           }),
+        quickCreate: {
+          requirementId: requirement.id,
+          ...(requirement.milestoneId ? { milestoneId: requirement.milestoneId } : {}),
+        },
+      });
+    }
+  } else if (view.groupBy === "assignee") {
+    const byAgent = new Map<string, TaskfoldCard[]>();
+    for (const card of cards) {
+      const key = card.agentId ?? "";
+      const current = byAgent.get(key) ?? [];
+      current.push(card);
+      byAgent.set(key, current);
+    }
+    const agents = [...byAgent.keys()].filter(Boolean).toSorted();
+    for (const agentId of ["", ...agents]) {
+      columns.push({
+        id: agentId ? `agent:${agentId}` : "unassigned",
+        title: agentId || t("taskfoldProject.unassigned"),
+        cards: sorted(byAgent.get(agentId) ?? []),
+        onDrop: (id) => controller.updateCardAgent(id, agentId),
+        onCreate: () => controller.openModal({ kind: "card" }),
+        quickCreate: agentId ? { agentId } : {},
       });
     }
   } else {
@@ -1091,6 +1408,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         cards: sorted(byStatus.get(status) ?? []),
         onDrop: (id) => controller.updateCardStatus(id, status),
         onCreate: () => controller.openModal({ kind: "card", status }),
+        quickCreate: { status },
       });
     }
   }
@@ -1100,6 +1418,56 @@ function renderBoard(controller: TaskfoldProjectViewController) {
         <div>
           <h1>${boardName(project.board)}</h1>
           <p>${project.board.currentObjective || project.board.description || project.board.id}</p>
+        </div>
+        <div class="taskfold-project__board-controls">
+          <div class="taskfold-project__segmented" role="group" aria-label=${t("taskfoldProject.groupBy")}>
+            ${BOARD_GROUPS.map(
+              (groupBy) => html`
+                <button
+                  type="button"
+                  class=${groupBy === view.groupBy ? "tf-is-active" : ""}
+                  aria-pressed=${groupBy === view.groupBy ? "true" : "false"}
+                  @click=${() =>
+                    groupBy !== view.groupBy &&
+                    controller.updateBoardView({
+                      groupBy,
+                      sortBy: groupBy === "milestone" ? view.sortBy : view.sortBy === "manual" ? "priority" : view.sortBy,
+                      sortDirection: view.sortDirection,
+                    })}
+                >${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</button>
+              `,
+            )}
+          </div>
+          <label>
+            ${t("taskfoldProject.sortBy")}
+            <select
+              @change=${(event: Event) =>
+                controller.updateBoardView({
+                  ...view,
+                  sortBy: (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardSortBy,
+                })}
+            >
+              ${BOARD_SORTS.filter((sortBy) => view.groupBy === "milestone" || sortBy !== "manual").map(
+                (sortBy) =>
+                  html`<option value=${sortBy} .selected=${sortBy === view.sortBy}>${t(`taskfoldProject.sortBy${sortBy[0].toUpperCase()}${sortBy.slice(1)}`)}</option>`,
+              )}
+            </select>
+          </label>
+          <label>
+            ${t("taskfoldProject.sortDirection")}
+            <select
+              @change=${(event: Event) =>
+                controller.updateBoardView({
+                  ...view,
+                  sortDirection: (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardSortDirection,
+                })}
+            >
+              ${BOARD_SORT_DIRECTIONS.map(
+                (direction) =>
+                  html`<option value=${direction} .selected=${direction === view.sortDirection}>${t(`taskfoldProject.sortDirection${direction[0].toUpperCase()}${direction.slice(1)}`)}</option>`,
+              )}
+            </select>
+          </label>
         </div>
         <div class="taskfold-project__heading-actions">
           ${project.board.archivedAt
@@ -1150,63 +1518,11 @@ function renderBoard(controller: TaskfoldProjectViewController) {
       ${project.board.archivedAt
         ? html`<div class="tf-callout">${t("taskfoldProject.projectArchived")}</div>`
         : nothing}
-      <div class="taskfold-project__board-controls">
-        <label>
-          ${t("taskfoldProject.groupBy")}
-          <select
-            @change=${(event: Event) => {
-              const groupBy = (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardGroupBy;
-              controller.updateBoardView({
-                groupBy,
-                sortBy:
-                  groupBy === "milestone"
-                    ? view.sortBy
-                    : view.sortBy === "manual"
-                      ? "priority"
-                      : view.sortBy,
-                sortDirection: view.sortDirection,
-              });
-            }}
-          >
-            ${BOARD_GROUPS.map(
-              (groupBy) =>
-                html`<option value=${groupBy} .selected=${groupBy === view.groupBy}>${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</option>`,
-            )}
-          </select>
-        </label>
-        <label>
-          ${t("taskfoldProject.sortBy")}
-          <select
-            @change=${(event: Event) =>
-              controller.updateBoardView({
-                ...view,
-                sortBy: (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardSortBy,
-              })}
-          >
-            ${BOARD_SORTS.filter((sortBy) => view.groupBy === "milestone" || sortBy !== "manual").map(
-              (sortBy) =>
-                html`<option value=${sortBy} .selected=${sortBy === view.sortBy}>${t(`taskfoldProject.sortBy${sortBy[0].toUpperCase()}${sortBy.slice(1)}`)}</option>`,
-            )}
-          </select>
-        </label>
-        <label>
-          ${t("taskfoldProject.sortDirection")}
-          <select
-            @change=${(event: Event) =>
-              controller.updateBoardView({
-                ...view,
-                sortDirection: (event.currentTarget as HTMLSelectElement).value as TaskfoldBoardSortDirection,
-              })}
-          >
-            ${BOARD_SORT_DIRECTIONS.map(
-              (direction) =>
-                html`<option value=${direction} .selected=${direction === view.sortDirection}>${t(`taskfoldProject.sortDirection${direction[0].toUpperCase()}${direction.slice(1)}`)}</option>`,
-            )}
-          </select>
-        </label>
-      </div>
-      <div class="taskfold-project__kanban" aria-label=${t("taskfoldProject.board")}>
+      <div class="taskfold-project__kanban" aria-label=${t("taskfoldProject.board")} ${ref(fitToViewport)}>
         ${columns.map((column) => renderColumn(controller, column))}
+        ${view.groupBy === "milestone" && !project.board.archivedAt
+          ? renderAddMilestoneColumn(controller)
+          : nothing}
       </div>
     </section>
   `;
@@ -1836,124 +2152,362 @@ function renderDocumentPreview(controller: TaskfoldProjectViewController) {
   `;
 }
 
+function describeCardEvent(event: TaskfoldEvent): string {
+  if (event.kind === "moved" && event.toStatus) {
+    return t("taskfoldProject.eventMoved", {
+      from: event.fromStatus ? t(`workboard.status.${event.fromStatus}`) : "—",
+      to: t(`workboard.status.${event.toStatus}`),
+    });
+  }
+  const key = `taskfoldProject.event.${event.kind}`;
+  const text = t(key);
+  // i18n 找不到 key 时原样返回 key：没有文案的事件类型落到通用「更新」。
+  return text === key ? t("taskfoldProject.event.other") : text;
+}
+
+function renderCardActivity(controller: TaskfoldProjectViewController, card: TaskfoldCard) {
+  const { state } = controller;
+  const tab = state.cardActivityTab;
+  const comments = cardComments(card);
+  const timeline = buildCardTimeline(card);
+  const formatTime = (at: number) => new Date(at).toLocaleString(controller.locale);
+  const setTab = (next: TaskfoldProjectUiState["cardActivityTab"]) => {
+    state.cardActivityTab = next;
+    controller.requestUpdate();
+  };
+  return html`
+    <section class="taskfold-project__detail-section taskfold-project__activity">
+      <div class="taskfold-project__activity-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected=${tab === "comments"}
+          class=${tab === "comments" ? "is-active" : ""}
+          @click=${() => setTab("comments")}
+        >${t("taskfoldProject.comments")} <small>${comments.length}</small></button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected=${tab === "history"}
+          class=${tab === "history" ? "is-active" : ""}
+          @click=${() => setTab("history")}
+        >${t("taskfoldProject.history")} <small>${timeline.length}</small></button>
+      </div>
+      ${tab === "comments"
+        ? html`
+            <form
+              class="taskfold-project__comment-form"
+              @submit=${(event: SubmitEvent) => {
+                event.preventDefault();
+                const form = event.currentTarget as HTMLFormElement;
+                const body = readForm(event).body ?? "";
+                if (body.trim() && !state.busy) {
+                  controller.addCardComment(card.id, body);
+                  form.reset();
+                }
+              }}
+            >
+              <taskfold-markdown-editor
+                name="body"
+                placeholder=${t("taskfoldProject.commentPlaceholder")}
+                .uploadImage=${(file: File) => controller.cardImages.upload(card.id, file)}
+                .resolveImage=${controller.cardImages.resolve}
+              ></taskfold-markdown-editor>
+              <button class="tf-btn tf-btn--primary" type="submit" ?disabled=${state.busy}>
+                ${t("taskfoldProject.addComment")}
+              </button>
+            </form>
+            ${comments.length
+              ? html`<ul class="taskfold-project__timeline">
+                  ${comments.map(
+                    (comment) => html`
+                      <li>
+                        <time>${formatTime(comment.createdAt)}</time>
+                        <article class="taskfold-markdown" ${hydrateMarkdownImages(controller.cardImages.resolve)}>${renderTaskfoldMarkdown(comment.body)}</article>
+                      </li>
+                    `,
+                  )}
+                </ul>`
+              : html`<p class="taskfold-project__detail-empty">${t("taskfoldProject.noComments")}</p>`}
+          `
+        : timeline.length
+          ? html`<ul class="taskfold-project__timeline">
+              ${timeline.map(
+                (entry) => html`
+                  <li>
+                    <time>${formatTime(entry.at)}</time>
+                    ${entry.type === "comment"
+                      ? html`<span>${t("taskfoldProject.eventComment")}：${entry.body}</span>`
+                      : html`<span>${describeCardEvent(entry.event)}</span>`}
+                  </li>
+                `,
+              )}
+            </ul>`
+          : html`<p class="taskfold-project__detail-empty">${t("taskfoldProject.noHistory")}</p>`}
+    </section>
+  `;
+}
+
+function renderCardLabelEditor(
+  controller: TaskfoldProjectViewController,
+  card: TaskfoldCard,
+  disabled: boolean,
+) {
+  return html`
+    <div class="taskfold-project__label-editor">
+      ${card.labels.map(
+        (label) => html`
+          <span class="taskfold-project__label tf-label-${labelColorIndex(label)}">
+            ${label}
+            <button
+              type="button"
+              class="taskfold-project__label-remove"
+              aria-label=${t("common.delete")}
+              ?disabled=${disabled}
+              @click=${() =>
+                controller.updateCardLabels(card.id, card.labels.filter((item) => item !== label))}
+            >&times;</button>
+          </span>
+        `,
+      )}
+      <input
+        placeholder=${t("taskfoldProject.addLabelPlaceholder")}
+        aria-label=${t("taskfoldProject.labels")}
+        ?disabled=${disabled}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key !== "Enter" || event.isComposing) {
+            return;
+          }
+          event.preventDefault();
+          const input = event.currentTarget as HTMLInputElement;
+          const value = input.value.trim();
+          if (value && !card.labels.includes(value)) {
+            controller.updateCardLabels(card.id, [...card.labels, value]);
+          }
+          input.value = "";
+        }}
+      />
+    </div>
+  `;
+}
+
 function renderCardDetail(controller: TaskfoldProjectViewController, card: TaskfoldCard) {
-  const project = controller.state.project;
+  const { state } = controller;
+  const project = state.project;
   if (!project) {
     return nothing;
   }
-  const otherProjects = controller.state.projects.filter(
+  const otherProjects = state.projects.filter(
     (candidate) => candidate.id !== boardId(card) && !candidate.archivedAt,
   );
+  const projectArchived = Boolean(project.board.archivedAt);
+  const locked = state.busy || projectArchived || isArchivedCard(card);
+  const closeMenu = () => {
+    if (state.cardMenuOpen) {
+      state.cardMenuOpen = false;
+      controller.requestUpdate();
+    }
+  };
   return html`
-    <div class="taskfold-project__modal-panel taskfold-project__detail-panel">
+    <div
+      class="taskfold-project__modal-panel taskfold-project__detail-panel"
+      @click=${(event: Event) => {
+        if (!(event.target as Element).closest("[data-card-menu]")) {
+          closeMenu();
+        }
+      }}
+    >
       <header>
         <div>
           <small>${boardName(project.board)}</small>
           <h2>${t("taskfoldProject.details")}</h2>
         </div>
-        <button class="taskfold-project__icon-button" type="button" aria-label=${t("common.close")} @click=${controller.closeModal}>&times;</button>
+        <div class="taskfold-project__detail-actions">
+          <div class="taskfold-project__card-menu" data-card-menu>
+            <button
+              class="taskfold-project__icon-button"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded=${state.cardMenuOpen}
+              aria-label=${t("taskfoldProject.more")}
+              title=${t("taskfoldProject.more")}
+              @click=${() => {
+                state.cardMenuOpen = !state.cardMenuOpen;
+                controller.requestUpdate();
+              }}
+            >&#8943;</button>
+            ${state.cardMenuOpen
+              ? html`
+                  <div class="taskfold-project__card-menu-list" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      ?disabled=${locked}
+                      @click=${() => {
+                        closeMenu();
+                        controller.duplicateCard(card.id);
+                      }}
+                    >${t("taskfoldProject.duplicateCard")}</button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="is-danger"
+                      ?disabled=${locked}
+                      @click=${() => {
+                        closeMenu();
+                        controller.deleteCard(card.id);
+                      }}
+                    >${t("taskfoldProject.deleteCard")}</button>
+                  </div>
+                `
+              : nothing}
+          </div>
+          <button class="taskfold-project__icon-button" type="button" aria-label=${t("common.close")} @click=${controller.closeModal}>&times;</button>
+        </div>
       </header>
-      <div class="taskfold-project__detail-body">
-        ${controller.cardEditingEnabled && controller.state.cardDraft?.cardId === card.id
-          ? renderCardEditForm(controller, controller.state.cardDraft)
-          : html`
-              <h3>${card.title}</h3>
-              ${card.notes ? html`<p class="taskfold-project__detail-notes">${card.notes}</p>` : nothing}
-              ${controller.cardEditingEnabled || controller.openCardFileEnabled
-                ? html`
-                    <div class="taskfold-project__inline-actions">
-                      ${controller.cardEditingEnabled
-                        ? html`
-                            <button
-                              class="tf-btn"
-                              type="button"
-                              data-taskfold-action="edit-card"
-                              ?disabled=${controller.state.busy}
-                              @click=${() => controller.startCardEdit(card.id)}
-                            >${t("taskfoldProject.editCard")}</button>
-                          `
-                        : nothing}
-                      ${controller.openCardFileEnabled
-                        ? html`
-                            <button
-                              class="tf-btn"
-                              type="button"
-                              data-taskfold-action="open-card-file"
-                              @click=${() => controller.openCardFile(card.id)}
-                            >${t("taskfoldProject.openCardFile")}</button>
-                          `
-                        : nothing}
-                    </div>
-                  `
-                : nothing}
-            `}
-        <dl>
-          <div><dt>${t("taskfoldProject.status")}</dt><dd>${t(`workboard.status.${card.status}`)}</dd></div>
-          <div><dt>${t("taskfoldProject.priority")}</dt><dd>${card.priority}</dd></div>
-          <div><dt>${t("taskfoldProject.assignee")}</dt><dd>${card.agentId || t("taskfoldProject.unassigned")}</dd></div>
-          <div><dt>${t("taskfoldProject.viewProject")}</dt><dd>${boardId(card)}</dd></div>
-        </dl>
-        <label>
-          ${t("taskfoldProject.status")}
-          <select
-            .value=${card.status}
-            @change=${(event: Event) =>
-              controller.updateCardStatus(
-                card.id,
-                (event.currentTarget as HTMLSelectElement).value as TaskfoldStatus,
-              )}
-          >
-            ${renderStatusOptions(card.status)}
-          </select>
-        </label>
-        <label>
-          ${t("taskfoldProject.moveTo")}
-          <select
-            .value=${card.milestoneId ?? ""}
-            ?disabled=${Boolean(project.board.archivedAt)}
-            @change=${(event: Event) =>
-              controller.moveCardMilestone(
-                card.id,
-                (event.currentTarget as HTMLSelectElement).value || undefined,
-              )}
-          >
-            <option value="">${t("taskfoldProject.unassigned")}</option>
-            ${project.milestones
-              .filter((milestone) => milestone.state === "active")
-              .map(
-                (milestone) =>
-                  html`<option value=${milestone.id}>${milestone.title}</option>`,
-              )}
-          </select>
-        </label>
-        ${renderExecutionSection(controller, card)}
-        ${renderDeliverySection(controller, card)}
-        ${renderSourceReferenceSection(controller, card)}
-        ${renderEvidenceSection(controller, card)}
-        ${controller.projectManagementEnabled && otherProjects.length
+      ${state.error ? html`<div class="tf-callout tf-danger" role="alert">${state.error}</div>` : nothing}
+      <div class="taskfold-project__detail-body taskfold-project__detail-layout">
+        <div class="taskfold-project__detail-main">
+          ${controller.cardEditingEnabled && state.cardDraft?.cardId === card.id
+            ? renderCardEditForm(controller, state.cardDraft)
+            : html`
+                <h3>${card.title}</h3>
+                ${card.notes
+                  ? html`<article class="taskfold-markdown taskfold-project__detail-notes" ${hydrateMarkdownImages(controller.cardImages.resolve)}>${renderTaskfoldMarkdown(card.notes)}</article>`
+                  : html`<p class="taskfold-project__detail-empty">${t("taskfoldProject.noNotes")}</p>`}
+                ${controller.cardEditingEnabled || controller.openCardFileEnabled
+                  ? html`
+                      <div class="taskfold-project__inline-actions">
+                        ${controller.cardEditingEnabled
+                          ? html`
+                              <button
+                                class="tf-btn"
+                                type="button"
+                                data-taskfold-action="edit-card"
+                                ?disabled=${state.busy}
+                                @click=${() => controller.startCardEdit(card.id)}
+                              >${t("taskfoldProject.editCard")}</button>
+                            `
+                          : nothing}
+                        ${controller.openCardFileEnabled
+                          ? html`
+                              <button
+                                class="tf-btn"
+                                type="button"
+                                data-taskfold-action="open-card-file"
+                                @click=${() => controller.openCardFile(card.id)}
+                              >${t("taskfoldProject.openCardFile")}</button>
+                            `
+                          : nothing}
+                      </div>
+                    `
+                  : nothing}
+              `}
+          ${renderExecutionSection(controller, card)}
+          ${renderDeliverySection(controller, card)}
+          ${renderSourceReferenceSection(controller, card)}
+          ${renderEvidenceSection(controller, card)}
+          ${renderCardActivity(controller, card)}
+        </div>
+        <aside class="taskfold-project__detail-side">
+          <label>
+            ${t("taskfoldProject.status")}
+            <select
+              .value=${card.status}
+              @change=${(event: Event) =>
+                controller.updateCardStatus(
+                  card.id,
+                  (event.currentTarget as HTMLSelectElement).value as TaskfoldStatus,
+                )}
+            >
+              ${renderStatusOptions(card.status)}
+            </select>
+          </label>
+          <label>
+            ${t("taskfoldProject.priority")}
+            <select
+              .value=${card.priority}
+              ?disabled=${locked}
+              @change=${(event: Event) =>
+                controller.updateCardPriority(
+                  card.id,
+                  (event.currentTarget as HTMLSelectElement).value as TaskfoldPriority,
+                )}
+            >
+              ${renderPriorityOptions(card.priority)}
+            </select>
+          </label>
+          <label>
+            ${t("taskfoldProject.assignee")}
+            <input
+              .value=${card.agentId ?? ""}
+              placeholder=${t("taskfoldProject.unassigned")}
+              ?disabled=${locked}
+              @change=${(event: Event) => {
+                const value = (event.currentTarget as HTMLInputElement).value.trim();
+                if (value !== (card.agentId ?? "")) {
+                  controller.updateCardAgent(card.id, value);
+                }
+              }}
+            />
+          </label>
+          <label>
+            ${t("taskfoldProject.moveTo")}
+            <select
+              ?disabled=${projectArchived}
+              @change=${(event: Event) =>
+                controller.moveCardMilestone(
+                  card.id,
+                  (event.currentTarget as HTMLSelectElement).value || undefined,
+                )}
+            >
+              <option value="" ?selected=${!card.milestoneId}>${t("taskfoldProject.unassigned")}</option>
+              ${project.milestones
+                // 可选的是进行中的里程碑；卡片当前所在的里程碑即使已完成或归档也要列出，否则会误显示成「未归属」。
+                .filter((milestone) => milestone.state === "active" || milestone.id === card.milestoneId)
+                .map(
+                  (milestone) =>
+                    html`<option value=${milestone.id} ?selected=${milestone.id === card.milestoneId}>${milestone.title}</option>`,
+                )}
+            </select>
+          </label>
+          <div class="taskfold-project__detail-field">
+            <span>${t("taskfoldProject.labels")}</span>
+            ${renderCardLabelEditor(controller, card, locked)}
+          </div>
+          <div class="taskfold-project__detail-field">
+            <span>${t("taskfoldProject.title")}</span>
+            <strong>${boardId(card)}</strong>
+          </div>
+          ${controller.projectManagementEnabled && otherProjects.length
+            ? html`
+                <button
+                  class="tf-btn"
+                  type="button"
+                  ?disabled=${projectArchived}
+                  @click=${() => controller.openModal({ kind: "move-project", cardId: card.id })}
+                >
+                  ${t("taskfoldProject.moveToProject")}
+                </button>
+              `
+            : nothing}
+        </aside>
+      </div>
+      <footer>
+        ${boardId(card) !== project.board.id
           ? html`
               <button
                 class="tf-btn"
                 type="button"
-                ?disabled=${Boolean(project.board.archivedAt)}
-                @click=${() => controller.openModal({ kind: "move-project", cardId: card.id })}
+                @click=${() => {
+                  controller.closeModal();
+                  controller.selectProject(boardId(card));
+                }}
               >
-                ${t("taskfoldProject.moveToProject")}
+                ${t("taskfoldProject.viewProject")}
               </button>
             `
           : nothing}
-      </div>
-      <footer>
-        <button
-          class="tf-btn"
-          type="button"
-          @click=${() => {
-            controller.closeModal();
-            controller.selectProject(boardId(card));
-          }}
-        >
-          ${t("taskfoldProject.viewProject")}
-        </button>
         <button
           class="tf-btn"
           type="button"
@@ -1991,27 +2545,16 @@ function renderCardEditForm(controller: TaskfoldProjectViewController, draft: Ta
         />
       </label>
       <label>
-        ${t("taskfoldProject.priority")}
-        <select
-          name="priority"
-          .value=${draft.priority}
-          @change=${(event: Event) => {
-            draft.priority = (event.currentTarget as HTMLSelectElement).value as TaskfoldPriority;
-          }}
-        >
-          ${renderPriorityOptions(draft.priority)}
-        </select>
-      </label>
-      <label>
         ${t("taskfoldProject.cardNotes")}
-        <textarea
+        <taskfold-markdown-editor
           name="notes"
-          rows="10"
           .value=${draft.notes}
-          @input=${(event: InputEvent) => {
-            draft.notes = (event.currentTarget as HTMLTextAreaElement).value;
+          .uploadImage=${(file: File) => controller.cardImages.upload(draft.cardId, file)}
+          .resolveImage=${controller.cardImages.resolve}
+          @markdown-change=${(event: CustomEvent<string>) => {
+            draft.notes = event.detail;
           }}
-        ></textarea>
+        ></taskfold-markdown-editor>
       </label>
       ${state.cardDraftError
         ? html`<div class="tf-callout tf-danger" role="alert">${state.cardDraftError}</div>`
@@ -2053,10 +2596,11 @@ function renderExecutionSection(controller: TaskfoldProjectViewController, card:
   const inspectionLoading =
     state.executionInspectionCardId === card.id && state.executionInspectionLoading;
 
+  const hasExecutionRecord = Boolean(card.execution) || active || unresolvedActive;
   return html`
-    <section class="taskfold-project__detail-section taskfold-project__execution-section">
+    <details class="taskfold-project__detail-section taskfold-project__execution-section" ?open=${hasExecutionRecord}>
+      <summary>${t("taskfoldProject.execution")}</summary>
       <div class="taskfold-project__execution-heading">
-        <h3>${t("taskfoldProject.execution")}</h3>
         ${active
           ? html`
               <button
@@ -2187,15 +2731,15 @@ function renderExecutionSection(controller: TaskfoldProjectViewController, card:
               ${t("taskfoldProject.startExecution")}
             </button>
           `}
-    </section>
+    </details>
   `;
 }
 
 function renderDeliverySection(controller: TaskfoldProjectViewController, card: TaskfoldCard) {
   const delivery = card.delivery;
   return html`
-    <section class="taskfold-project__detail-section">
-      <h3>${t("taskfoldProject.deliveryFacts")}</h3>
+    <details class="taskfold-project__detail-section" ?open=${Boolean(delivery)}>
+      <summary>${t("taskfoldProject.deliveryFacts")}</summary>
       <form
         class="taskfold-project__delivery-form"
         @input=${() => controller.beginDeliveryEdit(card.id, card.revision)}
@@ -2248,7 +2792,7 @@ function renderDeliverySection(controller: TaskfoldProjectViewController, card: 
           ${t("taskfoldProject.saveDelivery")}
         </button>
       </form>
-    </section>
+    </details>
   `;
 }
 
@@ -2257,8 +2801,8 @@ function renderSourceReferenceSection(controller: TaskfoldProjectViewController,
     (left, right) => left.position - right.position || left.createdAt - right.createdAt,
   );
   return html`
-    <section class="taskfold-project__detail-section">
-      <h3>${t("taskfoldProject.sourceReferences")}</h3>
+    <details class="taskfold-project__detail-section" ?open=${references.length > 0}>
+      <summary>${t("taskfoldProject.sourceReferences")}${references.length ? html` <small>${references.length}</small>` : nothing}</summary>
       <div class="taskfold-project__detail-list">
         ${references.length
           ? references.map((reference, index) => {
@@ -2333,7 +2877,7 @@ function renderSourceReferenceSection(controller: TaskfoldProjectViewController,
           ${t("taskfoldProject.addSourceReference")}
         </button>
       </form>
-    </section>
+    </details>
   `;
 }
 
@@ -2341,8 +2885,8 @@ function renderEvidenceSection(controller: TaskfoldProjectViewController, card: 
   const proof = card.metadata?.proof ?? [];
   const artifacts = card.metadata?.artifacts ?? [];
   return html`
-    <section class="taskfold-project__detail-section">
-      <h3>${t("taskfoldProject.proof")}</h3>
+    <details class="taskfold-project__detail-section" ?open=${proof.length > 0}>
+      <summary>${t("taskfoldProject.proof")}${proof.length ? html` <small>${proof.length}</small>` : nothing}</summary>
       <div class="taskfold-project__detail-list">
         ${proof.length
           ? proof.map(
@@ -2382,9 +2926,9 @@ function renderEvidenceSection(controller: TaskfoldProjectViewController, card: 
           ${t("taskfoldProject.addProof")}
         </button>
       </form>
-    </section>
-    <section class="taskfold-project__detail-section">
-      <h3>${t("taskfoldProject.artifacts")}</h3>
+    </details>
+    <details class="taskfold-project__detail-section" ?open=${artifacts.length > 0}>
+      <summary>${t("taskfoldProject.artifacts")}${artifacts.length ? html` <small>${artifacts.length}</small>` : nothing}</summary>
       <div class="taskfold-project__detail-list">
         ${artifacts.length
           ? artifacts.map(
@@ -2420,7 +2964,7 @@ function renderEvidenceSection(controller: TaskfoldProjectViewController, card: 
           ${t("taskfoldProject.addArtifact")}
         </button>
       </form>
-    </section>
+    </details>
   `;
 }
 
@@ -2678,7 +3222,15 @@ function renderModal(controller: TaskfoldProjectViewController) {
           <input type="hidden" name="cardKind" value=${cardKind} />
           <input type="hidden" name="relatedCardId" value=${modal.relatedCardId ?? ""} />
           <label>${t("taskfoldProject.cardTitle")}<input name="title" required /></label>
-          <label>${t("taskfoldProject.cardNotes")}<textarea name="notes"></textarea></label>
+          <div class="taskfold-project__detail-field">
+            <span>${t("taskfoldProject.cardNotes")}</span>
+            <taskfold-markdown-editor
+              name="notes"
+              .uploadImage=${async (file: File) => controller.cardImages.stage(file)}
+              .resolveImage=${controller.cardImages.resolve}
+              .acceptRef=${(ref: string) => controller.cardImages.isPending(ref) || ref.startsWith("../attachments/")}
+            ></taskfold-markdown-editor>
+          </div>
           ${modal.relatedCardId ? html`
             <label>${t("taskfoldProject.newCardRelation", { title: project.cards.find((card) => card.id === modal.relatedCardId)?.title ?? modal.relatedCardId })}
               <select name="relation">
@@ -2838,14 +3390,7 @@ export function renderTaskfoldProjects(controller: TaskfoldProjectViewController
           <button class="taskfold-project__refresh" type="button" title=${t("taskfoldProject.refresh")} @click=${controller.refresh}>
             &#8635;
           </button>
-          <button
-            class="tf-btn taskfold-project__all-projects ${state.screen === "overview" ? "tf-is-active" : ""}"
-            type="button"
-            @click=${() => controller.setScreen("overview")}
-          >
-            <span>${t("taskfoldProject.allProjects")}</span>
-            <strong>${state.projects.length}</strong>
-          </button>
+          ${renderProjectSwitcher(controller)}
           <label class="taskfold-project__language">
             <span class="taskfold-project__sr-only">${t("taskfoldProject.language")}</span>
             <select
@@ -2883,7 +3428,6 @@ export function renderTaskfoldProjects(controller: TaskfoldProjectViewController
         ? html`<div class="tf-callout">${t("taskfoldProject.connectionRequired")}</div>`
         : nothing}
       ${state.error ? html`<div class="tf-callout tf-danger" role="alert">${state.error}</div>` : nothing}
-      ${renderProjectToolbar(controller)}
       <main class="taskfold-project__main">
         ${state.project && state.screen !== "overview" ? renderProjectTabs(controller) : nothing}
         ${projectView}

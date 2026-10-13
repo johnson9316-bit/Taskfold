@@ -7,6 +7,7 @@ import type {
   TaskfoldLink,
   TaskfoldMetadata,
   TaskfoldStatus,
+  TaskfoldStatusDefinition,
 } from "./contract/index.js";
 import type {
   PersistedTaskfoldAttachment,
@@ -17,7 +18,10 @@ import type {
   PersistedTaskfoldProjectDocument,
   TaskfoldCompareAndSwapFailure,
   TaskfoldKeyedStore,
+  TaskfoldStatusConfigPort,
 } from "./persistence-types.js";
+import { resolveStatusRegistry, validateStatusDefinitions, type TaskfoldStatusRegistry } from "./status-registry.js";
+import type { TaskfoldCardImageStore } from "./file-store-card-images.js";
 import { normalizeAutomationPatch, normalizeCardAutomation } from "./store-automation.js";
 import {
   assertCanMutateClaimedCard,
@@ -169,6 +173,10 @@ export class TaskfoldCoreStore {
   protected readonly documentStore: TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>;
   protected readonly subscriptionStore: TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>;
   protected readonly attachmentStore: TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+  /** 卡片图片（`attachments/<卡 uuid>/`）；只有文件后端提供，内存 store 等没有。 */
+  protected readonly cardImageStore: TaskfoldCardImageStore | undefined;
+  /** 项目的状态定义；没有（内存 store 等）时所有项目用过渡默认集。 */
+  private readonly statusConfig: TaskfoldStatusConfigPort | undefined;
 
   constructor(
     store: TaskfoldKeyedStore,
@@ -178,6 +186,8 @@ export class TaskfoldCoreStore {
       documents?: TaskfoldKeyedStore<PersistedTaskfoldProjectDocument>;
       subscriptions?: TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>;
       attachments?: TaskfoldKeyedStore<PersistedTaskfoldAttachment>;
+      cardImages?: TaskfoldCardImageStore;
+      statusConfig?: TaskfoldStatusConfigPort;
       dataVersion?: () => number;
       changeEpoch?: string;
       reserveChangeRevisions?: (count: number) => number;
@@ -209,6 +219,50 @@ export class TaskfoldCoreStore {
       (store as unknown as TaskfoldKeyedStore<PersistedTaskfoldNotificationSubscription>);
     this.attachmentStore =
       stores.attachments ?? (store as unknown as TaskfoldKeyedStore<PersistedTaskfoldAttachment>);
+    this.cardImageStore = stores.cardImages;
+    this.statusConfig = stores.statusConfig;
+  }
+
+  /** 该项目当前生效的状态注册表；`config.yml` 里的 `statuses` 不合法时抛 {@link TaskfoldStatusConfigError}。 */
+  async statusRegistryFor(boardId?: string): Promise<TaskfoldStatusRegistry> {
+    const configured = await this.statusConfig?.read(normalizeBoardId(boardId) ?? "default");
+    return resolveStatusRegistry(configured);
+  }
+
+  /** 该项目的状态定义，按看板列顺序。 */
+  async listStatuses(boardId?: string): Promise<TaskfoldStatusDefinition[]> {
+    return [...(await this.statusRegistryFor(boardId)).list];
+  }
+
+  /**
+   * 整体保存该项目的状态定义。还有卡片在用、却不在新列表里的状态时拒绝（先把卡移走），这样
+   * 不会留下"状态不存在"的孤儿卡。需要项目已有可写的 `.taskfold/`（格式版本比本版新时拒绝）。
+   */
+  async saveStatuses(
+    boardId: string | undefined,
+    definitions: readonly TaskfoldStatusDefinition[],
+  ): Promise<TaskfoldStatusDefinition[]> {
+    if (!this.statusConfig) {
+      throw new Error("this store does not support custom statuses.");
+    }
+    const id = normalizeBoardId(boardId) ?? "default";
+    const next = validateStatusDefinitions(definitions);
+    return await this.enqueueMutation(async () => {
+      const nextIds = new Set(next.map((definition) => definition.id));
+      const stranded = new Map<string, number>();
+      for (const card of await this.list({ boardId: id })) {
+        if (!nextIds.has(card.status)) {
+          stranded.set(card.status, (stranded.get(card.status) ?? 0) + 1);
+        }
+      }
+      if (stranded.size > 0) {
+        const detail = [...stranded].map(([status, count]) => `${status} (${count})`).join(", ");
+        throw new Error(`cannot remove statuses that cards still use: ${detail}. Move those cards first.`);
+      }
+      const saved = await this.statusConfig!.write(id, next);
+      await this.changes.recordChange();
+      return saved;
+    });
   }
 
   announceChangeEpoch(): void {
@@ -490,11 +544,12 @@ export class TaskfoldCoreStore {
     options: { cardId?: string; insertIfAbsent?: boolean } = {},
   ): Promise<TaskfoldCard> {
     const now = Date.now();
-    const requestedStatus = normalizeStatus(input.status, "todo");
     const kind = normalizeCardKind(input.kind);
     const cards = await this.list();
     const parents = normalizeStringList(input.parents, "parents", 120);
     const automation = normalizeCardAutomation(input);
+    const statusRegistry = await this.statusRegistryFor(automation?.boardId);
+    const requestedStatus = normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
     const heldBySchedule =
       Boolean(automation?.scheduledAt && automation.scheduledAt > now) &&
       requestedStatus !== "blocked";
@@ -782,7 +837,11 @@ export class TaskfoldCoreStore {
         return existing;
       }
     }
-    const status = normalizeStatus(effectivePatch.status, existing.status);
+    const status = normalizeStatus(
+      effectivePatch.status,
+      existing.status,
+      await this.statusRegistryFor(cardBoardId(existing)),
+    );
     const now = Date.now();
     const startedAt =
       effectivePatch.startedAt === undefined

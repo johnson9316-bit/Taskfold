@@ -26,7 +26,7 @@ export type TaskfoldHostCapabilities = {
    * {@link TaskfoldCardWriteResult}。OpenClaw 网关的 move / moveMilestone 不接收这个参数，关闭。
    */
   readonly cardRevisionCheck: boolean;
-  /** 卡片详情里的编辑模式（标题、优先级、正文）。依赖卡片 CAS，没有 CAS 的宿主关闭。 */
+  /** 卡片详情里的编辑模式（标题、正文）。保存走 `taskfold.cards.update` 并带基准 revision，宿主必须支持。 */
   readonly cardEditing: boolean;
   /**
    * 项目级管理：新建 / 归档 / 恢复 / 排序项目、「包含已归档」、项目设置页、跨项目移卡。
@@ -62,6 +62,20 @@ export interface TaskfoldHost {
   /** 危险操作前的确认。用户取消或关闭对话框一律 resolve(false)，不 reject。 */
   confirm(message: string): Promise<boolean>;
   readonly capabilities: TaskfoldHostCapabilities;
+  /**
+   * 页面地址与「当前项目」的双向同步。有地址栏的宿主（OpenClaw：`?p.project=<id>`）提供它，
+   * 这样每个项目都有可收藏、可分享的链接；VS Code 的项目就是工作区文件夹，没有这个概念。
+   */
+  readonly route?: TaskfoldRoute;
+}
+
+export interface TaskfoldRoute {
+  /** 地址里指定的项目 id；没有（总览页）则为 undefined。 */
+  readonly projectId: string | undefined;
+  /** 前端切换了项目（undefined 表示回到总览）：把它写进地址。与当前地址一致时不做事。 */
+  setProject(projectId: string | undefined): void;
+  /** 地址被外部改动（浏览器前进 / 后退、点了别的链接）时通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
 }
 
 let activeHost: TaskfoldHost | undefined;
