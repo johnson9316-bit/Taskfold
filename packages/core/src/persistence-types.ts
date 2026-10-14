@@ -118,7 +118,18 @@ export type TaskfoldReadOnlyKeyedStore<T> = Pick<TaskfoldKeyedStoreBase<T>, "loo
  * `boardId`。`read` 返回 `undefined` 表示该项目没有配置（用默认集）。
  */
 export type TaskfoldStatusConfigPort = {
+  /**
+   * `project`：这份配置属于整个数据目录，不分看板（CLI、VS Code：一个仓库一个 `.taskfold/`，里面的
+   * 卡片可能带不同的 boardId）。保存 / 迁移时要核对数据目录里的**所有**卡片。省略表示按看板路由
+   * （OpenClaw：每个项目自己的数据根）。
+   */
+  readonly scope?: "project";
   read(boardId: string): Promise<TaskfoldStatusDefinition[] | undefined>;
   /** 整体替换。首次写入会把项目升到格式版本 4。 */
   write(boardId: string, definitions: readonly TaskfoldStatusDefinition[]): Promise<TaskfoldStatusDefinition[]>;
+  /**
+   * 迁移前备份该项目的数据（卡片、里程碑、config.yml、卡片运行态）到一个带标签的目录，返回目录路径。
+   * 后端不支持（内存 store 等）时省略，迁移照常进行但没有备份。
+   */
+  backup?(boardId: string, label: string): Promise<string | undefined>;
 };

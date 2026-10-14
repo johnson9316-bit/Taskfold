@@ -14,6 +14,8 @@ import {
 } from "./workspace-access.js";
 import {
   readTaskfoldProjectDocument,
+  readTaskfoldProjectDocumentAsset,
+  writeTaskfoldProjectDocumentAsset,
   writeTaskfoldProjectDocumentPath,
 } from "./project-document-reader.js";
 
@@ -272,6 +274,44 @@ export function registerTaskfoldProjectGatewayMethods(params: {
       }
     },
     { scope: READ_SCOPE },
+  );
+  // 资料库文档里的图片：存在文档旁的 `<文档名>.assets/`，只支持仓库里的 Markdown 文件文档。
+  api.registerGatewayMethod(
+    "taskfold.projects.documents.assets.get",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const access = await resolveProjectWorkspaceReadAccess(request);
+        const document = await store.getProjectDocument(readId(requestParams));
+        respond(true, await readTaskfoldProjectDocumentAsset({ document, ref: requestParams.ref, access }));
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE },
+  );
+  api.registerGatewayMethod(
+    "taskfold.projects.documents.assets.add",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const access = await resolveProjectWorkspaceWriteAccess(request);
+        const document = await store.getProjectDocument(readId(requestParams));
+        respond(
+          true,
+          await writeTaskfoldProjectDocumentAsset({
+            document,
+            fileName: requestParams.fileName,
+            mimeType: requestParams.mimeType,
+            contentBase64: requestParams.contentBase64,
+            access,
+          }),
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
   );
   api.registerGatewayMethod(
     "taskfold.projects.documents.write",

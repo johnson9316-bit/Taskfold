@@ -29,6 +29,7 @@ const CARD_SUMMARY_KEYS = [
   "id",
   "labels",
   "milestoneId",
+  "phase",
   "priority",
   "revision",
   "shortId",
@@ -38,7 +39,7 @@ const CARD_SUMMARY_KEYS = [
 ];
 const CARD_DETAIL_KEYS = [...CARD_SUMMARY_KEYS, "notes"].toSorted();
 
-const COMMANDS = ["init", "list", "show", "create", "update", "delete", "attach", "boards", "instructions", "guidelines"];
+const COMMANDS = ["init", "list", "show", "create", "update", "delete", "attach", "boards", "migrate", "instructions", "guidelines"];
 
 let bundle: string;
 

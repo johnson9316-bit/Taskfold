@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TaskfoldCard } from "./contract/index.js";
-import { assertCanMutateClaimedCard } from "./store-card-helpers.js";
+import { cardPhase, phasePatch } from "./card-phase.js";
+import { assertCanMutateClaimedCard, cardBoardId } from "./store-card-helpers.js";
 import { MAX_CARD_COMMENTS } from "./store-constants.js";
 import { TaskfoldEnrichmentStore } from "./store-enrichment.js";
 import type { TaskfoldMutationScope, TaskfoldPromoteInput } from "./store-inputs.js";
@@ -11,8 +12,9 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
     return await this.enqueueMutation(async () => {
       const promoted: TaskfoldCard[] = [];
       for (const card of await this.list()) {
+        const registry = await this.statusRegistryFor(cardBoardId(card));
         const next = await this.promoteDependencyReady(card.id, now);
-        if (next.status !== card.status) {
+        if (cardPhase(next, registry, now) !== cardPhase(card, registry, now)) {
           promoted.push(next);
         }
       }
@@ -71,17 +73,23 @@ export class TaskfoldPromoteStore extends TaskfoldEnrichmentStore {
             { id: randomUUID(), body: reason, createdAt: Date.now() },
           ].slice(-MAX_CARD_COMMENTS)
         : existing.metadata?.comments;
+      // 人工批准给 agent 执行：打上派发标记（原来是把状态改成 ready）。
+      const ready = phasePatch(existing, "ready", await this.statusRegistryFor(cardBoardId(existing)));
       return await this.updateCard(
         id,
         {
-          status: "ready",
+          status: ready.status,
           metadata: {
             ...clearDiagnostics(existing.metadata, ["stranded_ready", "blocked_too_long"]),
             comments,
             stale: null,
           },
         },
-        { enforceStatusHolds: input.force !== true, expectedRevision: existing.revision },
+        {
+          enforceStatusHolds: input.force !== true,
+          expectedRevision: existing.revision,
+          phaseFlags: ready.flags,
+        },
       );
     }));
   }

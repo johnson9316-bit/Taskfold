@@ -37,6 +37,11 @@ export type TaskfoldHostCapabilities = {
   readonly documents: boolean;
   /** 卡片详情里「在编辑器中打开」原 md 文件（`taskfold.cards.openFile`）。 */
   readonly openCardFile: boolean;
+  /**
+   * 卡片流转动作：标记 / 解除阻塞、加入派发队列（`taskfold.cards.block` / `unblock` / `promote`）。
+   * 这些是给 agent 调度用的；VS Code 不派活，关闭。
+   */
+  readonly cardFlow: boolean;
 };
 
 /**

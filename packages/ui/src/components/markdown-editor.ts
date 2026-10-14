@@ -195,7 +195,15 @@ export class TaskfoldMarkdownEditor extends LitElement {
         this.dispatchEvent(new CustomEvent("markdown-change", { detail: markdown, bubbles: true, composed: true }));
       },
       onError: (error) => this.showError(error),
-      onSubmit: () => this.closest("form")?.requestSubmit(),
+      onSubmit: () => {
+        const form = this.closest("form");
+        if (form) {
+          form.requestSubmit();
+        } else {
+          // 不在表单里（资料库文档）：交给外层处理，如保存。
+          this.dispatchEvent(new CustomEvent("editor-submit", { bubbles: true, composed: true }));
+        }
+      },
       ...(upload ? { uploadImage: (file: File) => this.uploadImage!(file) } : {}),
       resolveImage: (ref) => (this.resolveImage ? this.resolveImage(ref) : Promise.resolve(undefined)),
       ...(this.acceptRef ? { acceptRef: (ref: string) => this.acceptRef!(ref) } : {}),

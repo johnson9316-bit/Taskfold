@@ -1,7 +1,7 @@
 ---
 id: CARD-55
 title: worker 拿不到 taskfold 工具：宿主能力缺口与 43 个工具冒烟
-status: blocked
+status: running
 assignee: []
 created_date: '2026-10-08 09:34'
 updated_date: '2026-10-08 10:16'
@@ -30,6 +30,9 @@ ordinal: 8000
   "metadata": {
     "automation": {
       "boardId": "flowboard"
+    },
+    "blocked": {
+      "at": 1791454590393
     }
   }
 }

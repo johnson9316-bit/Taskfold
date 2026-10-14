@@ -14,6 +14,7 @@ import type {
 import { dispatchAndStartTaskfoldCards } from "../packages/openclaw/src/backend/src/dispatcher.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
+import { phaseOf } from "./helpers/phase.js";
 
 const roots: string[] = [];
 
@@ -114,7 +115,7 @@ describe("Taskfold dispatcher launch wiring (需求/15.7 步骤 3)", () => {
     );
 
     const failed = await store.get(card.id);
-    expect(failed?.status).toBe("blocked");
+    expect(phaseOf(failed)).toBe("blocked");
     expect(failed?.sessionKey).toBeUndefined();
     expect(failed?.runId).toBeUndefined();
     expect(failed?.execution).toBeUndefined();

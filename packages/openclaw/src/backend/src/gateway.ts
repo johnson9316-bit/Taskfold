@@ -632,6 +632,72 @@ export function registerTaskfoldGatewayMethods(params: {
     { scope: READ_SCOPE },
   );
 
+  // 项目的状态定义（需求/22-状态模型）：固定四个类别，状态名由项目自定义。
+  api.registerGatewayMethod(
+    "taskfold.statuses.list",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, { statuses: await store.listStatuses(requestParams.boardId as string | undefined) });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE },
+  );
+
+  api.registerGatewayMethod(
+    "taskfold.statuses.save",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, {
+          statuses: await store.saveStatuses(
+            requestParams.boardId as string | undefined,
+            requestParams.statuses as never,
+          ),
+        });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
+  );
+
+  // 删除一个状态：用它的卡先移到 moveCardsTo。
+  api.registerGatewayMethod(
+    "taskfold.statuses.delete",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(
+          true,
+          await store.deleteStatus(requestParams.boardId as string | undefined, String(requestParams.id ?? ""), {
+            ...(typeof requestParams.moveCardsTo === "string" ? { moveCardsTo: requestParams.moveCardsTo } : {}),
+          }),
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
+  );
+
+  // 把项目迁移到新状态模型（写状态集、升到格式版本 4、重写旧的 ready / scheduled / blocked）。
+  api.registerGatewayMethod(
+    "taskfold.statuses.migrate",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(
+          true,
+          await store.migrateStatusModel(requestParams.boardId as string | undefined, {
+            dryRun: requestParams.dryRun === true,
+          }),
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE },
+  );
+
   registerTaskfoldWorkspaceBoardMethod({ api, store, redactCard: redactClaimToken });
 
   api.registerGatewayMethod(

@@ -15,6 +15,8 @@ import {
   resolveDispatchWorkspaceAccess,
   type ResolveAgentWorkspaceRuntime,
 } from "./dispatcher-workspace.js";
+import { cardPhase } from "@taskfold/core/card-phase.js";
+import type { TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
 import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 import { buildWorkerPrompt } from "@taskfold/core/worker-prompt.js";
 import { isTaskfoldClaimReclaimable } from "@taskfold/core/store-constants.js";
@@ -232,6 +234,7 @@ function selectStartableCards(
   candidates: TaskfoldCard[],
   ownerOverride: string | undefined,
   now: number,
+  registryFor: (card: TaskfoldCard) => TaskfoldStatusRegistry,
 ): TaskfoldCard[] {
   if (limit <= 0) {
     return [];
@@ -243,8 +246,8 @@ function selectStartableCards(
     // heartbeat grace as cleanup before a stale running card releases its slot.
     const consumesOwnerSlot =
       !isTaskfoldClaimReclaimable(claim, now) &&
-      (card.status === "running" ||
-        (card.status !== "done" && cardHasActiveClaim(card, now)) ||
+      (cardPhase(card, registryFor(card), now) === "running" ||
+        (!registryFor(card).isTerminal(card.status) && cardHasActiveClaim(card, now)) ||
         card.execution?.status === "running");
     if (!consumesOwnerSlot || cardIsArchived(card)) {
       continue;
@@ -260,7 +263,9 @@ function selectStartableCards(
   for (const card of candidates
     .filter(
       (entry) =>
-        entry.status === "ready" && !cardHasActiveClaim(entry, now) && !cardIsArchived(entry),
+        cardPhase(entry, registryFor(entry), now) === "ready" &&
+        !cardHasActiveClaim(entry, now) &&
+        !cardIsArchived(entry),
     )
     .toSorted(sortReadyCards)) {
     const owner = resolveDispatchOwner(card, now, ownerOverride);
@@ -314,7 +319,12 @@ async function runTaskfoldDispatch(
   let acceptedStarts = 0;
   let attemptedStarts = 0;
 
-  for (const card of selectStartableCards(cards, maxStarts, candidates, ownerOverride, now)) {
+  const registries = new Map<string, TaskfoldStatusRegistry>();
+  for (const boardId of new Set(cards.map(cardBoardId))) {
+    registries.set(boardId, await params.store.statusRegistryFor(boardId));
+  }
+  const registryFor = (entry: TaskfoldCard) => registries.get(cardBoardId(entry))!;
+  for (const card of selectStartableCards(cards, maxStarts, candidates, ownerOverride, now, registryFor)) {
     const ownerId = resolveDispatchOwner(card, now, ownerOverride);
     if (acceptedStarts >= maxStarts || attemptedStarts >= maxAttempts) {
       break;

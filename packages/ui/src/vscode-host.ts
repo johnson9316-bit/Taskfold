@@ -27,6 +27,7 @@ export const TASKFOLD_VSCODE_CAPABILITIES: TaskfoldHostCapabilities = {
   projectManagement: false,
   documents: true,
   openCardFile: true,
+  cardFlow: false,
 };
 
 export function createVsCodeTaskfoldHost(

@@ -1,1 +1,19 @@
-format_version: 2
+format_version: 4
+statuses:
+  - id: triage
+    category: unstarted
+    role: intake
+  - id: backlog
+    category: unstarted
+  - id: todo
+    category: unstarted
+    default: true
+  - id: running
+    category: started
+  - id: review
+    category: started
+    role: review
+  - id: done
+    category: completed
+  - id: cancelled
+    category: cancelled

@@ -4,11 +4,11 @@
 // 不暴露这些执行相关的方法。
 import { randomUUID } from "node:crypto";
 import type { TaskfoldAttachment, TaskfoldCard } from "./contract/index.js";
+import { cardPhase, isDependencyPromotableCard, phasePatch } from "./card-phase.js";
 import {
   cardBoardId,
   closeRunningAttempts,
   computeCardDiagnostics,
-  isDependencyPromotableStatus,
   latestRunningAttempt,
   mergeDiagnostics,
   removeUndefinedCardFields,
@@ -39,11 +39,12 @@ import { TaskfoldProjectStore } from "./store-projects.js";
 // Capability layers split review boundaries only; the core still owns persistence and mutation order.
 export class TaskfoldDispatchStore extends TaskfoldProjectStore {
   private async shouldAutoOrchestrate(card: TaskfoldCard): Promise<boolean> {
-    if (
-      card.status !== "triage" ||
-      card.metadata?.archivedAt ||
-      card.metadata?.workerProtocol?.state === "idle"
-    ) {
+    if (card.metadata?.archivedAt || card.metadata?.workerProtocol?.state === "idle") {
+      return false;
+    }
+    // 只处理停在 intake 状态（原 triage）里的卡。
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    if (cardPhase(card, registry) !== "triage") {
       return false;
     }
     const board = await this.boardStore.lookup(cardBoardId(card));
@@ -72,8 +73,10 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
           if (card.metadata?.archivedAt) {
             continue;
           }
+          const registry = await this.statusRegistryFor(cardBoardId(card));
+          const phaseBefore = cardPhase(card, registry, now);
           let latest = await this.promoteDependencyReady(card.id, now);
-          const wasPromoted = latest.status !== card.status;
+          const wasPromoted = cardPhase(latest, registry, now) !== phaseBefore;
           const claim = latest.metadata?.claim;
           const latestAttempt = latestRunningAttempt(latest);
           const maxRuntimeSeconds = latest.metadata?.automation?.maxRuntimeSeconds;
@@ -83,7 +86,7 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
             now - runtimeStartedAt! > secondsToDurationMs(maxRuntimeSeconds!);
           const claimExpired = isTaskfoldClaimReclaimable(claim, now);
           const retriesExhausted = retryBudgetExhausted(latest);
-          if (latest.status === "running" && (timedOut || claimExpired)) {
+          if (cardPhase(latest, registry, now) === "running" && (timedOut || claimExpired)) {
             const reason = timedOut
               ? "Run exceeded the card max runtime."
               : "Claim expired without a recent heartbeat.";
@@ -91,11 +94,13 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
               latest.execution?.status === "running"
                 ? { ...latest.execution, status: "blocked" as const, updatedAt: now }
                 : latest.execution;
+            const blockedPatch = phasePatch(latest, "blocked", registry, { reason, now });
             latest = await this.updateCard(latest.id, {
-              status: "blocked",
+              status: blockedPatch.status,
               ...(execution ? { execution } : {}),
               metadata: {
                 ...latest.metadata,
+                ...blockedPatch.flags,
                 claim: undefined,
                 attempts: closeRunningAttempts(latest.metadata?.attempts, now, "blocked", reason),
                 failureCount: (latest.metadata?.failureCount ?? 0) + 1,
@@ -121,12 +126,17 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
           if (
             !latest.metadata?.claim &&
             retriesExhausted &&
-            isDependencyPromotableStatus(latest.status)
+            isDependencyPromotableCard(latest, registry)
           ) {
+            const blockedPatch = phasePatch(latest, "blocked", registry, {
+              reason: "Card exhausted its retry budget.",
+              now,
+            });
             latest = await this.updateCard(latest.id, {
-              status: "blocked",
+              status: blockedPatch.status,
               metadata: {
                 ...latest.metadata,
+                ...blockedPatch.flags,
                 notifications: [
                   ...(latest.metadata?.notifications ?? []),
                   {
@@ -141,7 +151,7 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
             }, { expectedRevision: latest.revision });
             blocked.push(latest);
           }
-          if (latest.status === "ready" && !latest.metadata?.archivedAt) {
+          if (cardPhase(latest, registry, now) === "ready" && !latest.metadata?.archivedAt) {
             latest = await this.recordDispatch(latest, now);
           }
           if (await this.shouldAutoOrchestrate(latest)) {
@@ -155,7 +165,7 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
               orchestratedByBoard.set(latestBoardId, boardCount + 1);
             }
           }
-          if (wasPromoted && latest.status !== "blocked") {
+          if (wasPromoted && cardPhase(latest, registry, now) !== "blocked") {
             promoted.push(latest);
           }
         } catch (error) {
@@ -217,8 +227,12 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
 
   async diagnostics(now = Date.now()): Promise<TaskfoldDiagnosticsResult> {
     const cards = await this.list();
+    const registries = new Map<string, Awaited<ReturnType<TaskfoldDispatchStore["statusRegistryFor"]>>>();
+    for (const boardId of new Set(cards.map(cardBoardId))) {
+      registries.set(boardId, await this.statusRegistryFor(boardId));
+    }
     const rows = cards.flatMap((card) => {
-      const diagnostics = computeCardDiagnostics(card, now);
+      const diagnostics = computeCardDiagnostics(card, now, registries.get(cardBoardId(card)));
       return diagnostics.length ? [{ card, diagnostics }] : [];
     });
     return {
@@ -238,7 +252,7 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
         }
         const diagnostics = mergeDiagnostics(
           latest.metadata?.diagnostics,
-          computeCardDiagnostics(latest, now),
+          computeCardDiagnostics(latest, now, await this.statusRegistryFor(cardBoardId(latest))),
         );
         if (diagnostics.length === 0 && !latest.metadata?.diagnostics?.length) {
           continue;
@@ -266,6 +280,6 @@ export class TaskfoldDispatchStore extends TaskfoldProjectStore {
     if (!card) {
       throw new Error(`card not found: ${id}`);
     }
-    return buildWorkerContext(card, await this.list());
+    return buildWorkerContext(card, await this.list(), Date.now(), await this.statusRegistryFor(cardBoardId(card)));
   }
 }

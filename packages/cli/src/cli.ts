@@ -7,9 +7,20 @@ import { Command, CommanderError, InvalidArgumentError } from "commander";
 import {
   isValidTaskfoldBoardId,
   TASKFOLD_PRIORITIES,
-  TASKFOLD_STATUSES,
+  TASKFOLD_STATUS_CATEGORIES,
+  TASKFOLD_STATUS_ROLES,
   type TaskfoldCard,
+  type TaskfoldStatusCategory,
+  type TaskfoldStatusDefinition,
+  type TaskfoldStatusRole,
 } from "@taskfold/core/contract/index.js";
+import {
+  acceptsStatusInput,
+  isRetiredTaskfoldStatusId,
+  TASKFOLD_STATUS_ID_PATTERN,
+  type TaskfoldStatusRegistry,
+} from "@taskfold/core/status-registry.js";
+import { cardPhase } from "@taskfold/core/card-phase.js";
 import type { TaskfoldProjectStore } from "@taskfold/core/store-projects.js";
 import {
   boardsInUse,
@@ -51,9 +62,10 @@ const UNSUPPORTED_PATHS_NOTE =
 // 参数解析（失败抛 InvalidArgumentError，commander 转成 INVALID_ARGUMENT）
 // ---------------------------------------------------------------------------
 
+/** 只检查写法；是不是该项目的状态要等打开项目、读到它的状态集之后才知道（见 assertKnownStatuses）。 */
 function parseStatus(value: string): string {
-  if (!(TASKFOLD_STATUSES as readonly string[]).includes(value)) {
-    throw new InvalidArgumentError(`status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`);
+  if (!TASKFOLD_STATUS_ID_PATTERN.test(value)) {
+    throw new InvalidArgumentError(`status must be a status id: lowercase letters, digits, "-" or "_".`);
   }
   return value;
 }
@@ -131,20 +143,31 @@ async function readTextSource(source: string, run: RunCliOptions, flag: string):
 // 人读文本
 // ---------------------------------------------------------------------------
 
-function cardLine(out: CliOutput, card: TaskfoldCard, displayIds: CardDisplayIds): string {
-  const view = toCardSummary(card, displayIds);
-  const labels = view.labels.length ? `  [${view.labels.join(", ")}]` : "";
-  const archived = view.archived ? "  (archived)" : "";
-  return `${out.dim(view.displayId ?? view.shortId)}  ${out.status(view.status, 9)} ${view.priority.padEnd(6)}  ${view.boardId}  ${view.title}${labels}${archived}`;
+/** 阻塞 / 已派发 / 定时未到：这三种阶段在状态列里看不出来，行尾标出。 */
+function phaseNote(phase: string): string {
+  return phase === "blocked" || phase === "ready" || phase === "scheduled" ? `  (${phase})` : "";
 }
 
-function printCardDetail(out: CliOutput, card: TaskfoldCard, displayIds: CardDisplayIds): void {
-  const view = toCardDetail(card, displayIds);
+function cardLine(out: CliOutput, card: TaskfoldCard, displayIds: CardDisplayIds, registry: TaskfoldStatusRegistry): string {
+  const view = toCardSummary(card, displayIds, registry);
+  const labels = view.labels.length ? `  [${view.labels.join(", ")}]` : "";
+  const archived = view.archived ? "  (archived)" : "";
+  return `${out.dim(view.displayId ?? view.shortId)}  ${out.status(view.status, 9)} ${view.priority.padEnd(6)}  ${view.boardId}  ${view.title}${labels}${phaseNote(view.phase)}${archived}`;
+}
+
+function printCardDetail(
+  out: CliOutput,
+  card: TaskfoldCard,
+  displayIds: CardDisplayIds,
+  registry: TaskfoldStatusRegistry,
+): void {
+  const view = toCardDetail(card, displayIds, registry);
   out.line(out.bold(view.title));
   const rows: Array<[string, string]> = [
     ["id", view.id],
     ["number", view.displayId ?? "-"],
     ["status", out.status(view.status)],
+    ["phase", view.phase],
     ["priority", view.priority],
     ["labels", view.labels.length ? view.labels.join(", ") : "-"],
     ["agent", view.agentId ?? "-"],
@@ -181,9 +204,30 @@ function helpText(sections: { reads?: string; writes?: string; examples: string[
 }
 
 /** 打开 `cwd` 所属仓库的 `.taskfold/`，跑一个命令。 */
-async function withProject<T>(run: RunCliOptions, body: (store: TaskfoldProjectStore, displayIds: CardDisplayIds, dataDir: string) => Promise<T>): Promise<T> {
+async function withProject<T>(
+  run: RunCliOptions,
+  body: (
+    store: TaskfoldProjectStore,
+    displayIds: CardDisplayIds,
+    dataDir: string,
+    registry: TaskfoldStatusRegistry,
+  ) => Promise<T>,
+): Promise<T> {
   const { store, dataDir } = openTaskfoldProject(run.cwd);
-  return await body(store, readCardDisplayIds(dataDir), dataDir);
+  // 状态集属于整个仓库（`.taskfold/config.yml`）：单项目后端不分看板，传不传 boardId 都一样。
+  return await body(store, readCardDisplayIds(dataDir), dataDir, await store.statusRegistryFor(undefined));
+}
+
+/** 状态 id 必须在项目状态集里（旧的 ready / scheduled / blocked 仍接受，由 core 翻译成标记）。 */
+function assertKnownStatuses(registry: TaskfoldStatusRegistry, statuses: readonly string[]): void {
+  for (const status of statuses) {
+    if (!acceptsStatusInput(registry, status)) {
+      throw new TaskfoldCliError("INVALID_ARGUMENT", `status must be one of: ${registry.ids.join(", ")}.`, {
+        status,
+        statuses: [...registry.ids],
+      });
+    }
+  }
 }
 
 function buildProgram(run: RunCliOptions, out: CliOutput): Command {
@@ -250,7 +294,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
   program
     .command("list")
     .description("list cards (archived cards are hidden unless --include-archived)")
-    .option("--status <statuses>", `only these statuses, comma-separated (${TASKFOLD_STATUSES.join(", ")})`, parseStatusList)
+    .option("--status <statuses>", "only these statuses, comma-separated (see `taskfold statuses`)", parseStatusList)
     .option("--label <label>", "only cards carrying this label")
     .option("--board <id>", "only cards on this board (default: all boards)", parseBoardId)
     .option("--include-archived", "include archived cards")
@@ -266,22 +310,31 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
       async (options: JsonFlag & { status?: string[]; label?: string; board?: string; includeArchived?: boolean }) => {
         await withProject(
           run,
-          async (store, displayIds) => {
+          async (store, displayIds, _dataDir, registry) => {
+            assertKnownStatuses(registry, options.status ?? []);
+            // 旧的 ready / scheduled / blocked 现在是阶段不是状态：`--status ready` 筛"已派发"的卡。
+            const matchesStatus = (card: TaskfoldCard) =>
+              !options.status?.length ||
+              options.status.some((status) =>
+                isRetiredTaskfoldStatusId(status) && !registry.has(status)
+                  ? cardPhase(card, registry) === status
+                  : card.status === status,
+              );
             const cards = (await store.list(options.board ? { boardId: options.board } : {})).filter(
               (card) =>
                 (options.includeArchived || !card.metadata?.archivedAt) &&
-                (!options.status?.length || options.status.includes(card.status)) &&
+                matchesStatus(card) &&
                 (!options.label || card.labels.includes(options.label)),
             );
             if (options.json) {
-              out.json("card-list", { boardId: options.board ?? null, cards: cards.map((card) => toCardSummary(card, displayIds)) });
+              out.json("card-list", { boardId: options.board ?? null, cards: cards.map((card) => toCardSummary(card, displayIds, registry)) });
               return;
             }
             if (cards.length === 0) {
               out.line("No cards.");
             }
             for (const card of cards) {
-              out.line(cardLine(out, card, displayIds));
+              out.line(cardLine(out, card, displayIds, registry));
             }
           }
         );
@@ -303,13 +356,13 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (id: string, options: JsonFlag) => {
       await withProject(
         run,
-        async (store, displayIds) => {
+        async (store, displayIds, _dataDir, registry) => {
           const card = await resolveCard(store, id, displayIds);
           if (options.json) {
-            out.json("card", { card: toCardDetail(card, displayIds) });
+            out.json("card", { card: toCardDetail(card, displayIds, registry) });
             return;
           }
-          printCardDetail(out, card, displayIds);
+          printCardDetail(out, card, displayIds, registry);
         }
       );
     });
@@ -320,7 +373,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .description("create a card")
     .option("--notes <text>", "card body")
     .option("--notes-file <path>", "read the card body from a file (- for stdin)")
-    .option("--status <status>", `initial status (${TASKFOLD_STATUSES.join(", ")})`, parseStatus, "todo")
+    .option("--status <status>", "initial status (default: the project's default, normally todo; see `taskfold statuses`)", parseStatus)
     .option("--priority <priority>", `priority (${TASKFOLD_PRIORITIES.join(", ")})`, parsePriority, "normal")
     .option("--labels <items>", "comma-separated labels")
     .option("--agent <id>", "assigned agent id")
@@ -348,7 +401,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
         options: JsonFlag & {
           notes?: string;
           notesFile?: string;
-          status: string;
+          status?: string;
           priority: string;
           labels?: string;
           agent?: string;
@@ -360,7 +413,10 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
           options.notesFile !== undefined ? await readTextSource(options.notesFile, run, "--notes-file") : options.notes;
         await withProject(
           run,
-          async (store, displayIds, dataDir) => {
+          async (store, displayIds, dataDir, registry) => {
+            if (options.status !== undefined) {
+              assertKnownStatuses(registry, [options.status]);
+            }
             const boardId = await resolveCreateBoard(store, options.board);
             const created = await store.create({
               title: titleWords.join(" "),
@@ -376,10 +432,10 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
             const card = (await store.get(created.id)) ?? created;
             displayIds = readCardDisplayIds(dataDir);
             if (options.json) {
-              out.json("card", { card: toCardDetail(card, displayIds) });
+              out.json("card", { card: toCardDetail(card, displayIds, registry) });
               return;
             }
-            printCardDetail(out, card, displayIds);
+            printCardDetail(out, card, displayIds, registry);
           }
         );
       },
@@ -393,7 +449,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
         "body (--notes / --notes-file) requires --expect-revision",
     )
     .option("--title <title>", "new title")
-    .option("--status <status>", `move to this status (${TASKFOLD_STATUSES.join(", ")})`, parseStatus)
+    .option("--status <status>", "move to this status (see `taskfold statuses`)", parseStatus)
     .option("--priority <priority>", `new priority (${TASKFOLD_PRIORITIES.join(", ")})`, parsePriority)
     .option("--add-label <label>", "add a label (repeatable)", collect)
     .option("--remove-label <label>", "remove a label (repeatable)", collect)
@@ -480,7 +536,10 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
         }
         await withProject(
           run,
-          async (store, displayIds) => {
+          async (store, displayIds, _dataDir, registry) => {
+            if (options.status !== undefined) {
+              assertKnownStatuses(registry, [options.status]);
+            }
             const target = await resolveCard(store, id, displayIds);
             const card = await updateCardWithRetry(
               store,
@@ -506,10 +565,10 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
               options.expectRevision,
             );
             if (options.json) {
-              out.json("card", { card: toCardDetail(card, displayIds) });
+              out.json("card", { card: toCardDetail(card, displayIds, registry) });
               return;
             }
-            printCardDetail(out, card, displayIds);
+            printCardDetail(out, card, displayIds, registry);
           }
         );
       },
@@ -533,7 +592,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (id: string, options: JsonFlag) => {
       await withProject(
         run,
-        async (store, displayIds) => {
+        async (store, displayIds, _dataDir, registry) => {
           const card = await resolveCard(store, id, displayIds);
           const { deleted } = await store.delete(card.id);
           if (!deleted) {
@@ -574,7 +633,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (id: string, files: string[], options: JsonFlag & { appendNotes?: boolean }) => {
       await withProject(
         run,
-        async (store, displayIds) => {
+        async (store, displayIds, _dataDir, registry) => {
           const target = await resolveCard(store, id, displayIds);
           const images: Array<{
             file: string;
@@ -625,7 +684,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
             out.json("card-images", {
               cardId: target.id,
               images,
-              card: card ? toCardDetail(card, displayIds) : null,
+              card: card ? toCardDetail(card, displayIds, registry) : null,
             });
             return;
           }
@@ -650,7 +709,7 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
     .action(async (options: JsonFlag) => {
       await withProject(
         run,
-        async (store, displayIds) => {
+        async (store, displayIds, _dataDir, registry) => {
           const cards = await store.list();
           const inUse = new Set(boardsInUse(cards));
           const defaultBoardId = defaultBoardFor(cards) ?? null;
@@ -676,6 +735,263 @@ function buildProgram(run: RunCliOptions, out: CliOutput): Command {
           }
         }
       );
+    });
+
+  const statusesCommand = program
+    .command("statuses")
+    .description(
+      "show or change the project's statuses. Categories are fixed (unstarted, started, completed, cancelled); " +
+        "the statuses inside them are the project's own and live in .taskfold/config.yml",
+    );
+
+  const printStatuses = (out2: CliOutput, statuses: readonly TaskfoldStatusDefinition[]) => {
+    for (const status of statuses) {
+      const flags = [status.role ? `role=${status.role}` : "", status.default ? "default" : ""].filter(Boolean);
+      out2.line(
+        `${status.id.padEnd(14)} ${status.category.padEnd(10)} ${(status.name ?? "").padEnd(12)} ${flags.join(" ")}`.trimEnd(),
+      );
+    }
+  };
+  const parseCategory = (value: string): TaskfoldStatusCategory => {
+    if (!(TASKFOLD_STATUS_CATEGORIES as readonly string[]).includes(value)) {
+      throw new InvalidArgumentError(`category must be one of: ${TASKFOLD_STATUS_CATEGORIES.join(", ")}.`);
+    }
+    return value as TaskfoldStatusCategory;
+  };
+  const parseRole = (value: string): TaskfoldStatusRole | "none" => {
+    if (value !== "none" && !(TASKFOLD_STATUS_ROLES as readonly string[]).includes(value)) {
+      throw new InvalidArgumentError(`role must be one of: ${TASKFOLD_STATUS_ROLES.join(", ")}, none.`);
+    }
+    return value as TaskfoldStatusRole | "none";
+  };
+  const findStatus = (list: readonly TaskfoldStatusDefinition[], statusId: string): number => {
+    const index = list.findIndex((status) => status.id === statusId);
+    if (index === -1) {
+      throw new TaskfoldCliError("NOT_FOUND", `status not found: ${statusId}`, { status: statusId });
+    }
+    return index;
+  };
+  /** 角色与默认状态在项目里只能各有一个：给新状态设置时从原来的那个上摘掉。 */
+  const takeExclusive = (
+    list: TaskfoldStatusDefinition[],
+    target: TaskfoldStatusDefinition,
+    flags: { role?: TaskfoldStatusRole; makeDefault?: boolean },
+  ) => {
+    for (const status of list) {
+      if (status.id === target.id) continue;
+      if (flags.role && status.role === flags.role) delete status.role;
+      if (flags.makeDefault && status.default) delete status.default;
+    }
+  };
+  const saveAndPrint = async (
+    store: TaskfoldProjectStore,
+    next: TaskfoldStatusDefinition[],
+    options: JsonFlag,
+  ) => {
+    const saved = await store.saveStatuses(undefined, next);
+    if (options.json) {
+      out.json("status-list", { configured: true, statuses: saved });
+      return;
+    }
+    printStatuses(out, saved);
+  };
+
+  statusesCommand
+    .command("list", { isDefault: true })
+    .description("list the project's statuses in board order")
+    .option("--json", "print one JSON object (kind: status-list)")
+    .action(async (options: JsonFlag) => {
+      await withProject(run, async (store, _displayIds, _dataDir, registry) => {
+        const configured = await store.hasStatusConfig(undefined);
+        const statuses = await store.listStatuses(undefined);
+        if (options.json) {
+          out.json("status-list", { configured, statuses });
+          return;
+        }
+        printStatuses(out, statuses);
+        if (!configured) {
+          out.line("Defaults: run `taskfold migrate` to write this project's own statuses.");
+        }
+      });
+    });
+
+  statusesCommand
+    .command("add")
+    .argument("<id>", "status id (lowercase letters, digits, - or _)")
+    .requiredOption("--category <category>", `category: ${TASKFOLD_STATUS_CATEGORIES.join(", ")}`, parseCategory)
+    .option("--name <name>", "display name (default: a built-in name for the standard ids)")
+    .option("--color <color>", "board column accent, e.g. #2563eb")
+    .option("--role <role>", `engine role: ${TASKFOLD_STATUS_ROLES.join(", ")} (moves it from the status that has it)`, parseRole)
+    .option("--default", "make this the status new cards start in (unstarted only)")
+    .option("--before <id>", "insert before this status (default: after the last status of the same category)")
+    .option("--json", "print one JSON object (kind: status-list)")
+    .addHelpText("after", helpText({ writes: ".taskfold/config.yml (statuses; first write upgrades format_version to 4)", examples: ["taskfold statuses add testing --category started --name Testing --before review"] }))
+    .action(async (statusId: string, options: JsonFlag & {
+      category: TaskfoldStatusCategory;
+      name?: string;
+      color?: string;
+      role?: TaskfoldStatusRole | "none";
+      default?: boolean;
+      before?: string;
+    }) => {
+      if (!TASKFOLD_STATUS_ID_PATTERN.test(statusId)) {
+        throw new TaskfoldCliError("INVALID_ARGUMENT", `status id must match ${TASKFOLD_STATUS_ID_PATTERN}.`);
+      }
+      await withProject(run, async (store, _displayIds, _dataDir, registry) => {
+        const list = (await store.listStatuses(undefined)).map((status) => ({ ...status }));
+        if (list.some((status) => status.id === statusId)) {
+          throw new TaskfoldCliError("REJECTED", `status already exists: ${statusId}`, { status: statusId });
+        }
+        const created: TaskfoldStatusDefinition = {
+          id: statusId,
+          category: options.category,
+          ...(options.name ? { name: options.name } : {}),
+          ...(options.color ? { color: options.color } : {}),
+          ...(options.role && options.role !== "none" ? { role: options.role } : {}),
+          ...(options.default ? { default: true } : {}),
+        };
+        takeExclusive(list, created, { role: created.role, makeDefault: options.default === true });
+        const lastOfCategory = list.findLastIndex((status) => status.category === options.category);
+        const at = options.before !== undefined ? findStatus(list, options.before) : lastOfCategory + 1;
+        list.splice(at, 0, created);
+        await saveAndPrint(store, list, options);
+      });
+    });
+
+  statusesCommand
+    .command("edit")
+    .argument("<id>", "status id")
+    .option("--name <name>", 'display name ("" clears it)')
+    .option("--category <category>", `category: ${TASKFOLD_STATUS_CATEGORIES.join(", ")}`, parseCategory)
+    .option("--color <color>", 'column accent ("" clears it)')
+    .option("--role <role>", `engine role: ${TASKFOLD_STATUS_ROLES.join(", ")}, or none to clear`, parseRole)
+    .option("--default", "make this the status new cards start in (unstarted only)")
+    .option("--json", "print one JSON object (kind: status-list)")
+    .action(async (statusId: string, options: JsonFlag & {
+      name?: string;
+      category?: TaskfoldStatusCategory;
+      color?: string;
+      role?: TaskfoldStatusRole | "none";
+      default?: boolean;
+    }) => {
+      await withProject(run, async (store, _displayIds, _dataDir, registry) => {
+        const list = (await store.listStatuses(undefined)).map((status) => ({ ...status }));
+        const status = list[findStatus(list, statusId)]!;
+        if (options.name !== undefined) {
+          if (options.name === "") delete status.name;
+          else status.name = options.name;
+        }
+        if (options.color !== undefined) {
+          if (options.color === "") delete status.color;
+          else status.color = options.color;
+        }
+        if (options.category !== undefined) status.category = options.category;
+        if (options.role !== undefined) {
+          if (options.role === "none") delete status.role;
+          else status.role = options.role;
+        }
+        if (options.default) status.default = true;
+        if (status.category !== "unstarted") delete status.default;
+        takeExclusive(list, status, {
+          ...(status.role ? { role: status.role } : {}),
+          makeDefault: options.default === true,
+        });
+        await saveAndPrint(store, list, options);
+      });
+    });
+
+  statusesCommand
+    .command("move")
+    .argument("<id>", "status id")
+    .option("--before <id>", "put it before this status")
+    .option("--after <id>", "put it after this status")
+    .option("--json", "print one JSON object (kind: status-list)")
+    .action(async (statusId: string, options: JsonFlag & { before?: string; after?: string }) => {
+      exclusive(options, "before", "after", "--before", "--after");
+      if (options.before === undefined && options.after === undefined) {
+        throw new TaskfoldCliError("INVALID_ARGUMENT", "pass --before <id> or --after <id>.");
+      }
+      await withProject(run, async (store, _displayIds, _dataDir, registry) => {
+        const list = (await store.listStatuses(undefined)).map((status) => ({ ...status }));
+        const [moving] = list.splice(findStatus(list, statusId), 1);
+        const anchor = findStatus(list, (options.before ?? options.after)!);
+        list.splice(options.before !== undefined ? anchor : anchor + 1, 0, moving!);
+        await saveAndPrint(store, list, options);
+      });
+    });
+
+  statusesCommand
+    .command("remove")
+    .argument("<id>", "status id")
+    .option("--move-cards-to <id>", "move the cards that use it to this status first (required when any do)")
+    .option("--json", "print one JSON object (kind: status-list)")
+    .action(async (statusId: string, options: JsonFlag & { moveCardsTo?: string }) => {
+      await withProject(run, async (store, _displayIds, _dataDir, registry) => {
+        findStatus(registry.list, statusId);
+        const { statuses, moved } = await store.deleteStatus(undefined, statusId, {
+          ...(options.moveCardsTo !== undefined ? { moveCardsTo: options.moveCardsTo } : {}),
+        });
+        if (options.json) {
+          out.json("status-list", { configured: true, statuses, moved });
+          return;
+        }
+        printStatuses(out, statuses);
+        if (moved > 0) {
+          out.line(`Moved ${moved} card(s) to ${options.moveCardsTo}.`);
+        }
+      });
+    });
+
+  program
+    .command("migrate")
+    .description(
+      "migrate this repository's .taskfold/ to the status model (fixed categories + per-project statuses): " +
+        "writes the project's `statuses` into config.yml and rewrites legacy ready / scheduled / blocked cards. " +
+        "Safe to rerun; backs up first",
+    )
+    .option("--dry-run", "only print what would change; write nothing")
+    .option("--json", "print one JSON object (kind: migration)")
+    .addHelpText(
+      "after",
+      helpText({
+        reads: "all cards under .taskfold/cards/ and the statuses in .taskfold/config.yml",
+        writes:
+          "<repo>/.taskfold/config.yml (statuses, format_version 4) and the cards that still carry a legacy\n" +
+          "          status. A copy of cards/, milestones/ and config.yml goes to .taskfold/.runtime/backup-<time>/\n" +
+          "          first. Older Taskfold versions open a migrated project read-only.",
+        examples: ["taskfold migrate --dry-run", "taskfold migrate", "taskfold migrate --json"],
+      }),
+    )
+    .action(async (options: JsonFlag & { dryRun?: boolean }) => {
+      await withProject(run, async (store) => {
+        const report = await store.migrateStatusModel(undefined, { dryRun: options.dryRun === true });
+        if (options.json) {
+          out.json("migration", report as unknown as Record<string, unknown>);
+          return;
+        }
+        const counts = Object.entries(report.usage)
+          .map(([status, count]) => `${status} ${count}`)
+          .join(", ");
+        out.line(`${report.total} cards: ${counts || "none"}`);
+        out.line(`Statuses: ${report.statuses.map((status) => `${status.id} (${status.category})`).join(", ")}`);
+        if (report.rewrites.length === 0 && !report.dryRun && !report.changed) {
+          out.line("Already migrated; nothing to change.");
+          return;
+        }
+        for (const rewrite of report.rewrites) {
+          out.line(`  ${report.dryRun ? "would rewrite" : "rewrote"} ${rewrite.cardId}: ${rewrite.from} -> ${rewrite.to}`);
+        }
+        if (report.dryRun) {
+          out.line("Dry run: nothing was written.");
+          return;
+        }
+        if (report.backupDir) {
+          out.line(`Backup: ${report.backupDir}`);
+        }
+        if (report.conflicts.length > 0) {
+          out.line(`${report.conflicts.length} cards changed during the migration; run \`taskfold migrate\` again.`);
+        }
+      });
     });
 
   program

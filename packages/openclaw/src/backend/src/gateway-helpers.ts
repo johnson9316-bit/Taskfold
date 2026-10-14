@@ -1,4 +1,4 @@
-import { TASKFOLD_STATUSES, type TaskfoldCard } from "@taskfold/core/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 // Taskfold plugin module implements shared gateway request helpers.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
@@ -86,7 +86,12 @@ export async function listTaskfoldCards(
   redactCard: (card: TaskfoldCard) => TaskfoldCard,
 ) {
   const [cards, { boards }] = await Promise.all([store.list({ boardId }), store.listBoards()]);
-  return { cards: cards.map(redactCard), boards, statuses: TASKFOLD_STATUSES };
+  return {
+    cards: cards.map(redactCard),
+    boards,
+    // 该项目的状态定义（按看板列顺序）；查全部看板时给默认项目的。
+    statuses: await store.listStatuses(typeof boardId === "string" ? boardId : undefined),
+  };
 }
 
 export function resolveGatewayTaskfoldWorkspaceAccess(params: {

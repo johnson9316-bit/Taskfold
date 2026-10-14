@@ -120,7 +120,11 @@ describe("TaskfoldStore 的状态方法", () => {
   it("没配置时用过渡默认集；新卡按注册表的默认状态落点", async () => {
     const { store } = setup();
     const statuses = await store.listStatuses("demo");
-    expect(statuses.map((status) => status.id)).toContain("blocked");
+    // 界面用的列表：没有卡在用 triage / backlog 就不列出来（与迁移后一致）。
+    expect(statuses.map((status) => status.id)).toEqual(["todo", "running", "review", "done", "cancelled"]);
+    // 但引擎仍接受旧的 triage / backlog 作为输入。
+    const registry = await store.statusRegistryFor("demo");
+    expect(registry.has("triage") && registry.has("backlog")).toBe(true);
 
     const card = await store.create({ title: "A", boardId: "demo" });
     expect(card.status).toBe("todo");

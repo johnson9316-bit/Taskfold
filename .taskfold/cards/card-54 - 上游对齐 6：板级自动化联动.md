@@ -1,7 +1,7 @@
 ---
 id: CARD-54
 title: 上游对齐 6：板级自动化联动
-status: blocked
+status: running
 assignee: []
 created_date: '2026-10-08 09:34'
 updated_date: '2026-10-08 10:16'
@@ -29,6 +29,9 @@ ordinal: 24000
   "metadata": {
     "automation": {
       "boardId": "flowboard"
+    },
+    "blocked": {
+      "at": 1791454590518
     }
   }
 }

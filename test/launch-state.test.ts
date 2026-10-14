@@ -15,6 +15,7 @@ import { createTaskfoldFileStores } from "@taskfold/core/file-store.js";
 import { normalizeAutomation } from "@taskfold/core/store-normalizers.js";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
+import { phaseOf } from "./helpers/phase.js";
 
 const roots: string[] = [];
 
@@ -320,7 +321,7 @@ describe("Taskfold launch state", () => {
       // `running` 时才把失败推成 `blocked`（需求/8.4「Run 与 Card 状态分离」
       // 映射表：该行前提是 dispatcher 的 claim() 已把状态推成 running 的调度路径），
       // 所以这里保持 `ready` 不变。
-      expect(failedCard?.status).toBe("ready");
+      expect(phaseOf(failedCard)).toBe("ready");
       expect(failedCard?.sessionKey).toBeUndefined();
       expect(failedCard?.runId).toBeUndefined();
       expect(failedCard?.execution).toBeUndefined();

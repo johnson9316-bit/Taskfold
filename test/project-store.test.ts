@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { TaskfoldStore } from "../packages/openclaw/src/backend/src/store.js";
 import { keyedStore } from "./helpers/memory-keyed-store.js";
+import { phaseOf } from "./helpers/phase.js";
 import { defaultTaskfoldBoardView } from "../packages/core/src/store-normalizers.js";
 
 function createStore() {
@@ -242,10 +243,11 @@ describe("Taskfold M2 project store", () => {
         expect.objectContaining({ type: "contained_by", targetCardId: requirement.id }),
       ]),
     );
-    await expect(store.move(task.id, "ready", undefined)).resolves.toMatchObject({
-      id: task.id,
-      status: "ready",
-    });
+    const readied = await store.move(task.id, "ready", undefined);
+    expect(readied.id).toBe(task.id);
+    // `ready` 不再是状态：旧值被翻译成"待办 + 派发标记"。
+    expect(readied.status).toBe("todo");
+    expect(phaseOf(readied)).toBe("ready");
     await expect(
       store.create({
         boardId: "alpha",

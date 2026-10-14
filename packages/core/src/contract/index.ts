@@ -59,6 +59,10 @@ export const TASKFOLD_EVENT_KINDS = [
   "archived",
   "unarchived",
   "stale",
+  "blocked",
+  "unblocked",
+  "queued",
+  "unqueued",
 ] as const;
 export const TASKFOLD_ATTEMPT_STATUSES = [
   "running",
@@ -532,6 +536,15 @@ export type TaskfoldNotificationSubscription = {
   updatedAt: number;
 };
 
+/**
+ * 阻塞标记（需求/22-状态模型）：run 失败 / 超时 / 重试耗尽时由系统设置，也可以人工设置；
+ * 卡片留在原来的状态列里，不再有 `blocked` 状态。
+ */
+export type TaskfoldBlockedState = {
+  at: number;
+  reason?: string;
+};
+
 export type TaskfoldMetadata = {
   attempts?: TaskfoldRunAttempt[];
   comments?: TaskfoldComment[];
@@ -550,6 +563,13 @@ export type TaskfoldMetadata = {
   stale?: TaskfoldStaleState;
   lifecycleStatusSourceUpdatedAt?: number;
   failureCount?: number;
+  /** 阻塞标记；没有表示未阻塞。 */
+  blocked?: TaskfoldBlockedState;
+  /**
+   * 派发标记（原 `ready` 状态）：调度器只拾取带此标记的未开始卡。`promote()`（人工批准给 agent
+   * 执行）与"所有父卡已完成"都会设置它；卡片开始执行时清除。
+   */
+  dispatchReady?: boolean;
 };
 
 export type TaskfoldCard = {
@@ -589,6 +609,10 @@ export type TaskfoldProjectView = {
   board: TaskfoldBoardMetadata;
   milestones: TaskfoldMilestone[];
   cards: TaskfoldCard[];
+  /** 该项目的状态定义（按看板列顺序）；看板的列与状态下拉都来自它。 */
+  statuses: TaskfoldStatusDefinition[];
+  /** 项目是否有自己保存的状态集；false 表示在用"未配置"默认集，界面据此提示迁移。 */
+  statusesConfigured: boolean;
 };
 
 export type TaskfoldBoardViewSettings = {

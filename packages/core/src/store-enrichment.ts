@@ -7,9 +7,11 @@ import type {
 } from "./contract/index.js";
 import type { PersistedTaskfoldAttachment } from "./persistence-types.js";
 import { taskfoldCardImageRef, type TaskfoldCardImageStore } from "./file-store-card-images.js";
+import { phasePatch } from "./card-phase.js";
 import {
   assertCanMutateClaimedCard,
   capText,
+  cardBoardId,
   cardRunId,
   cardSessionKey,
   closeRunningAttempts,
@@ -342,11 +344,16 @@ export class TaskfoldEnrichmentStore extends TaskfoldCoreStore {
           : {}),
         ...(runId || cardRunId(card) ? { runId: runId ?? cardRunId(card) } : {}),
       };
+      const registry = await this.statusRegistryFor(cardBoardId(card));
+      const blockedPatch = registry.isTerminal(card.status)
+        ? undefined
+        : phasePatch(card, "blocked", registry, { reason: detail, now });
       return await this.updateCard(card.id, {
-        status: card.status === "done" ? card.status : "blocked",
+        status: blockedPatch?.status ?? card.status,
         ...(execution ? { execution } : {}),
         metadata: {
           ...card.metadata,
+          ...(blockedPatch?.flags ?? {}),
           workerLogs: [...(card.metadata?.workerLogs ?? []), log].slice(-MAX_CARD_WORKER_LOGS),
           workerProtocol: {
             state: "violated",

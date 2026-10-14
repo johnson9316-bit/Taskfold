@@ -331,6 +331,10 @@ function readFormatVersion(configPath) {
   const unquoted = raw.replace(/^(["'])(.*)\1$/, "$2");
   return /^\d+$/.test(unquoted) ? Number(unquoted) : raw;
 }
+function taskfoldFormatVersionAtLeast(configPath, target) {
+  const version = readFormatVersion(configPath);
+  return typeof version === "number" && version >= target;
+}
 function unsupportedFormatVersion(configPath) {
   const version = readFormatVersion(configPath);
   if (version === void 0 || typeof version === "number" && version <= TASKFOLD_FORMAT_VERSION) {
@@ -445,14 +449,14 @@ var require_polyfills = __commonJS({
       fs16.fstatSync = statFixSync(fs16.fstatSync);
       fs16.lstatSync = statFixSync(fs16.lstatSync);
       if (fs16.chmod && !fs16.lchmod) {
-        fs16.lchmod = function(path22, mode, cb) {
+        fs16.lchmod = function(path23, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs16.lchmodSync = function() {
         };
       }
       if (fs16.chown && !fs16.lchown) {
-        fs16.lchown = function(path22, uid, gid, cb) {
+        fs16.lchown = function(path23, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs16.lchownSync = function() {
@@ -519,9 +523,9 @@ var require_polyfills = __commonJS({
         };
       })(fs16.readSync);
       function patchLchmod(fs17) {
-        fs17.lchmod = function(path22, mode, callback) {
+        fs17.lchmod = function(path23, mode, callback) {
           fs17.open(
-            path22,
+            path23,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -537,8 +541,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs17.lchmodSync = function(path22, mode) {
-          var fd = fs17.openSync(path22, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs17.lchmodSync = function(path23, mode) {
+          var fd = fs17.openSync(path23, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -559,8 +563,8 @@ var require_polyfills = __commonJS({
       }
       function patchLutimes(fs17) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs17.futimes) {
-          fs17.lutimes = function(path22, at, mt, cb) {
-            fs17.open(path22, constants.O_SYMLINK, function(er, fd) {
+          fs17.lutimes = function(path23, at, mt, cb) {
+            fs17.open(path23, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -572,8 +576,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs17.lutimesSync = function(path22, at, mt) {
-            var fd = fs17.openSync(path22, constants.O_SYMLINK);
+          fs17.lutimesSync = function(path23, at, mt) {
+            var fd = fs17.openSync(path23, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -691,11 +695,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path22, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path22, options);
+      function ReadStream(path23, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path23, options);
         Stream.call(this);
         var self = this;
-        this.path = path22;
+        this.path = path23;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -740,10 +744,10 @@ var require_legacy_streams = __commonJS({
           self._read();
         });
       }
-      function WriteStream(path22, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path22, options);
+      function WriteStream(path23, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path23, options);
         Stream.call(this);
-        this.path = path22;
+        this.path = path23;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -886,14 +890,14 @@ var require_graceful_fs = __commonJS({
       fs17.createWriteStream = createWriteStream;
       var fs$readFile = fs17.readFile;
       fs17.readFile = readFile;
-      function readFile(path22, options, cb) {
+      function readFile(path23, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path22, options, cb);
-        function go$readFile(path23, options2, cb2, startTime) {
-          return fs$readFile(path23, options2, function(err) {
+        return go$readFile(path23, options, cb);
+        function go$readFile(path24, options2, cb2, startTime) {
+          return fs$readFile(path24, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path23, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path24, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -903,14 +907,14 @@ var require_graceful_fs = __commonJS({
       }
       var fs$writeFile = fs17.writeFile;
       fs17.writeFile = writeFile;
-      function writeFile(path22, data, options, cb) {
+      function writeFile(path23, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path22, data, options, cb);
-        function go$writeFile(path23, data2, options2, cb2, startTime) {
-          return fs$writeFile(path23, data2, options2, function(err) {
+        return go$writeFile(path23, data, options, cb);
+        function go$writeFile(path24, data2, options2, cb2, startTime) {
+          return fs$writeFile(path24, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path23, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path24, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -921,14 +925,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs17.appendFile;
       if (fs$appendFile)
         fs17.appendFile = appendFile;
-      function appendFile(path22, data, options, cb) {
+      function appendFile(path23, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path22, data, options, cb);
-        function go$appendFile(path23, data2, options2, cb2, startTime) {
-          return fs$appendFile(path23, data2, options2, function(err) {
+        return go$appendFile(path23, data, options, cb);
+        function go$appendFile(path24, data2, options2, cb2, startTime) {
+          return fs$appendFile(path24, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path23, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path24, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -959,31 +963,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs17.readdir;
       fs17.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path22, options, cb) {
+      function readdir(path23, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path23, options2, cb2, startTime) {
-          return fs$readdir(path23, fs$readdirCallback(
-            path23,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path24, options2, cb2, startTime) {
+          return fs$readdir(path24, fs$readdirCallback(
+            path24,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path23, options2, cb2, startTime) {
-          return fs$readdir(path23, options2, fs$readdirCallback(
-            path23,
+        } : function go$readdir2(path24, options2, cb2, startTime) {
+          return fs$readdir(path24, options2, fs$readdirCallback(
+            path24,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path22, options, cb);
-        function fs$readdirCallback(path23, options2, cb2, startTime) {
+        return go$readdir(path23, options, cb);
+        function fs$readdirCallback(path24, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path23, options2, cb2],
+                [path24, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -1054,7 +1058,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path22, options) {
+      function ReadStream(path23, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -1074,7 +1078,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path22, options) {
+      function WriteStream(path23, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -1092,22 +1096,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path22, options) {
-        return new fs17.ReadStream(path22, options);
+      function createReadStream(path23, options) {
+        return new fs17.ReadStream(path23, options);
       }
-      function createWriteStream(path22, options) {
-        return new fs17.WriteStream(path22, options);
+      function createWriteStream(path23, options) {
+        return new fs17.WriteStream(path23, options);
       }
       var fs$open = fs17.open;
       fs17.open = open;
-      function open(path22, flags, mode, cb) {
+      function open(path23, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path22, flags, mode, cb);
-        function go$open(path23, flags2, mode2, cb2, startTime) {
-          return fs$open(path23, flags2, mode2, function(err, fd) {
+        return go$open(path23, flags, mode, cb);
+        function go$open(path24, flags2, mode2, cb2, startTime) {
+          return fs$open(path24, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path23, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path24, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -1636,7 +1640,7 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "../../node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path22 = __require("path");
+    var path23 = __require("path");
     var fs16 = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
@@ -1647,7 +1651,7 @@ var require_lockfile = __commonJS({
     }
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path22.resolve(file));
+        return callback(null, path23.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -2586,21 +2590,10 @@ var init_file_store_card_runtime = __esm({
 function isValidTaskfoldBoardId(value) {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
-var TASKFOLD_STATUSES, TASKFOLD_STATUS_CATEGORIES, TASKFOLD_STATUS_ROLES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
+var TASKFOLD_STATUS_CATEGORIES, TASKFOLD_STATUS_ROLES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
 var init_contract = __esm({
   "../core/src/contract/index.ts"() {
     "use strict";
-    TASKFOLD_STATUSES = [
-      "triage",
-      "backlog",
-      "todo",
-      "scheduled",
-      "ready",
-      "running",
-      "review",
-      "blocked",
-      "done"
-    ];
     TASKFOLD_STATUS_CATEGORIES = ["unstarted", "started", "completed", "cancelled"];
     TASKFOLD_STATUS_ROLES = ["review", "intake"];
     TASKFOLD_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -2637,7 +2630,11 @@ var init_contract = __esm({
       "protocol_violation",
       "archived",
       "unarchived",
-      "stale"
+      "stale",
+      "blocked",
+      "unblocked",
+      "queued",
+      "unqueued"
     ];
     TASKFOLD_ATTEMPT_STATUSES = [
       "running",
@@ -3689,6 +3686,16 @@ function taskfoldCardImageRef(cardId, name) {
   assertTaskfoldCardImageName(name);
   return `../attachments/${cardId}/${name}`;
 }
+function isTaskfoldDocumentImageRef(ref) {
+  if (!ref || ref.length > 1024 || /[\\?#\0]/.test(ref) || ref.startsWith("/") || ref.startsWith("//")) {
+    return false;
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(ref)) {
+    return false;
+  }
+  const dot = ref.lastIndexOf(".");
+  return dot > 0 && taskfoldCardImageMimeType(ref.slice(dot + 1)) !== void 0;
+}
 var TASKFOLD_CARD_IMAGE_MIME_BY_EXTENSION, MIME_TO_EXTENSION, SEGMENT, TASKFOLD_CARD_ID_PATTERN, TASKFOLD_CARD_IMAGE_NAME_PATTERN, IMAGE_REF_PATTERN;
 var init_card_image_ref = __esm({
   "../core/src/card-image-ref.ts"() {
@@ -4534,6 +4541,9 @@ var init_file_store_boards = __esm({
 });
 
 // ../core/src/status-registry.ts
+function isRetiredTaskfoldStatusId(value) {
+  return RETIRED_TASKFOLD_STATUS_IDS.includes(value);
+}
 function validateStatusDefinitions(input) {
   if (!Array.isArray(input) || input.length === 0) {
     throw new TaskfoldStatusConfigError("must be a non-empty list.");
@@ -4623,7 +4633,7 @@ function validateStatusDefinitions(input) {
 function createStatusRegistry(definitions) {
   const list = Object.freeze([...definitions]);
   const byId = new Map(list.map((definition) => [definition.id, definition]));
-  const category = (id) => byId.get(id)?.category;
+  const category = (id) => byId.get(id)?.category ?? (isRetiredTaskfoldStatusId(id) ? RETIRED_STATUS_CATEGORY[id] : void 0);
   const unstarted = list.filter((definition) => definition.category === "unstarted");
   const defaultStatus = (unstarted.find((definition) => definition.default) ?? unstarted.find((definition) => definition.role !== "intake") ?? unstarted[0])?.id;
   if (defaultStatus === void 0) {
@@ -4652,10 +4662,13 @@ function createStatusRegistry(definitions) {
     }
   };
 }
-function resolveStatusRegistry(configured) {
-  return createStatusRegistry(configured ?? LEGACY_TASKFOLD_STATUSES);
+function acceptsStatusInput(registry, value) {
+  return registry.has(value) || isRetiredTaskfoldStatusId(value);
 }
-var TASKFOLD_STATUS_ID_PATTERN, TASKFOLD_STATUS_NAME_MAX_LENGTH, TASKFOLD_STATUS_MAX_COUNT, DEFAULT_TASKFOLD_STATUSES, LEGACY_TASKFOLD_STATUSES, TaskfoldStatusConfigError, LEGACY_STATUS_REGISTRY;
+function resolveStatusRegistry(configured) {
+  return configured ? createStatusRegistry(configured) : UNCONFIGURED_STATUS_REGISTRY;
+}
+var TASKFOLD_STATUS_ID_PATTERN, TASKFOLD_STATUS_NAME_MAX_LENGTH, TASKFOLD_STATUS_MAX_COUNT, DEFAULT_TASKFOLD_STATUSES, LEGACY_TASKFOLD_STATUSES, RETIRED_TASKFOLD_STATUS_IDS, RETIRED_STATUS_CATEGORY, UNCONFIGURED_TASKFOLD_STATUSES, TaskfoldStatusConfigError, UNCONFIGURED_STATUS_REGISTRY;
 var init_status_registry = __esm({
   "../core/src/status-registry.ts"() {
     "use strict";
@@ -4681,18 +4694,36 @@ var init_status_registry = __esm({
       { id: "blocked", category: "started" },
       { id: "done", category: "completed" }
     ]);
+    RETIRED_TASKFOLD_STATUS_IDS = ["scheduled", "ready", "blocked"];
+    RETIRED_STATUS_CATEGORY = {
+      scheduled: "unstarted",
+      ready: "unstarted",
+      blocked: "started"
+    };
+    UNCONFIGURED_TASKFOLD_STATUSES = Object.freeze([
+      { id: "triage", category: "unstarted", role: "intake" },
+      { id: "backlog", category: "unstarted" },
+      { id: "todo", category: "unstarted", default: true },
+      { id: "running", category: "started" },
+      { id: "review", category: "started", role: "review" },
+      { id: "done", category: "completed" },
+      { id: "cancelled", category: "cancelled" }
+    ]);
     TaskfoldStatusConfigError = class extends Error {
       constructor(message) {
         super(`taskfold statuses: ${message}`);
         this.name = "TaskfoldStatusConfigError";
       }
     };
-    LEGACY_STATUS_REGISTRY = createStatusRegistry(LEGACY_TASKFOLD_STATUSES);
+    UNCONFIGURED_STATUS_REGISTRY = createStatusRegistry(
+      UNCONFIGURED_TASKFOLD_STATUSES
+    );
   }
 });
 
 // ../core/src/file-store-statuses.ts
 import fs10 from "node:fs";
+import path15 from "node:path";
 function unquote(raw) {
   const value = raw.trim();
   if (value.startsWith('"')) {
@@ -4779,6 +4810,7 @@ function renderTaskfoldStatusesConfig(content, definitions) {
 }
 function createTaskfoldFileStatusConfigStore(options) {
   const { configPath, locksDir } = options;
+  const dataDir = path15.dirname(configPath);
   let cache;
   const stampOf = () => {
     try {
@@ -4809,10 +4841,61 @@ function createTaskfoldFileStatusConfigStore(options) {
       });
       cache = void 0;
       return validated;
+    },
+    async backup(label) {
+      const safeLabel = label.replace(/[^A-Za-z0-9._-]/g, "-");
+      const base = path15.join(dataDir, ".runtime", `backup-${safeLabel}`);
+      let target = base;
+      for (let attempt = 2; fs10.existsSync(target); attempt += 1) {
+        target = `${base}-${attempt}`;
+      }
+      fs10.mkdirSync(target, { recursive: true, mode: 448 });
+      for (const entry of BACKUP_ENTRIES) {
+        const from = path15.join(dataDir, entry);
+        if (fs10.existsSync(from)) {
+          fs10.cpSync(from, path15.join(target, entry), { recursive: true, preserveTimestamps: true });
+        }
+      }
+      return target;
     }
   };
 }
-var STATUSES_KEY, TOP_LEVEL_KEY;
+function needsStatusModelFormat(value) {
+  const card = value?.card;
+  return Boolean(
+    card && (!LEGACY_STATUS_IDS.has(card.status) || card.metadata?.blocked || card.metadata?.dispatchReady)
+  );
+}
+function upgradeFormatForStatusModelWrites(options, store) {
+  const { configPath, locksDir } = options;
+  const ensure = async (value) => {
+    if (!needsStatusModelFormat(value) || taskfoldFormatVersionAtLeast(configPath, TASKFOLD_STATUS_MODEL_FORMAT_VERSION)) {
+      return;
+    }
+    assertTaskfoldFormatWritable(configPath);
+    await withTaskfoldGlobalLock(locksDir, (guard) => {
+      upgradeTaskfoldFormatVersion(configPath, guard.assertHeld, TASKFOLD_STATUS_MODEL_FORMAT_VERSION);
+    });
+  };
+  return {
+    ...store,
+    register: async (key, value) => {
+      await ensure(value);
+      await store.register(key, value);
+    },
+    compareAndSwap: async (key, expectedRevision, value, onReject) => {
+      await ensure(value);
+      return await store.compareAndSwap(key, expectedRevision, value, onReject);
+    },
+    ...store.registerIfAbsent ? {
+      registerIfAbsent: async (key, value) => {
+        await ensure(value);
+        return await store.registerIfAbsent(key, value);
+      }
+    } : {}
+  };
+}
+var STATUSES_KEY, TOP_LEVEL_KEY, BACKUP_ENTRIES, LEGACY_STATUS_IDS;
 var init_file_store_statuses = __esm({
   "../core/src/file-store-statuses.ts"() {
     "use strict";
@@ -4822,17 +4905,19 @@ var init_file_store_statuses = __esm({
     init_status_registry();
     STATUSES_KEY = /^statuses:/;
     TOP_LEVEL_KEY = /^[^\s#-][^:]*:/;
+    BACKUP_ENTRIES = ["cards", "milestones", "config.yml", path15.join(".runtime", "cards")];
+    LEGACY_STATUS_IDS = new Set(LEGACY_TASKFOLD_STATUSES.map((status) => status.id));
   }
 });
 
 // ../core/src/file-store.ts
-import path15 from "node:path";
+import path16 from "node:path";
 function createTaskfoldFileStores(options) {
   const layout = resolveTaskfoldFileStoreLayout({
     dataDir: resolveTaskfoldMainCheckoutPath(options.dataDir),
     ...options.pluginDir === void 0 ? {} : { pluginDir: options.pluginDir }
   });
-  const projectRoot = path15.basename(layout.dataDir) === ".taskfold" ? path15.dirname(layout.dataDir) : layout.dataDir;
+  const projectRoot = path16.basename(layout.dataDir) === ".taskfold" ? path16.dirname(layout.dataDir) : layout.dataDir;
   const canWrite = () => isTaskfoldFormatWritable(layout.configPath);
   const assertWritable = () => assertTaskfoldFormatWritable(layout.configPath);
   const writableAtOpen = canWrite();
@@ -4850,14 +4935,20 @@ function createTaskfoldFileStores(options) {
     codec: cardCodec,
     canWrite
   });
-  const cards = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileCardStore({
-    cardsDir: layout.cardsDir,
-    archiveCardsDir: layout.archiveCardsDir,
-    attachmentsDir: layout.attachmentsDir,
-    codec: cardCodec,
-    locksDir: layout.locksDir,
-    runtimeCardsDir: layout.runtimeCardsDir
-  }));
+  const cards = rejectWritesUnlessFormatWritable(
+    assertWritable,
+    upgradeFormatForStatusModelWrites(
+      { configPath: layout.configPath, locksDir: layout.locksDir },
+      createTaskfoldFileCardStore({
+        cardsDir: layout.cardsDir,
+        archiveCardsDir: layout.archiveCardsDir,
+        attachmentsDir: layout.attachmentsDir,
+        codec: cardCodec,
+        locksDir: layout.locksDir,
+        runtimeCardsDir: layout.runtimeCardsDir
+      })
+    )
+  );
   const boards = layout.projectsJsonPath === void 0 ? createProcessLocalStore() : createTaskfoldFileBoardStore({ projectsJsonPath: layout.projectsJsonPath });
   const milestones = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileMilestoneStore({
     milestonesDir: layout.milestonesDir,
@@ -4885,8 +4976,10 @@ function createTaskfoldFileStores(options) {
     locksDir: layout.locksDir
   });
   const statusConfig = {
+    scope: "project",
     read: async () => statusConfigStore.read(),
-    write: async (_boardId, definitions) => await statusConfigStore.write(definitions)
+    write: async (_boardId, definitions) => await statusConfigStore.write(definitions),
+    backup: async (_boardId, label) => await statusConfigStore.backup(label)
   };
   const changeEpoch = ensureFileChangeEpoch(layout.changesLogPath, layout.locksDir, writableAtOpen);
   const changeSource = createTaskfoldFileChangeSource({
@@ -5008,6 +5101,1806 @@ var init_card_redaction = __esm({
   }
 });
 
+// ../core/src/card-phase.ts
+function cardPhase(card, registry, now = Date.now()) {
+  const status = card.status;
+  if (registry.isCompleted(status)) return "done";
+  if (registry.isCancelled(status)) return "cancelled";
+  if (status === "blocked" || card.metadata?.blocked) return "blocked";
+  if (status === "scheduled") return "scheduled";
+  if (status === "ready") return "ready";
+  if (registry.isStarted(status)) {
+    return registry.get(status)?.role === "review" ? "review" : "running";
+  }
+  const scheduledAt = card.metadata?.automation?.scheduledAt;
+  if (scheduledAt && scheduledAt > now) return "scheduled";
+  if (card.metadata?.dispatchReady) return "ready";
+  if (registry.get(status)?.role === "intake") return "triage";
+  return "todo";
+}
+function isBlockedCard(card) {
+  return card.status === "blocked" || Boolean(card.metadata?.blocked);
+}
+function isDispatchReadyCard(card) {
+  return card.status === "ready" || card.metadata?.dispatchReady === true;
+}
+function isDependencyPromotableCard(card, registry) {
+  return registry.isUnstarted(card.status) && !isBlockedCard(card);
+}
+function isStartablePhase(phase) {
+  return phase === "todo" || phase === "ready";
+}
+function activeStatusOf(registry) {
+  return registry.list.find((status) => status.category === "started" && status.role !== "review")?.id ?? registry.firstOf("started");
+}
+function phasePatch(card, phase, registry, options = {}) {
+  const now = options.now ?? Date.now();
+  const keepUnstarted = () => registry.has(card.status) && registry.isUnstarted(card.status) ? card.status : registry.defaultStatus;
+  const need = (status, what) => {
+    if (status === void 0) {
+      throw new Error(`this project has no status for "${what}"; add one in the project's statuses.`);
+    }
+    return status;
+  };
+  const cleared = { blocked: void 0, dispatchReady: void 0 };
+  switch (phase) {
+    case "triage":
+      return { status: registry.withRole("intake") ?? registry.defaultStatus, flags: cleared };
+    case "todo":
+    case "scheduled":
+      return { status: keepUnstarted(), flags: cleared };
+    case "ready":
+      return { status: keepUnstarted(), flags: { ...cleared, dispatchReady: true } };
+    case "running":
+      return { status: need(activeStatusOf(registry), "running"), flags: cleared };
+    case "review":
+      return {
+        status: need(registry.withRole("review") ?? activeStatusOf(registry), "review"),
+        flags: cleared
+      };
+    case "blocked": {
+      let status = card.status;
+      if (isRetiredTaskfoldStatusId(status) || !registry.has(status)) {
+        status = registry.isStarted(card.status) ? need(activeStatusOf(registry), "running") : registry.defaultStatus;
+      }
+      const reason = options.reason?.trim();
+      return {
+        status,
+        flags: { blocked: { at: now, ...reason ? { reason } : {} }, dispatchReady: void 0 }
+      };
+    }
+    case "done":
+      return { status: need(registry.firstOf("completed"), "done"), flags: cleared };
+    case "cancelled":
+      return { status: need(registry.firstOf("cancelled"), "cancelled"), flags: cleared };
+  }
+}
+var init_card_phase = __esm({
+  "../core/src/card-phase.ts"() {
+    "use strict";
+    init_status_registry();
+  }
+});
+
+// ../core/src/workspace-path.ts
+function isAbsoluteWorkspacePath(value) {
+  return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+}
+var init_workspace_path = __esm({
+  "../core/src/workspace-path.ts"() {
+    "use strict";
+  }
+});
+
+// ../core/src/store-normalizers.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
+function normalizeOptionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function normalizeBoardId(value, fallback) {
+  const raw = normalizeBoundedString(value, fallback, 80, "board id");
+  if (!raw) {
+    return void 0;
+  }
+  const boardId = raw.toLowerCase();
+  if (!isValidTaskfoldBoardId(boardId)) {
+    throw new Error("board id must match [a-z0-9][a-z0-9._-]{0,79}.");
+  }
+  return boardId;
+}
+function normalizeBoardIdRequired(value) {
+  return normalizeBoardId(value) ?? "default";
+}
+function normalizeBoardMetadata(input, fallback, now = Date.now()) {
+  const id = normalizeBoardId(input.id, fallback?.id) ?? "default";
+  const name = normalizeBoundedString(input.name, fallback?.name, 120, "board name");
+  const description = normalizeBoundedString(
+    input.description,
+    fallback?.description,
+    1e3,
+    "board description"
+  );
+  const icon = normalizeBoundedString(input.icon, fallback?.icon, 40, "board icon");
+  const color = normalizeBoundedString(input.color, fallback?.color, 40, "board color");
+  const position = Object.hasOwn(input, "position") ? normalizePosition(input.position, fallback?.position ?? 0) : fallback?.position;
+  const version = normalizeBoundedString(input.version, fallback?.version, 120, "project version");
+  const currentObjective = normalizeBoundedString(
+    input.currentObjective,
+    fallback?.currentObjective,
+    2e3,
+    "current objective"
+  );
+  const coreValue = normalizeBoundedString(input.coreValue, fallback?.coreValue, 2e3, "core value");
+  const sourceOfTruth = Object.hasOwn(input, "sourceOfTruth") ? normalizeExternalUrl(input.sourceOfTruth, fallback?.sourceOfTruth, "source of truth") : fallback?.sourceOfTruth;
+  const repositoryUrl = Object.hasOwn(input, "repositoryUrl") ? normalizeExternalUrl(input.repositoryUrl, fallback?.repositoryUrl, "repository URL") : fallback?.repositoryUrl;
+  const planningPath = normalizeBoundedString(
+    input.planningPath,
+    fallback?.planningPath,
+    2e3,
+    "planning path"
+  );
+  const homepageUrl = Object.hasOwn(input, "homepageUrl") ? normalizeExternalUrl(input.homepageUrl, fallback?.homepageUrl, "homepage URL") : fallback?.homepageUrl;
+  const defaultWorkspace = Object.hasOwn(input, "defaultWorkspace") ? normalizeWorkspace(input.defaultWorkspace, fallback?.defaultWorkspace) : fallback?.defaultWorkspace;
+  const orchestration = Object.hasOwn(input, "orchestration") ? normalizeOrchestration(input.orchestration, fallback?.orchestration) : fallback?.orchestration;
+  const boardView = Object.hasOwn(input, "boardView") ? normalizeBoardView(input.boardView, fallback?.boardView) : fallback?.boardView;
+  const archivedAt = Object.hasOwn(input, "archived") ? input.archived === false ? void 0 : now : fallback?.archivedAt;
+  return {
+    id,
+    ...name ? { name } : {},
+    ...description ? { description } : {},
+    ...icon ? { icon } : {},
+    ...color ? { color } : {},
+    ...position !== void 0 ? { position } : {},
+    ...version ? { version } : {},
+    ...currentObjective ? { currentObjective } : {},
+    ...coreValue ? { coreValue } : {},
+    ...sourceOfTruth ? { sourceOfTruth } : {},
+    ...repositoryUrl ? { repositoryUrl } : {},
+    ...planningPath ? { planningPath } : {},
+    ...homepageUrl ? { homepageUrl } : {},
+    ...defaultWorkspace ? { defaultWorkspace } : {},
+    ...orchestration ? { orchestration } : {},
+    ...boardView ? { boardView } : {},
+    createdAt: fallback?.createdAt ?? now,
+    updatedAt: now,
+    ...archivedAt ? { archivedAt } : {}
+  };
+}
+function defaultTaskfoldBoardView() {
+  return { groupBy: "status", sortBy: "priority", sortDirection: "asc" };
+}
+function normalizeBoardView(value, fallback) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (value === void 0) {
+      return fallback ?? defaultTaskfoldBoardView();
+    }
+    throw new Error("board view must be an object.");
+  }
+  const record = value;
+  const groupBy = typeof record.groupBy === "string" && TASKFOLD_BOARD_GROUP_BY.includes(record.groupBy) ? record.groupBy : fallback?.groupBy ?? "status";
+  const defaultSortBy = groupBy === "milestone" ? "manual" : "priority";
+  const sortBy = typeof record.sortBy === "string" && TASKFOLD_BOARD_SORT_BY.includes(record.sortBy) ? record.sortBy : fallback?.groupBy === groupBy ? fallback.sortBy : defaultSortBy;
+  if (groupBy !== "milestone" && sortBy === "manual") {
+    throw new Error("manual sorting is available only when grouping by milestone.");
+  }
+  const sortDirection = typeof record.sortDirection === "string" && TASKFOLD_BOARD_SORT_DIRECTIONS.includes(record.sortDirection) ? record.sortDirection : fallback?.sortDirection ?? "asc";
+  return { groupBy, sortBy, sortDirection };
+}
+function normalizeOrchestration(value, fallback) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const record = value;
+  const autoDecompose = typeof record.autoDecompose === "boolean" ? record.autoDecompose : fallback?.autoDecompose;
+  const autoDecomposePerDispatch = typeof record.autoDecomposePerDispatch === "number" && Number.isFinite(record.autoDecomposePerDispatch) ? Math.max(1, Math.min(20, Math.trunc(record.autoDecomposePerDispatch))) : fallback?.autoDecomposePerDispatch;
+  const defaultAssignee = normalizeBoundedString(
+    record.defaultAssignee,
+    fallback?.defaultAssignee,
+    120,
+    "default assignee"
+  );
+  const orchestratorProfile = normalizeBoundedString(
+    record.orchestratorProfile,
+    fallback?.orchestratorProfile,
+    120,
+    "orchestrator profile"
+  );
+  const next = {
+    ...autoDecompose !== void 0 ? { autoDecompose } : {},
+    ...autoDecomposePerDispatch ? { autoDecomposePerDispatch } : {},
+    ...defaultAssignee ? { defaultAssignee } : {},
+    ...orchestratorProfile ? { orchestratorProfile } : {}
+  };
+  return Object.keys(next).length ? next : void 0;
+}
+function normalizeNotificationKinds(value) {
+  if (value == null) {
+    return void 0;
+  }
+  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : [];
+  const kinds = [];
+  for (const entry of entries) {
+    const kind = typeof entry === "string" ? entry.trim() : "";
+    if (!TASKFOLD_NOTIFICATION_KINDS.includes(kind)) {
+      throw new Error(
+        `notification kind must be one of: ${TASKFOLD_NOTIFICATION_KINDS.join(", ")}.`
+      );
+    }
+    const notificationKind = kind;
+    if (!kinds.includes(notificationKind)) {
+      kinds.push(notificationKind);
+    }
+  }
+  return kinds.length ? kinds : void 0;
+}
+function normalizeNotificationSubscription(input, fallback, now = Date.now()) {
+  const boardId = normalizeBoardId(input.boardId, fallback?.boardId) ?? "default";
+  const cardId = normalizeBoundedString(input.cardId, fallback?.cardId, 120, "card id");
+  const sessionKey = normalizeBoundedString(
+    input.sessionKey,
+    fallback?.sessionKey,
+    240,
+    "session key"
+  );
+  const runId = normalizeBoundedString(input.runId, fallback?.runId, 160, "run id");
+  const target = normalizeBoundedString(input.target, fallback?.target, 240, "notification target");
+  if (!cardId && !sessionKey && !runId && !target) {
+    throw new Error("notification subscription needs cardId, sessionKey, runId, or target.");
+  }
+  const eventKinds = normalizeNotificationKinds(input.eventKinds);
+  const preservedFields = {};
+  if (fallback) {
+    if (fallback.lastEventAt) {
+      preservedFields.lastEventAt = fallback.lastEventAt;
+    }
+    if (fallback.lastEventId) {
+      preservedFields.lastEventId = fallback.lastEventId;
+    }
+    if (fallback.lastEventSequence) {
+      preservedFields.lastEventSequence = fallback.lastEventSequence;
+    }
+    if (fallback.deliveredEventIds?.length) {
+      preservedFields.deliveredEventIds = fallback.deliveredEventIds;
+    }
+  }
+  return {
+    id: fallback?.id ?? randomUUID3(),
+    boardId,
+    ...cardId ? { cardId } : {},
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {},
+    ...target ? { target } : {},
+    ...eventKinds ? { eventKinds } : {},
+    ...preservedFields,
+    createdAt: fallback?.createdAt ?? now,
+    updatedAt: now
+  };
+}
+function normalizeTitle(value) {
+  const title = normalizeOptionalString(value);
+  if (!title) {
+    throw new Error("title is required.");
+  }
+  if (title.length > 180) {
+    throw new Error("title must be 180 characters or fewer.");
+  }
+  return title;
+}
+function normalizeNotes(value) {
+  const notes = normalizeOptionalString(value);
+  if (!notes) {
+    return void 0;
+  }
+  if (notes.length > 4e3) {
+    throw new Error("notes must be 4000 characters or fewer.");
+  }
+  return notes;
+}
+function normalizeOptionalBoundedString(value, maxLength, fieldName) {
+  const normalized2 = normalizeOptionalString(value);
+  if (!normalized2) {
+    return void 0;
+  }
+  if (normalized2.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+  return normalized2;
+}
+function normalizeDeliveryState(value, allowed, fieldName) {
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  if (!allowed.includes(value)) {
+    throw new Error(`${fieldName} must be one of: ${allowed.join(", ")}.`);
+  }
+  return value;
+}
+function normalizeDelivery(value, fallback, now = Date.now()) {
+  if (value === null) {
+    return void 0;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const record = value;
+  const readText = (key, maxLength, fieldName) => Object.hasOwn(record, key) ? normalizeOptionalBoundedString(record[key], maxLength, fieldName) : fallback?.[key];
+  const implementationState = Object.hasOwn(record, "implementationState") ? normalizeDeliveryState(
+    record.implementationState,
+    TASKFOLD_DELIVERY_IMPLEMENTATION_STATES,
+    "implementation state"
+  ) : fallback?.implementationState;
+  const verificationState = Object.hasOwn(record, "verificationState") ? normalizeDeliveryState(
+    record.verificationState,
+    TASKFOLD_DELIVERY_VERIFICATION_STATES,
+    "verification state"
+  ) : fallback?.verificationState;
+  const releaseState = Object.hasOwn(record, "releaseState") ? normalizeDeliveryState(
+    record.releaseState,
+    TASKFOLD_DELIVERY_RELEASE_STATES,
+    "release state"
+  ) : fallback?.releaseState;
+  const delivery = {
+    ...readText("objective", 2e3, "delivery objective") ? { objective: readText("objective", 2e3, "delivery objective") } : {},
+    ...readText("deliverySummary", 4e3, "delivery summary") ? { deliverySummary: readText("deliverySummary", 4e3, "delivery summary") } : {},
+    ...readText("openItems", 4e3, "delivery open items") ? { openItems: readText("openItems", 4e3, "delivery open items") } : {},
+    ...implementationState ? { implementationState } : {},
+    ...verificationState ? { verificationState } : {},
+    ...releaseState ? { releaseState } : {}
+  };
+  return Object.keys(delivery).length ? { ...delivery, updatedAt: now } : void 0;
+}
+function normalizeBoundedString(value, fallback, maxLength, fieldName) {
+  const normalized2 = normalizeOptionalString(value);
+  if (!normalized2) {
+    return fallback;
+  }
+  if (normalized2.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+  return normalized2;
+}
+function normalizeExternalUrl(value, fallback, fieldName) {
+  const normalized2 = normalizeBoundedString(value, fallback, 2e3, fieldName);
+  if (!normalized2) {
+    return void 0;
+  }
+  let parsed;
+  try {
+    parsed = new URL(normalized2);
+  } catch {
+    throw new Error(`${fieldName} must be a valid http or https URL.`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${fieldName} must be a valid http or https URL.`);
+  }
+  return parsed.toString();
+}
+function optionalStatusInput(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function normalizeStatus(value, fallback, registry = UNCONFIGURED_STATUS_REGISTRY) {
+  if (typeof value !== "string" || !value.trim()) {
+    return fallback;
+  }
+  if (registry.has(value)) {
+    return value;
+  }
+  throw new Error(`status must be one of: ${registry.ids.join(", ")}.`);
+}
+function normalizeCardKind(value, fallback = "task") {
+  if (value === void 0 || value === null || value === "") {
+    return fallback;
+  }
+  if (typeof value === "string" && TASKFOLD_CARD_KINDS.includes(value)) {
+    return value;
+  }
+  throw new Error(`card kind must be one of: ${TASKFOLD_CARD_KINDS.join(", ")}.`);
+}
+function normalizePriority(value, fallback) {
+  if (typeof value !== "string" || !value.trim()) {
+    return fallback;
+  }
+  if (TASKFOLD_PRIORITIES.includes(value)) {
+    return value;
+  }
+  throw new Error(`priority must be one of: ${TASKFOLD_PRIORITIES.join(", ")}.`);
+}
+function normalizeLabels(value, fallback = []) {
+  if (value == null) {
+    return fallback;
+  }
+  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : void 0;
+  if (!entries) {
+    throw new Error("labels must be an array or comma-separated string.");
+  }
+  const labels = [];
+  for (const entry of entries) {
+    const label = normalizeOptionalString(entry);
+    if (!label || labels.includes(label)) {
+      continue;
+    }
+    if (label.length > 40) {
+      throw new Error("labels must be 40 characters or fewer.");
+    }
+    labels.push(label);
+    if (labels.length >= 12) {
+      break;
+    }
+  }
+  return labels;
+}
+function normalizeStringList(value, fieldName, maxLength = 80) {
+  if (value == null) {
+    return [];
+  }
+  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : void 0;
+  if (!entries) {
+    throw new Error(`${fieldName} must be an array or comma-separated string.`);
+  }
+  const values = [];
+  for (const entry of entries) {
+    if (Array.isArray(value) && typeof entry !== "string") {
+      throw new Error(`${fieldName} entries must be strings.`);
+    }
+    const normalized2 = normalizeBoundedString(entry, void 0, maxLength, fieldName);
+    if (normalized2 && !values.includes(normalized2)) {
+      values.push(normalized2);
+    }
+    if (values.length > 20) {
+      throw new Error(`${fieldName} supports at most 20 entries.`);
+    }
+  }
+  return values;
+}
+function normalizePosition(value, fallback) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+function normalizePositiveInteger(value, fieldName) {
+  if (value == null || value === "") {
+    return void 0;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${fieldName} must be a number.`);
+  }
+  return Math.max(1, Math.trunc(value));
+}
+function normalizeWorkspace(value, fallback) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const record = value;
+  const kind = record.kind === "scratch" || record.kind === "dir" || record.kind === "worktree" ? record.kind : fallback?.kind;
+  if (!kind) {
+    throw new Error("workspace kind must be scratch, dir, or worktree.");
+  }
+  const workspacePath = normalizeBoundedString(record.path, fallback?.path, 2e3, "workspace path");
+  if (kind === "dir" && (!workspacePath || !isAbsoluteWorkspacePath(workspacePath))) {
+    throw new Error("dir workspace path must be absolute.");
+  }
+  const branch = normalizeBoundedString(record.branch, fallback?.branch, 160, "workspace branch");
+  const sourcePath = normalizeBoundedString(
+    record.sourcePath,
+    fallback?.sourcePath,
+    2e3,
+    "workspace source path"
+  );
+  if (sourcePath && !isAbsoluteWorkspacePath(sourcePath)) {
+    throw new Error("workspace source path must be absolute.");
+  }
+  const sourceBranch = normalizeBoundedString(
+    record.sourceBranch,
+    fallback?.sourceBranch,
+    160,
+    "workspace source branch"
+  );
+  return {
+    kind,
+    ...workspacePath ? { path: workspacePath } : {},
+    ...branch ? { branch } : {},
+    ...kind === "worktree" && sourcePath ? { sourcePath } : {},
+    ...kind === "worktree" && sourceBranch ? { sourceBranch } : {}
+  };
+}
+function normalizeAutomation(value, fallback = {}, options = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return Object.keys(fallback).length ? fallback : void 0;
+  }
+  const record = value;
+  const tenant = normalizeBoundedString(record.tenant, fallback.tenant, 80, "tenant");
+  const boardId = Object.hasOwn(record, "boardId") ? normalizeBoardId(record.boardId, fallback.boardId) : fallback.boardId;
+  const createdByCardId = normalizeBoundedString(
+    record.createdByCardId,
+    fallback.createdByCardId,
+    120,
+    "created by card id"
+  );
+  const idempotencyKey = normalizeBoundedString(
+    record.idempotencyKey,
+    fallback.idempotencyKey,
+    160,
+    "idempotency key"
+  );
+  const summary = normalizeBoundedString(record.summary, fallback.summary, 2e3, "summary");
+  const skills = Object.hasOwn(record, "skills") ? normalizeStringList(record.skills, "skills") : fallback.skills;
+  const createdCardIds = Object.hasOwn(record, "createdCardIds") ? normalizeStringList(record.createdCardIds, "created card ids", 120) : fallback.createdCardIds;
+  const scheduledAt = Object.hasOwn(record, "scheduledAt") ? normalizeTimestamp(record.scheduledAt, 0) || void 0 : fallback.scheduledAt;
+  const maxRuntimeSeconds = Object.hasOwn(record, "maxRuntimeSeconds") ? normalizePositiveInteger(record.maxRuntimeSeconds, "max runtime seconds") : fallback.maxRuntimeSeconds;
+  const maxRetries = Object.hasOwn(record, "maxRetries") ? normalizePositiveInteger(record.maxRetries, "max retries") : fallback.maxRetries;
+  const dispatchCount = Object.hasOwn(record, "dispatchCount") ? normalizeTimestamp(record.dispatchCount, 0) || void 0 : fallback.dispatchCount;
+  const lastDispatchAt = Object.hasOwn(record, "lastDispatchAt") ? normalizeTimestamp(record.lastDispatchAt, 0) || void 0 : fallback.lastDispatchAt;
+  const workspace = Object.hasOwn(record, "workspace") ? normalizeWorkspace(record.workspace, fallback.workspace) : fallback.workspace;
+  const workspaceAccess = fallback.workspaceAccess;
+  const launch = normalizeLaunchState(
+    options.allowLaunchState && Object.hasOwn(record, "launch") ? record.launch : fallback.launch
+  );
+  const next = removeUndefinedAutomationFields({
+    ...tenant ? { tenant } : {},
+    ...boardId ? { boardId } : {},
+    ...createdByCardId ? { createdByCardId } : {},
+    ...idempotencyKey ? { idempotencyKey } : {},
+    ...skills?.length ? { skills } : {},
+    ...workspace ? { workspace } : {},
+    ...workspaceAccess ? { workspaceAccess } : {},
+    ...maxRuntimeSeconds ? { maxRuntimeSeconds } : {},
+    ...maxRetries ? { maxRetries } : {},
+    ...scheduledAt ? { scheduledAt } : {},
+    ...summary ? { summary } : {},
+    ...createdCardIds?.length ? { createdCardIds } : {},
+    ...dispatchCount ? { dispatchCount } : {},
+    ...lastDispatchAt ? { lastDispatchAt } : {},
+    ...launch ? { launch } : {}
+  });
+  return Object.keys(next).length ? next : void 0;
+}
+function normalizeLaunchTimestamp(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : void 0;
+}
+function normalizeLaunchString(value, maxLength) {
+  const normalized2 = normalizeOptionalString(value);
+  return normalized2 && normalized2.length <= maxLength ? normalized2 : void 0;
+}
+function normalizeLaunchState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const record = value;
+  const requestedSessionKey = normalizeLaunchString(record.requestedSessionKey, 240);
+  const provisionalRunId = normalizeLaunchString(record.provisionalRunId, 160);
+  const preparedAt = normalizeLaunchTimestamp(record.preparedAt);
+  const preparedBy = normalizeLaunchString(record.preparedBy, 160);
+  if (!requestedSessionKey || !provisionalRunId || preparedAt === void 0 || !preparedBy) {
+    return void 0;
+  }
+  const identity = { requestedSessionKey, provisionalRunId, preparedAt, preparedBy };
+  if (record.phase === "prepared") {
+    return { phase: "prepared", ...identity };
+  }
+  if (record.phase === "accepted") {
+    const acceptedAt = normalizeLaunchTimestamp(record.acceptedAt);
+    const acceptedSessionKey = normalizeLaunchString(record.acceptedSessionKey, 240);
+    const acceptedRunId = normalizeLaunchString(record.acceptedRunId, 160);
+    return acceptedAt === void 0 || !acceptedSessionKey ? void 0 : {
+      phase: "accepted",
+      ...identity,
+      acceptedAt,
+      acceptedSessionKey,
+      ...acceptedRunId ? { acceptedRunId } : {}
+    };
+  }
+  if (record.phase === "failed") {
+    const failedAt = normalizeLaunchTimestamp(record.failedAt);
+    const reason = normalizeLaunchString(record.reason, 800);
+    return failedAt === void 0 || !reason ? void 0 : { phase: "failed", ...identity, failedAt, reason };
+  }
+  return void 0;
+}
+function deriveChildIdempotencyKey(parentKey, index) {
+  if (!parentKey) {
+    return void 0;
+  }
+  const key = `${parentKey}:child:${index}`;
+  return key.length <= 160 ? key : void 0;
+}
+function normalizeExecutionMode(value, fallback) {
+  if (typeof value === "string" && TASKFOLD_EXECUTION_MODES.includes(value)) {
+    return value;
+  }
+  return fallback;
+}
+function normalizeExecutionStatus(value, fallback) {
+  if (typeof value === "string" && TASKFOLD_EXECUTION_STATUSES.includes(value)) {
+    return value;
+  }
+  return fallback;
+}
+function normalizeAttemptStatus(value, fallback) {
+  if (typeof value === "string" && TASKFOLD_ATTEMPT_STATUSES.includes(value)) {
+    return value;
+  }
+  return fallback;
+}
+function normalizeLinkType(value, fallback) {
+  if (typeof value === "string" && TASKFOLD_LINK_TYPES.includes(value)) {
+    return value;
+  }
+  return fallback;
+}
+function normalizeProofStatus(value, fallback) {
+  if (typeof value === "string" && TASKFOLD_PROOF_STATUSES.includes(value)) {
+    return value;
+  }
+  return fallback;
+}
+function normalizeTemplateId(value) {
+  return typeof value === "string" && TASKFOLD_TEMPLATE_IDS.includes(value) ? value : void 0;
+}
+function normalizeTimestamp(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+function normalizeEvent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const kind = TASKFOLD_EVENT_KINDS.includes(record.kind) ? record.kind : null;
+  const at = normalizeTimestamp(record.at, 0);
+  if (!id || !kind || !at) {
+    return null;
+  }
+  const fromStatus = typeof record.fromStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.fromStatus) ? record.fromStatus : void 0;
+  const toStatus = typeof record.toStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.toStatus) ? record.toStatus : void 0;
+  const fromMilestoneId = normalizeBoundedString(
+    record.fromMilestoneId,
+    void 0,
+    120,
+    "event source milestone"
+  );
+  const toMilestoneId = normalizeBoundedString(
+    record.toMilestoneId,
+    void 0,
+    120,
+    "event target milestone"
+  );
+  const sessionKey = normalizeOptionalString(record.sessionKey);
+  const runId = normalizeOptionalString(record.runId);
+  return {
+    id,
+    kind,
+    at,
+    ...fromStatus ? { fromStatus } : {},
+    ...toStatus ? { toStatus } : {},
+    ...fromMilestoneId ? { fromMilestoneId } : {},
+    ...toMilestoneId ? { toMilestoneId } : {},
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {}
+  };
+}
+function normalizeEvents(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map(normalizeEvent).filter((event) => event !== null).slice(-MAX_CARD_EVENTS);
+}
+function normalizeAttempt(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const startedAt = normalizeTimestamp(record.startedAt, 0);
+  if (!id || !startedAt) {
+    return null;
+  }
+  const endedAt = normalizeTimestamp(record.endedAt, 0);
+  const sessionKey = normalizeOptionalString(record.sessionKey);
+  const runId = normalizeOptionalString(record.runId);
+  const error = normalizeBoundedString(record.error, void 0, 800, "attempt error");
+  const engine = normalizeBoundedString(record.engine, void 0, 160, "attempt engine");
+  const model = normalizeBoundedString(record.model, void 0, 160, "attempt model");
+  const promptVersion = typeof record.promptVersion === "number" && Number.isSafeInteger(record.promptVersion) && record.promptVersion > 0 ? record.promptVersion : void 0;
+  return {
+    id,
+    status: normalizeAttemptStatus(record.status, "running"),
+    startedAt,
+    ...endedAt ? { endedAt } : {},
+    ...engine ? { engine } : {},
+    ...typeof record.mode === "string" && TASKFOLD_EXECUTION_MODES.includes(record.mode) ? { mode: record.mode } : {},
+    ...model ? { model } : {},
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {},
+    ...error ? { error } : {},
+    ...promptVersion !== void 0 ? { promptVersion } : {}
+  };
+}
+function normalizeComment(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const body = normalizeBoundedString(record.body, void 0, 2e3, "comment body");
+  const createdAt = normalizeTimestamp(record.createdAt, 0);
+  if (!id || !body || !createdAt) {
+    return null;
+  }
+  const updatedAt = normalizeTimestamp(record.updatedAt, 0);
+  return { id, body, createdAt, ...updatedAt ? { updatedAt } : {} };
+}
+function normalizeLink(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const createdAt = normalizeTimestamp(record.createdAt, 0);
+  if (!id || !createdAt) {
+    return null;
+  }
+  const targetCardId = normalizeBoundedString(record.targetCardId, void 0, 120, "link target");
+  const title = normalizeBoundedString(record.title, void 0, 180, "link title");
+  const url = normalizeBoundedString(record.url, void 0, 2e3, "link URL");
+  if (!targetCardId && !url) {
+    return null;
+  }
+  return {
+    id,
+    type: normalizeLinkType(record.type, "relates_to"),
+    createdAt,
+    ...targetCardId ? { targetCardId } : {},
+    ...title ? { title } : {},
+    ...url ? { url } : {}
+  };
+}
+function isDependencyLink(link) {
+  return link.type === "parent" || link.type === "child" || link.type === "contains" || link.type === "contained_by";
+}
+function normalizeProof(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const createdAt = normalizeTimestamp(record.createdAt, 0);
+  if (!id || !createdAt) {
+    return null;
+  }
+  const label = normalizeBoundedString(record.label, void 0, 160, "proof label");
+  const command = normalizeBoundedString(record.command, void 0, 1e3, "proof command");
+  const url = normalizeBoundedString(record.url, void 0, 2e3, "proof URL");
+  const note = normalizeBoundedString(record.note, void 0, 2e3, "proof note");
+  return {
+    id,
+    status: normalizeProofStatus(record.status, "unknown"),
+    createdAt,
+    ...label ? { label } : {},
+    ...command ? { command } : {},
+    ...url ? { url } : {},
+    ...note ? { note } : {}
+  };
+}
+function normalizeArtifact(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id) ?? randomUUID3();
+  const createdAt = normalizeTimestamp(record.createdAt, Date.now());
+  const label = normalizeBoundedString(record.label, void 0, 160, "artifact label");
+  const url = normalizeBoundedString(record.url, void 0, 2e3, "artifact URL");
+  const artifactPath = normalizeBoundedString(record.path, void 0, 2e3, "artifact path");
+  const mimeType = normalizeBoundedString(record.mimeType, void 0, 160, "artifact MIME type");
+  if (!url && !artifactPath) {
+    return null;
+  }
+  return {
+    id,
+    createdAt,
+    ...label ? { label } : {},
+    ...url ? { url } : {},
+    ...artifactPath ? { path: artifactPath } : {},
+    ...mimeType ? { mimeType } : {}
+  };
+}
+function normalizeAttachment(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const cardId = normalizeBoundedString(record.cardId, void 0, 120, "card id");
+  const fileName = normalizeBoundedString(record.fileName, void 0, 240, "attachment file name");
+  const createdAt = normalizeTimestamp(record.createdAt, 0);
+  const byteSize = typeof record.byteSize === "number" && Number.isFinite(record.byteSize) ? Math.max(0, Math.trunc(record.byteSize)) : 0;
+  if (!id || !cardId || !fileName || !createdAt || byteSize <= 0) {
+    return null;
+  }
+  const mimeType = normalizeBoundedString(record.mimeType, void 0, 160, "attachment MIME type");
+  const note = normalizeBoundedString(record.note, void 0, 400, "attachment note");
+  return {
+    id,
+    cardId,
+    createdAt,
+    fileName,
+    byteSize,
+    ...mimeType ? { mimeType } : {},
+    ...note ? { note } : {}
+  };
+}
+function normalizeWorkerLog(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id);
+  const message = normalizeBoundedString(record.message, void 0, 800, "worker log message");
+  const createdAt = normalizeTimestamp(record.createdAt, 0);
+  if (!id || !message || !createdAt) {
+    return null;
+  }
+  const level = record.level === "warning" || record.level === "error" || record.level === "info" ? record.level : "info";
+  const sessionKey = normalizeBoundedString(record.sessionKey, void 0, 240, "session key");
+  const runId = normalizeBoundedString(record.runId, void 0, 160, "run id");
+  return {
+    id,
+    level,
+    message,
+    createdAt,
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {}
+  };
+}
+function normalizeWorkerProtocol(value, fallback) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const record = value;
+  const state = record.state === "idle" || record.state === "running" || record.state === "completed" || record.state === "blocked" || record.state === "violated" ? record.state : fallback?.state;
+  if (!state) {
+    return void 0;
+  }
+  const updatedAt = normalizeTimestamp(record.updatedAt, fallback?.updatedAt ?? Date.now());
+  const detail = normalizeBoundedString(record.detail, fallback?.detail, 800, "protocol detail");
+  return {
+    state,
+    updatedAt,
+    ...detail ? { detail } : {}
+  };
+}
+function normalizeAttachmentInput(cardId, input, now) {
+  const fileName = normalizeBoundedString(input.fileName, void 0, 240, "attachment file name");
+  if (!fileName) {
+    throw new Error("attachment fileName is required.");
+  }
+  const contentBase64 = typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : void 0;
+  if (!contentBase64) {
+    throw new Error("attachment contentBase64 is required.");
+  }
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0 || contentBase64.length > Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4) {
+    throw new Error("attachment contentBase64 must be canonical base64.");
+  }
+  const decoded = Buffer.from(contentBase64, "base64");
+  if (decoded.toString("base64") !== contentBase64) {
+    throw new Error("attachment contentBase64 must be canonical base64.");
+  }
+  const byteSize = decoded.length;
+  if (byteSize <= 0 || byteSize > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`attachment must be between 1 and ${MAX_ATTACHMENT_BYTES} bytes.`);
+  }
+  const mimeType = normalizeBoundedString(input.mimeType, void 0, 160, "attachment MIME type");
+  const note = normalizeBoundedString(input.note, void 0, 400, "attachment note");
+  const attachment = {
+    id: randomUUID3(),
+    cardId,
+    createdAt: now,
+    fileName,
+    byteSize,
+    ...mimeType ? { mimeType } : {},
+    ...note ? { note } : {}
+  };
+  return { attachment, contentBase64 };
+}
+function normalizeCardImageInput(input) {
+  const contentBase64 = typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : void 0;
+  if (!contentBase64) {
+    throw new Error("card image contentBase64 is required.");
+  }
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== contentBase64) {
+    throw new Error("card image contentBase64 must be canonical base64.");
+  }
+  const declaredMime = typeof input.mimeType === "string" ? input.mimeType.trim() : "";
+  const fileName = typeof input.fileName === "string" ? input.fileName.trim() : "";
+  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
+  const extension = (declaredMime ? taskfoldCardImageExtensionForMime(declaredMime) : void 0) ?? (taskfoldCardImageMimeType(fileExtension) ? fileExtension : void 0);
+  if (!extension) {
+    throw new Error(
+      "card image must be png, jpeg, gif, webp, avif or bmp (set mimeType or a matching fileName extension)."
+    );
+  }
+  return { extension, mimeType: taskfoldCardImageMimeType(extension), bytes };
+}
+function normalizeClaim(value, fallback) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  const record = value;
+  const ownerId = normalizeBoundedString(record.ownerId, fallback?.ownerId, 120, "claim owner");
+  const token = normalizeBoundedString(record.token, fallback?.token, 160, "claim token");
+  const claimedAt = normalizeTimestamp(record.claimedAt, fallback?.claimedAt ?? Date.now());
+  const lastHeartbeatAt = normalizeTimestamp(
+    record.lastHeartbeatAt,
+    fallback?.lastHeartbeatAt ?? claimedAt
+  );
+  const expiresAt = normalizeTimestamp(record.expiresAt, fallback?.expiresAt ?? 0);
+  if (!ownerId || !token || !claimedAt || !lastHeartbeatAt) {
+    return void 0;
+  }
+  return {
+    ownerId,
+    token,
+    claimedAt,
+    lastHeartbeatAt,
+    ...expiresAt ? { expiresAt } : {}
+  };
+}
+function normalizeDiagnosticAction(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const kind = record.kind === "claim" || record.kind === "unblock" || record.kind === "reassign" || record.kind === "add_proof" || record.kind === "open_session" ? record.kind : void 0;
+  const label = normalizeBoundedString(record.label, void 0, 120, "diagnostic action label");
+  return kind && label ? { kind, label } : null;
+}
+function normalizeDiagnostic(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const kind = TASKFOLD_DIAGNOSTIC_KINDS.includes(record.kind) ? record.kind : void 0;
+  const severity = TASKFOLD_DIAGNOSTIC_SEVERITIES.includes(
+    record.severity
+  ) ? record.severity : "warning";
+  const title = normalizeBoundedString(record.title, void 0, 160, "diagnostic title");
+  const detail = normalizeBoundedString(record.detail, void 0, 800, "diagnostic detail");
+  const firstSeenAt = normalizeTimestamp(record.firstSeenAt, Date.now());
+  const lastSeenAt = normalizeTimestamp(record.lastSeenAt, firstSeenAt);
+  if (!kind || !title || !detail) {
+    return null;
+  }
+  return {
+    kind,
+    severity,
+    title,
+    detail,
+    firstSeenAt,
+    lastSeenAt,
+    count: typeof record.count === "number" && Number.isFinite(record.count) ? Math.max(1, Math.trunc(record.count)) : 1,
+    actions: Array.isArray(record.actions) ? record.actions.map(normalizeDiagnosticAction).filter((action) => action !== null).slice(0, 4) : []
+  };
+}
+function normalizeNotification(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const id = normalizeOptionalString(record.id) ?? randomUUID3();
+  const kind = TASKFOLD_NOTIFICATION_KINDS.includes(record.kind) ? record.kind : void 0;
+  const createdAt = normalizeTimestamp(record.createdAt, Date.now());
+  const sequence = normalizeTimestamp(record.sequence, 0) || void 0;
+  const message = normalizeBoundedString(record.message, void 0, 240, "notification message");
+  if (!kind || !message) {
+    return null;
+  }
+  const sessionKey = normalizeBoundedString(record.sessionKey, void 0, 240, "session key");
+  const runId = normalizeBoundedString(record.runId, void 0, 120, "run id");
+  return {
+    id,
+    kind,
+    createdAt,
+    ...sequence ? { sequence } : {},
+    message,
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {}
+  };
+}
+function normalizeProofInput(input, now) {
+  const label = normalizeBoundedString(input.label, void 0, 160, "proof label");
+  const command = normalizeBoundedString(input.command, void 0, 1e3, "proof command");
+  const url = normalizeBoundedString(input.url, void 0, 2e3, "proof URL");
+  const note = normalizeBoundedString(input.note, void 0, 2e3, "proof note");
+  return {
+    id: randomUUID3(),
+    status: normalizeProofStatus(input.status, "unknown"),
+    createdAt: now,
+    ...label ? { label } : {},
+    ...command ? { command } : {},
+    ...url ? { url } : {},
+    ...note ? { note } : {}
+  };
+}
+function completionProofConflicts(existing, completion) {
+  return ["label", "command", "url", "note"].some(
+    (field) => completion[field] !== void 0 && completion[field] !== existing[field]
+  );
+}
+function appendCompletionProof(existing, proof, proofId) {
+  const entries = [...existing ?? []];
+  if (!proofId) {
+    return [...entries, proof].slice(-MAX_CARD_PROOF);
+  }
+  const index = entries.findIndex((entry) => entry.id === proofId);
+  const pending = index >= 0 ? entries[index] : void 0;
+  if (!pending) {
+    throw new Error(`proof not found: ${proofId}`);
+  }
+  if (proof.status === "unknown") {
+    throw new Error("completion proof status must be passed, failed, or skipped.");
+  }
+  if (completionProofConflicts(pending, proof)) {
+    throw new Error(`completion proof does not match pending proof: ${proofId}`);
+  }
+  if (pending.status !== "unknown") {
+    if (pending.status !== proof.status) {
+      throw new Error(`completion proof status does not match existing proof: ${proofId}`);
+    }
+    return entries.slice(-MAX_CARD_PROOF);
+  }
+  entries[index] = { ...pending, status: proof.status };
+  return entries.slice(-MAX_CARD_PROOF);
+}
+function normalizeMetadata(value, fallback = {}, options = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return trimMetadataToBudget(fallback, options);
+  }
+  const record = value;
+  const stale = record.stale && typeof record.stale === "object" && !Array.isArray(record.stale) ? record.stale : null;
+  const hasArchivedAt = Object.hasOwn(record, "archivedAt");
+  const hasStale = Object.hasOwn(record, "stale");
+  const hasBlocked = Object.hasOwn(record, "blocked");
+  const hasDispatchReady = Object.hasOwn(record, "dispatchReady");
+  const blocked = record.blocked && typeof record.blocked === "object" && !Array.isArray(record.blocked) ? record.blocked : null;
+  const hasLifecycleStatusSourceUpdatedAt = Object.hasOwn(record, "lifecycleStatusSourceUpdatedAt");
+  const links = Array.isArray(record.links) ? record.links.map(normalizeLink).filter((link) => link !== null) : void 0;
+  const normalizedLinks = links === void 0 ? fallback.links : options.allowDependencyLinks === false ? (() => {
+    const dependencyLinks = (fallback.links ?? []).filter(isDependencyLink);
+    const ordinaryCapacity = Math.max(0, MAX_CARD_LINKS - dependencyLinks.length);
+    return [
+      ...dependencyLinks.slice(-MAX_CARD_LINKS),
+      ...ordinaryCapacity > 0 ? links.filter((link) => !isDependencyLink(link)).slice(-ordinaryCapacity) : []
+    ];
+  })() : links.slice(-MAX_CARD_LINKS);
+  const normalized2 = {
+    attempts: Array.isArray(record.attempts) ? record.attempts.map(normalizeAttempt).filter((attempt) => attempt !== null).slice(-MAX_CARD_ATTEMPTS) : fallback.attempts,
+    comments: Array.isArray(record.comments) ? record.comments.map(normalizeComment).filter((comment) => comment !== null).slice(-MAX_CARD_COMMENTS) : fallback.comments,
+    links: normalizedLinks,
+    proof: Array.isArray(record.proof) ? record.proof.map(normalizeProof).filter((proof) => proof !== null).slice(-MAX_CARD_PROOF) : fallback.proof,
+    artifacts: Array.isArray(record.artifacts) ? record.artifacts.map(normalizeArtifact).filter((artifact) => artifact !== null).slice(-MAX_CARD_ARTIFACTS) : fallback.artifacts,
+    attachments: Array.isArray(record.attachments) ? record.attachments.map(normalizeAttachment).filter((attachment) => attachment !== null).slice(-MAX_CARD_ATTACHMENTS) : fallback.attachments,
+    workerLogs: Array.isArray(record.workerLogs) ? record.workerLogs.map(normalizeWorkerLog).filter((log) => log !== null).slice(-MAX_CARD_WORKER_LOGS) : fallback.workerLogs,
+    workerProtocol: Object.hasOwn(record, "workerProtocol") ? normalizeWorkerProtocol(record.workerProtocol, fallback.workerProtocol) : fallback.workerProtocol,
+    automation: Object.hasOwn(record, "automation") ? normalizeAutomation(record.automation, fallback.automation, {
+      allowLaunchState: options.allowAutomationLaunch
+    }) : fallback.automation,
+    claim: Object.hasOwn(record, "claim") ? record.claim ? normalizeClaim(record.claim, fallback.claim) : void 0 : fallback.claim,
+    diagnostics: Array.isArray(record.diagnostics) ? record.diagnostics.map(normalizeDiagnostic).filter(
+      (diagnosticLocal) => diagnosticLocal !== null
+    ).slice(-MAX_CARD_DIAGNOSTICS) : fallback.diagnostics,
+    notifications: Array.isArray(record.notifications) ? record.notifications.map(normalizeNotification).filter((notification) => notification !== null).slice(-MAX_CARD_NOTIFICATIONS) : fallback.notifications,
+    templateId: normalizeTemplateId(record.templateId) ?? fallback.templateId,
+    archivedAt: hasArchivedAt ? normalizeTimestamp(record.archivedAt, 0) || void 0 : fallback.archivedAt,
+    stale: hasStale ? stale ? {
+      detectedAt: normalizeTimestamp(stale.detectedAt, Date.now()),
+      lastSessionUpdatedAt: normalizeTimestamp(stale.lastSessionUpdatedAt, 0) || void 0,
+      reason: normalizeBoundedString(stale.reason, fallback.stale?.reason, 240, "stale reason") ?? "Session has not reported recent activity."
+    } : void 0 : fallback.stale,
+    lifecycleStatusSourceUpdatedAt: hasLifecycleStatusSourceUpdatedAt ? normalizeTimestamp(record.lifecycleStatusSourceUpdatedAt, 0) : fallback.lifecycleStatusSourceUpdatedAt,
+    failureCount: typeof record.failureCount === "number" && Number.isFinite(record.failureCount) ? Math.max(0, Math.trunc(record.failureCount)) : fallback.failureCount,
+    // 键存在即表示要改：值为空（undefined / null / false）清除标记。
+    blocked: hasBlocked ? blocked ? {
+      at: normalizeTimestamp(blocked.at, Date.now()),
+      ...normalizeBoundedString(blocked.reason, void 0, 400, "blocked reason") ? { reason: normalizeBoundedString(blocked.reason, void 0, 400, "blocked reason") } : {}
+    } : void 0 : fallback.blocked,
+    dispatchReady: hasDispatchReady ? record.dispatchReady === true ? true : void 0 : fallback.dispatchReady
+  };
+  return trimMetadataToBudget(normalized2, options);
+}
+function normalizeExecution(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const record = value;
+  const now = Date.now();
+  const engine = normalizeBoundedString(record.engine, void 0, 160, "execution engine");
+  const model = normalizeBoundedString(record.model, void 0, 160, "execution model");
+  const normalizedId = normalizeOptionalString(record.id);
+  const sessionKey = normalizeOptionalString(record.sessionKey);
+  const runId = normalizeOptionalString(record.runId);
+  if (!normalizedId && !engine && !model && !sessionKey && !runId) {
+    return void 0;
+  }
+  const id = normalizedId ?? randomUUID3();
+  const startedAt = normalizeTimestamp(record.startedAt, now);
+  const updatedAt = normalizeTimestamp(record.updatedAt, startedAt);
+  return {
+    id,
+    kind: "agent-session",
+    mode: normalizeExecutionMode(record.mode, "autonomous"),
+    status: normalizeExecutionStatus(record.status, "idle"),
+    startedAt,
+    updatedAt,
+    ...engine ? { engine } : {},
+    ...model ? { model } : {},
+    ...sessionKey ? { sessionKey } : {},
+    ...runId ? { runId } : {}
+  };
+}
+function syncExecutionSessionKey(execution, sessionKey) {
+  if (!execution) {
+    return void 0;
+  }
+  return removeUndefinedExecutionFields({
+    ...execution,
+    sessionKey,
+    updatedAt: Date.now()
+  });
+}
+function removeUndefinedExecutionFields(execution) {
+  const next = { ...execution };
+  if (next.engine === void 0) {
+    delete next.engine;
+  }
+  if (next.model === void 0) {
+    delete next.model;
+  }
+  if (next.sessionKey === void 0) {
+    delete next.sessionKey;
+  }
+  if (next.runId === void 0) {
+    delete next.runId;
+  }
+  return next;
+}
+function removeUndefinedAutomationFields(automation) {
+  const next = { ...automation };
+  for (const key of [
+    "tenant",
+    "boardId",
+    "createdByCardId",
+    "idempotencyKey",
+    "skills",
+    "workspace",
+    "workspaceAccess",
+    "maxRuntimeSeconds",
+    "maxRetries",
+    "scheduledAt",
+    "summary",
+    "createdCardIds",
+    "dispatchCount",
+    "lastDispatchAt",
+    "launch"
+  ]) {
+    const value = next[key];
+    if (value === void 0 || Array.isArray(value) && value.length === 0 || typeof value === "object" && value !== null && Object.keys(value).length === 0) {
+      delete next[key];
+    }
+  }
+  return next;
+}
+function removeUndefinedMetadataFields(metadata) {
+  const next = { ...metadata };
+  for (const key of [
+    "attempts",
+    "comments",
+    "links",
+    "proof",
+    "artifacts",
+    "attachments",
+    "workerLogs",
+    "workerProtocol",
+    "automation",
+    "claim",
+    "diagnostics",
+    "notifications",
+    "templateId",
+    "archivedAt",
+    "stale",
+    "lifecycleStatusSourceUpdatedAt",
+    "failureCount",
+    "blocked",
+    "dispatchReady"
+  ]) {
+    const value = next[key];
+    if (value === void 0 || Array.isArray(value) && value.length === 0 || typeof value === "number" && value === 0 && key === "failureCount") {
+      delete next[key];
+    }
+  }
+  return next;
+}
+function clearDiagnostics(metadata, kinds) {
+  if (!metadata?.diagnostics) {
+    return metadata ?? {};
+  }
+  return {
+    ...metadata,
+    diagnostics: metadata.diagnostics.filter((entry) => !kinds.includes(entry.kind))
+  };
+}
+function metadataIsEmpty(metadata) {
+  return !metadata || Object.keys(metadata).length === 0;
+}
+function metadataByteSize(metadata) {
+  return Buffer.byteLength(JSON.stringify(metadata), "utf8");
+}
+function dropFirst(items) {
+  if (!items?.length) {
+    return void 0;
+  }
+  const next = items.slice(1);
+  return next.length ? next : void 0;
+}
+function dropFirstProofExcept(items, preserveProofId) {
+  if (!items?.length) {
+    return void 0;
+  }
+  const index = preserveProofId ? items.findIndex((proof) => proof.id !== preserveProofId) : 0;
+  if (index < 0) {
+    return items.slice();
+  }
+  const next = items.filter((_, itemIndex) => itemIndex !== index);
+  return next.length ? next : void 0;
+}
+function dropFirstNonDependencyLink(items) {
+  if (!items?.length) {
+    return void 0;
+  }
+  const index = items.findIndex((link) => !isDependencyLink(link));
+  if (index < 0) {
+    return items.slice();
+  }
+  const next = items.filter((_, itemIndex) => itemIndex !== index);
+  return next.length ? next : void 0;
+}
+function appendLinkPreservingDependencies(links, link) {
+  const next = [...links, link];
+  if (next.length <= MAX_CARD_LINKS) {
+    return next;
+  }
+  const dropIndex = next.findIndex((entry) => !isDependencyLink(entry));
+  if (dropIndex < 0 || dropIndex === next.length - 1) {
+    throw new Error("card link limit reached.");
+  }
+  return next.filter((_, index) => index !== dropIndex);
+}
+function trimMetadataToBudget(metadata, options = {}) {
+  let next = removeUndefinedMetadataFields(metadata);
+  while (metadataByteSize(next) > MAX_CARD_METADATA_BYTES) {
+    const currentSize = metadataByteSize(next);
+    if (next.attempts?.length) {
+      next = removeUndefinedMetadataFields({ ...next, attempts: dropFirst(next.attempts) });
+    } else if (next.diagnostics?.length) {
+      next = removeUndefinedMetadataFields({ ...next, diagnostics: dropFirst(next.diagnostics) });
+    } else if (next.notifications?.length) {
+      next = removeUndefinedMetadataFields({
+        ...next,
+        notifications: dropFirst(next.notifications)
+      });
+    } else if (next.proof?.some((proof) => !options.preserveProofId || proof.id !== options.preserveProofId)) {
+      next = removeUndefinedMetadataFields({
+        ...next,
+        proof: dropFirstProofExcept(next.proof, options.preserveProofId)
+      });
+    } else if (next.artifacts?.length) {
+      next = removeUndefinedMetadataFields({ ...next, artifacts: dropFirst(next.artifacts) });
+    } else if (next.attachments?.length) {
+      next = removeUndefinedMetadataFields({
+        ...next,
+        attachments: dropFirst(next.attachments)
+      });
+    } else if (next.workerLogs?.length) {
+      next = removeUndefinedMetadataFields({ ...next, workerLogs: dropFirst(next.workerLogs) });
+    } else if (next.links?.length) {
+      const links = dropFirstNonDependencyLink(next.links);
+      if (links?.length === next.links.length) {
+        next = removeUndefinedMetadataFields({ ...next, comments: dropFirst(next.comments) });
+      } else {
+        next = removeUndefinedMetadataFields({ ...next, links });
+      }
+    } else if (next.comments?.length) {
+      next = removeUndefinedMetadataFields({ ...next, comments: dropFirst(next.comments) });
+    } else if (options.preserveProofId) {
+      throw new Error(`card metadata cannot retain proof: ${options.preserveProofId}`);
+    }
+    if (metadataByteSize(next) >= currentSize) {
+      if (options.preserveProofId) {
+        throw new Error(`card metadata cannot retain proof: ${options.preserveProofId}`);
+      }
+      break;
+    }
+  }
+  return next;
+}
+var init_store_normalizers = __esm({
+  "../core/src/store-normalizers.ts"() {
+    "use strict";
+    init_contract();
+    init_store_constants();
+    init_file_store_card_images();
+    init_workspace_path();
+    init_status_registry();
+  }
+});
+
+// ../core/src/store-card-helpers.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+function compareCards(left, right, statusRank = UNCONFIGURED_STATUS_REGISTRY.rank) {
+  if (left.status !== right.status) {
+    return statusRank(left.status) - statusRank(right.status);
+  }
+  if (left.position !== right.position) {
+    return left.position - right.position;
+  }
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt - right.createdAt;
+  }
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+function cardSessionKey(card) {
+  return card.sessionKey ?? card.execution?.sessionKey;
+}
+function cardRunId(card) {
+  return card.runId ?? card.execution?.runId;
+}
+function executionAttemptStatus(execution) {
+  if (execution.status === "running") {
+    return "running";
+  }
+  if (execution.status === "blocked") {
+    return "blocked";
+  }
+  if (execution.status === "done" || execution.status === "review") {
+    return "succeeded";
+  }
+  return "stopped";
+}
+function syncExecutionAttemptMetadata(metadata, execution, now) {
+  if (!execution) {
+    return metadata;
+  }
+  const attempts = [...metadata.attempts ?? []];
+  const key = execution.runId ?? execution.sessionKey ?? execution.id;
+  const existingIndex = attempts.findIndex(
+    (attempt) => execution.runId && attempt.runId === execution.runId || !execution.runId && attempt.id === key
+  );
+  const existingAttempt = existingIndex >= 0 ? attempts[existingIndex] : void 0;
+  const attemptStatus = execution.status === "blocked" && existingAttempt?.status === "stopped" ? "stopped" : executionAttemptStatus(execution);
+  const nextAttempt = {
+    id: existingAttempt?.id ?? key,
+    status: attemptStatus,
+    startedAt: existingAttempt?.startedAt ?? execution.startedAt,
+    mode: execution.mode,
+    ...execution.engine ? { engine: execution.engine } : {},
+    ...execution.model ? { model: execution.model } : {},
+    ...execution.sessionKey ? { sessionKey: execution.sessionKey } : {},
+    ...execution.runId ? { runId: execution.runId } : {},
+    ...attemptStatus !== "running" && { endedAt: execution.updatedAt || now },
+    ...attemptStatus !== "succeeded" && existingAttempt?.error ? { error: existingAttempt.error } : {},
+    // Stamped once when the attempt appears, then carried forward, so a prompt
+    // change mid-run cannot relabel an attempt already under way.
+    promptVersion: existingAttempt?.promptVersion ?? TASKFOLD_PROMPT_VERSION
+  };
+  if (existingIndex >= 0) {
+    attempts[existingIndex] = nextAttempt;
+  } else {
+    attempts.push(nextAttempt);
+  }
+  const previousFailed = existingAttempt?.status === "blocked" || existingAttempt?.status === "failed";
+  const attemptFailed = attemptStatus === "blocked" || attemptStatus === "failed";
+  const failureCount = attemptFailed ? previousFailed ? metadata.failureCount : (metadata.failureCount ?? 0) + 1 : attemptStatus === "succeeded" ? 0 : metadata.failureCount;
+  return removeUndefinedMetadataFields({
+    ...metadata,
+    attempts: attempts.slice(-MAX_CARD_ATTEMPTS),
+    failureCount
+  });
+}
+function appendEvent(card, event, at = Date.now()) {
+  return [
+    ...normalizeEvents(card.events),
+    {
+      id: randomUUID4(),
+      at,
+      ...event
+    }
+  ].slice(-MAX_CARD_EVENTS);
+}
+function latestMetadataIdChanged(existing, next) {
+  const latestId = next?.at(-1)?.id;
+  return Boolean(latestId && latestId !== existing?.at(-1)?.id);
+}
+function lifecycleStatusSourceUpdatedAtFromPatch(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return void 0;
+  }
+  if (!Object.hasOwn(metadata, "lifecycleStatusSourceUpdatedAt")) {
+    return void 0;
+  }
+  const sourceUpdatedAt = normalizeTimestamp(
+    metadata.lifecycleStatusSourceUpdatedAt,
+    0
+  );
+  return sourceUpdatedAt;
+}
+function latestStatusTransitionAt(card, registry) {
+  for (let index = (card.events?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const event = card.events?.[index];
+    if ((event?.kind === "moved" || event?.kind === "created") && (event.kind === "created" && !registry.isUnstarted(card.status) || event.kind === "moved" && event.fromStatus !== event.toStatus) && event.toStatus === card.status && typeof event.at === "number" && Number.isFinite(event.at)) {
+      return event.at;
+    }
+  }
+  return void 0;
+}
+function shouldSkipPersistedLifecycleStatusUpdate(existing, sourceUpdatedAt, registry = UNCONFIGURED_STATUS_REGISTRY) {
+  const lifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
+  if (lifecycleStatusSourceUpdatedAt !== void 0) {
+    return sourceUpdatedAt < lifecycleStatusSourceUpdatedAt;
+  }
+  const statusTransitionAt = latestStatusTransitionAt(existing, registry);
+  return statusTransitionAt !== void 0 && sourceUpdatedAt < statusTransitionAt;
+}
+function updateEvent(existing, next) {
+  if (existing.metadata?.workerProtocol?.state !== next.metadata?.workerProtocol?.state && next.metadata?.workerProtocol?.state === "violated") {
+    return { kind: "protocol_violation" };
+  }
+  if (existing.status !== next.status || existing.position !== next.position) {
+    return {
+      kind: "moved",
+      fromStatus: existing.status,
+      toStatus: next.status
+    };
+  }
+  if (Boolean(existing.metadata?.blocked) !== Boolean(next.metadata?.blocked)) {
+    return { kind: next.metadata?.blocked ? "blocked" : "unblocked" };
+  }
+  if (Boolean(existing.metadata?.dispatchReady) !== Boolean(next.metadata?.dispatchReady)) {
+    return { kind: next.metadata?.dispatchReady ? "queued" : "unqueued" };
+  }
+  if (cardSessionKey(existing) !== cardSessionKey(next)) {
+    return {
+      kind: "linked",
+      ...cardSessionKey(next) ? { sessionKey: cardSessionKey(next) } : {}
+    };
+  }
+  if (existing.execution?.status !== next.execution?.status || existing.execution?.engine !== next.execution?.engine || cardRunId(existing) !== cardRunId(next)) {
+    const existingAttempts = existing.metadata?.attempts ?? [];
+    const nextAttempts = next.metadata?.attempts ?? [];
+    const latestAttempt = nextAttempts.at(-1);
+    if (nextAttempts.length > existingAttempts.length) {
+      return {
+        kind: "attempt_started",
+        ...latestAttempt?.sessionKey ? { sessionKey: latestAttempt.sessionKey } : {},
+        ...latestAttempt?.runId ? { runId: latestAttempt.runId } : {}
+      };
+    }
+    const previousAttempt = latestAttempt ? existingAttempts.find((attempt) => attempt.id === latestAttempt.id) : void 0;
+    if (latestAttempt && previousAttempt?.status !== latestAttempt.status) {
+      return {
+        kind: "attempt_updated",
+        ...latestAttempt.sessionKey ? { sessionKey: latestAttempt.sessionKey } : {},
+        ...latestAttempt.runId ? { runId: latestAttempt.runId } : {}
+      };
+    }
+    return {
+      kind: "execution_updated",
+      ...cardSessionKey(next) ? { sessionKey: cardSessionKey(next) } : {},
+      ...cardRunId(next) ? { runId: cardRunId(next) } : {}
+    };
+  }
+  if (existing.metadata?.claim?.token !== next.metadata?.claim?.token) {
+    return { kind: "claimed" };
+  }
+  if (existing.metadata?.claim?.lastHeartbeatAt !== next.metadata?.claim?.lastHeartbeatAt) {
+    return { kind: "heartbeat" };
+  }
+  if ((existing.metadata?.comments?.length ?? 0) !== (next.metadata?.comments?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.comments, next.metadata?.comments)) {
+    return { kind: "comment_added" };
+  }
+  if ((existing.metadata?.links?.length ?? 0) !== (next.metadata?.links?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.links, next.metadata?.links)) {
+    return { kind: "link_added" };
+  }
+  if ((existing.metadata?.proof?.length ?? 0) !== (next.metadata?.proof?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.proof, next.metadata?.proof)) {
+    return { kind: "proof_added" };
+  }
+  if ((existing.metadata?.artifacts?.length ?? 0) !== (next.metadata?.artifacts?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.artifacts, next.metadata?.artifacts)) {
+    return { kind: "artifact_added" };
+  }
+  if ((existing.metadata?.attachments?.length ?? 0) !== (next.metadata?.attachments?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.attachments, next.metadata?.attachments)) {
+    return (next.metadata?.attachments?.length ?? 0) > (existing.metadata?.attachments?.length ?? 0) ? { kind: "attachment_added" } : { kind: "edited" };
+  }
+  if (existing.metadata?.workerProtocol?.state !== next.metadata?.workerProtocol?.state) {
+    return { kind: "orchestration" };
+  }
+  if ((existing.metadata?.workerLogs?.length ?? 0) !== (next.metadata?.workerLogs?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.workerLogs, next.metadata?.workerLogs)) {
+    return { kind: "orchestration" };
+  }
+  if ((existing.metadata?.diagnostics?.length ?? 0) !== (next.metadata?.diagnostics?.length ?? 0)) {
+    return { kind: "diagnostic" };
+  }
+  if ((existing.metadata?.notifications?.length ?? 0) !== (next.metadata?.notifications?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.notifications, next.metadata?.notifications)) {
+    return { kind: "notification" };
+  }
+  if (existing.metadata?.automation?.dispatchCount !== next.metadata?.automation?.dispatchCount || existing.metadata?.automation?.lastDispatchAt !== next.metadata?.automation?.lastDispatchAt) {
+    return { kind: "dispatch" };
+  }
+  if (!existing.metadata?.archivedAt && next.metadata?.archivedAt) {
+    return { kind: "archived" };
+  }
+  if (existing.metadata?.archivedAt && !next.metadata?.archivedAt) {
+    return { kind: "unarchived" };
+  }
+  if (!existing.metadata?.stale && next.metadata?.stale) {
+    return { kind: "stale" };
+  }
+  return { kind: "edited" };
+}
+function removeUndefinedCardFields(card) {
+  const next = { ...card };
+  for (const key of [
+    "notes",
+    "agentId",
+    "sessionKey",
+    "runId",
+    "taskId",
+    "sourceUrl",
+    "execution",
+    "delivery",
+    "sourceReferences",
+    "startedAt",
+    "completedAt",
+    "metadata"
+  ]) {
+    if (next[key] === void 0) {
+      delete next[key];
+    }
+  }
+  if (metadataIsEmpty(next.metadata)) {
+    delete next.metadata;
+  }
+  return next;
+}
+function assertCanMutateClaimedCard(card, scope) {
+  if (!scope) {
+    return;
+  }
+  const claim = card.metadata?.claim;
+  if (!claim) {
+    return;
+  }
+  const ownerId = normalizeOptionalString(scope.ownerId);
+  const token = normalizeOptionalString(scope.token);
+  if (claim.ownerId !== ownerId && !safeEqualSecret(token, claim.token)) {
+    throw new Error(`card is claimed by ${claim.ownerId}.`);
+  }
+}
+function retryBudgetExhausted(card) {
+  const maxRetries = card.metadata?.automation?.maxRetries;
+  return Boolean(maxRetries && (card.metadata?.failureCount ?? 0) > maxRetries);
+}
+function diagnostic(params, now) {
+  return {
+    ...params,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    count: 1
+  };
+}
+function mergeDiagnostics(previous, next) {
+  const byKind = new Map(previous?.map((entry) => [entry.kind, entry]));
+  return next.map((entry) => {
+    const prior = byKind.get(entry.kind);
+    return prior ? {
+      ...entry,
+      firstSeenAt: prior.firstSeenAt,
+      count: prior.count + 1
+    } : entry;
+  });
+}
+function taskfoldLastActivityAt(card) {
+  return Math.max(
+    card.metadata?.claim?.lastHeartbeatAt ?? 0,
+    card.execution?.updatedAt ?? 0,
+    card.updatedAt
+  );
+}
+function computeCardDiagnostics(card, now, registry = UNCONFIGURED_STATUS_REGISTRY) {
+  const phase = cardPhase(card, registry, now);
+  if (card.metadata?.archivedAt) {
+    if (registry.isTerminal(card.status)) {
+      return [];
+    }
+    return [
+      diagnostic(
+        {
+          kind: "archived_but_active",
+          severity: "warning",
+          title: "Archived card is still in an active status",
+          detail: `Card status is "${card.status}" but it is archived, so it is excluded from dispatch without any start failure or error. Unarchive it or move it to "done" to stop the silent skip.`,
+          actions: []
+        },
+        now
+      )
+    ];
+  }
+  const diagnostics = [];
+  const claim = card.metadata?.claim;
+  const lastHeartbeatAt = taskfoldLastActivityAt(card);
+  if ((phase === "todo" || phase === "ready") && card.agentId && now - card.updatedAt > READY_STRANDED_MS) {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "stranded_ready",
+          severity: "warning",
+          title: "Assigned card is waiting",
+          detail: "The card has an assigned agent but has not been claimed recently.",
+          actions: [{ kind: "claim", label: "Claim card" }]
+        },
+        now
+      )
+    );
+  }
+  if (phase === "running" && now - lastHeartbeatAt > RUNNING_HEARTBEAT_STALE_MS) {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "running_without_heartbeat",
+          severity: "error",
+          title: "Running card has no recent heartbeat",
+          detail: "The linked run or claim has not reported recent activity.",
+          actions: [
+            { kind: "open_session", label: "Open session" },
+            { kind: "reassign", label: "Reassign card" }
+          ]
+        },
+        now
+      )
+    );
+  }
+  if (phase === "blocked" && now - (card.metadata?.blocked?.at ?? card.updatedAt) > BLOCKED_TOO_LONG_MS) {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "blocked_too_long",
+          severity: "warning",
+          title: "Blocked card needs attention",
+          detail: "The card has been blocked for more than a day.",
+          actions: [{ kind: "unblock", label: "Move to todo" }]
+        },
+        now
+      )
+    );
+  }
+  if ((card.metadata?.failureCount ?? 0) >= 2) {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "repeated_failures",
+          severity: "error",
+          title: "Repeated run failures",
+          detail: "Multiple attempts failed or blocked on this card.",
+          actions: [{ kind: "reassign", label: "Reassign card" }]
+        },
+        now
+      )
+    );
+  }
+  if (registry.isCompleted(card.status) && !(card.metadata?.proof?.length || card.metadata?.artifacts?.length || card.metadata?.attachments?.length)) {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "missing_proof",
+          severity: "warning",
+          title: "Done card has no proof",
+          detail: "The card is marked done without proof or an attached artifact.",
+          actions: [{ kind: "add_proof", label: "Add proof" }]
+        },
+        now
+      )
+    );
+  }
+  if (card.sessionKey && !card.execution && phase === "running") {
+    diagnostics.push(
+      diagnostic(
+        {
+          kind: "orphaned_session",
+          severity: "warning",
+          title: "Running card has only a loose session link",
+          detail: "The card is running but has no execution record for lifecycle handoff.",
+          actions: [{ kind: "open_session", label: "Open session" }]
+        },
+        now
+      )
+    );
+  }
+  return diagnostics;
+}
+function capText(value, max) {
+  if (!value) {
+    return void 0;
+  }
+  return value.length <= max ? value : `${truncateUtf16Safe(value, Math.max(0, max - 1))}\u2026`;
+}
+function cardBoardId(card) {
+  return card.metadata?.automation?.boardId ?? "default";
+}
+function cardParentIds(card) {
+  return (card.metadata?.links ?? []).filter((link) => link.type === "parent" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
+}
+function cardChildIds(card) {
+  return (card.metadata?.links ?? []).filter((link) => link.type === "child" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
+}
+function cardRequirementId(card) {
+  return (card.metadata?.links ?? []).find(
+    (link) => link.type === "contained_by" && link.targetCardId
+  )?.targetCardId;
+}
+function cardRequirementChildIds(card) {
+  return (card.metadata?.links ?? []).filter((link) => link.type === "contains" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
+}
+function isRequirementCard(card) {
+  return card.kind === "requirement" || cardRequirementChildIds(card).length > 0;
+}
+function latestRunningAttempt(card) {
+  return card.metadata?.attempts?.findLast((attempt) => attempt.status === "running");
+}
+function isActiveDependencyTarget(card, registry, options = {}) {
+  const phase = cardPhase(card, registry);
+  return Boolean(card.metadata?.claim) || card.execution?.status === "running" || Boolean(latestRunningAttempt(card)) || !options.allowStatusOnly && (phase === "running" || phase === "review");
+}
+function closeRunningAttempts(attempts, now, status, reason) {
+  if (!attempts?.some((attempt) => attempt.status === "running")) {
+    return attempts;
+  }
+  return attempts.map(
+    (attempt) => attempt.status === "running" ? { ...attempt, status, endedAt: now, ...reason ? { error: reason } : {} } : attempt
+  );
+}
+function notificationSequence(event) {
+  return typeof event.sequence === "number" && Number.isFinite(event.sequence) ? Math.trunc(event.sequence) : void 0;
+}
+function compareNotifications(a, b) {
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt - b.createdAt;
+  }
+  const aSequence = notificationSequence(a);
+  const bSequence = notificationSequence(b);
+  if (aSequence !== void 0 && bSequence !== void 0) {
+    return aSequence - bSequence || a.id.localeCompare(b.id);
+  }
+  if (aSequence !== void 0) {
+    return -1;
+  }
+  if (bSequence !== void 0) {
+    return 1;
+  }
+  return a.id.localeCompare(b.id);
+}
+var init_store_card_helpers = __esm({
+  "../core/src/store-card-helpers.ts"() {
+    "use strict";
+    init_sdk_utils();
+    init_card_phase();
+    init_status_registry();
+    init_store_constants();
+    init_store_normalizers();
+  }
+});
+
 // ../core/src/card-lookup.ts
 function resolveTaskfoldCardByIdOrPrefix(cards, id) {
   const exact = cards.find((card2) => card2.id === id);
@@ -5105,9 +6998,9 @@ var init_change_aggregator = __esm({
 
 // src/backend/src/project-routed-stores.ts
 import fs12 from "node:fs";
-import path18 from "node:path";
+import path19 from "node:path";
 function taskfoldPluginProjectDataDir(pluginDir, boardId) {
-  return path18.join(pluginDir, "projects", boardId);
+  return path19.join(pluginDir, "projects", boardId);
 }
 function taskfoldProjectDataDir(pluginDir, boardId, board) {
   const workspace = board?.defaultWorkspace;
@@ -5134,9 +7027,9 @@ function cardBoardId2(value) {
   return value.card.metadata?.automation?.boardId ?? "default";
 }
 function createTaskfoldProjectRoutedStores(options) {
-  const pluginDir = path18.resolve(options.pluginDir);
+  const pluginDir = path19.resolve(options.pluginDir);
   const warn = options.warn ?? ((message) => console.warn(message));
-  const projectsRootDir = path18.join(pluginDir, "projects");
+  const projectsRootDir = path19.join(pluginDir, "projects");
   const pluginLayout = resolveTaskfoldFileStoreLayout({ dataDir: projectsRootDir, pluginDir });
   const ensurePluginDir = () => ensureTaskfoldPluginDirectories(pluginLayout);
   const rawBoards = createTaskfoldFileBoardStore({ projectsJsonPath: pluginLayout.projectsJsonPath });
@@ -5166,7 +7059,7 @@ function createTaskfoldProjectRoutedStores(options) {
     }
     for (const name of listDirectoryNames(projectsRootDir)) {
       if (BOARD_DIR_NAME.test(name)) {
-        dirs.add(path18.join(projectsRootDir, name));
+        dirs.add(path19.join(projectsRootDir, name));
       }
     }
     return [...dirs];
@@ -5179,7 +7072,7 @@ function createTaskfoldProjectRoutedStores(options) {
     if (!create && !isDirectory(dataDir)) {
       return void 0;
     }
-    if (dataDir.startsWith(`${projectsRootDir}${path18.sep}`)) {
+    if (dataDir.startsWith(`${projectsRootDir}${path19.sep}`)) {
       ensurePluginDir();
     }
     const stores = createTaskfoldFileStores({ dataDir });
@@ -5266,8 +7159,8 @@ function createTaskfoldProjectRoutedStores(options) {
   function copyAttachmentBlobs(card, from, to) {
     copyTaskfoldCardImageDir(from.attachmentsDir, to.attachmentsDir, card.id);
     for (const attachment of card.metadata?.attachments ?? []) {
-      const target = path18.join(to.attachmentsDir, attachment.id);
-      const content = readBufferIfExists(path18.join(from.attachmentsDir, attachment.id));
+      const target = path19.join(to.attachmentsDir, attachment.id);
+      const content = readBufferIfExists(path19.join(from.attachmentsDir, attachment.id));
       if (content !== void 0 && !fs12.existsSync(target)) {
         writeFileAtomic(target, content);
       }
@@ -5466,6 +7359,10 @@ function createTaskfoldProjectRoutedStores(options) {
       const saved = await root.stores.statusConfig.write(boardId, definitions);
       markDirty(root);
       return saved;
+    },
+    async backup(boardId, label) {
+      const root = openRoot(await dataDirForBoardId(boardId), false);
+      return root ? await root.stores.statusConfig.backup?.(boardId, label) : void 0;
     }
   };
   const boards = {
@@ -6169,7 +8066,7 @@ __export(sqlite_migration_exports, {
 });
 import fs15 from "node:fs";
 import os from "node:os";
-import path21 from "node:path";
+import path22 from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 function zeroCounts() {
   return Object.fromEntries(COUNT_KEYS.map((key) => [key, 0]));
@@ -6178,7 +8075,7 @@ function cardBoardId3(card) {
   return card.metadata?.automation?.boardId ?? "default";
 }
 function isAbsolutePath(value) {
-  return typeof value === "string" && path21.isAbsolute(value);
+  return typeof value === "string" && path22.isAbsolute(value);
 }
 function countCards(cards, counts) {
   for (const card of cards) {
@@ -6224,7 +8121,7 @@ function copySqliteFiles(sqlitePath, destDir, baseName) {
       if (!fs15.existsSync(source)) {
         continue;
       }
-      const target = path21.join(destDir, `${baseName}.sqlite${suffix}`);
+      const target = path22.join(destDir, `${baseName}.sqlite${suffix}`);
       fs15.copyFileSync(source, target, fs15.constants.COPYFILE_EXCL);
       copied.push(target);
       fs15.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
@@ -6375,14 +8272,14 @@ async function writeAndVerifyRoot(plan, stagingDir) {
     counts.attachmentBlobs = blobBoards.get(boardId) ?? 0;
     written.set(boardId, counts);
   }
-  const cardsDir = path21.join(stagingDir, "cards");
+  const cardsDir = path22.join(stagingDir, "cards");
   const files = fs15.existsSync(cardsDir) ? fs15.readdirSync(cardsDir).filter((name) => name.endsWith(".md")) : [];
   const idOf = (name) => name.split(" - ")[0];
   const numberOf = (name) => Number.parseInt(idOf(name).replace(/^\D+-/, ""), 10);
   for (const boardId of plan.boardIds) {
     const own = new Set(storedCards.filter((card) => cardBoardId3(card) === boardId).map((card) => card.id));
     const mine = files.filter((name) => {
-      const content = fs15.readFileSync(path21.join(cardsDir, name), "utf8");
+      const content = fs15.readFileSync(path22.join(cardsDir, name), "utf8");
       return [...own].some((id) => content.includes(`"uuid": ${JSON.stringify(id)}`));
     }).toSorted((a, b) => numberOf(a) - numberOf(b));
     if (mine.length > 0) {
@@ -6392,16 +8289,16 @@ async function writeAndVerifyRoot(plan, stagingDir) {
   return { written, displayIds, milestoneUpdatedAtTruncated };
 }
 function stagingPathFor(dataDir, stamp) {
-  return path21.join(path21.dirname(dataDir), `.${path21.basename(dataDir).replace(/^\./, "")}.migrating-${stamp}`);
+  return path22.join(path22.dirname(dataDir), `.${path22.basename(dataDir).replace(/^\./, "")}.migrating-${stamp}`);
 }
 async function runTaskfoldSqliteMigration(options) {
-  const pluginDir = path21.resolve(options.pluginDir);
+  const pluginDir = path22.resolve(options.pluginDir);
   const { mode } = options;
   const stamp = localTimestamp(options.now ?? /* @__PURE__ */ new Date());
-  const sqlitePath = path21.join(pluginDir, "taskfold.sqlite");
-  const projectsJsonPath = path21.join(pluginDir, "projects.json");
-  const markerPath = path21.join(pluginDir, TASKFOLD_SQLITE_MIGRATION_MARKER);
-  const projectsRootDir = path21.join(pluginDir, "projects");
+  const sqlitePath = path22.join(pluginDir, "taskfold.sqlite");
+  const projectsJsonPath = path22.join(pluginDir, "projects.json");
+  const markerPath = path22.join(pluginDir, TASKFOLD_SQLITE_MIGRATION_MARKER);
+  const projectsRootDir = path22.join(pluginDir, "projects");
   if (!fs15.existsSync(sqlitePath)) {
     throw new TaskfoldSqliteMigrationError(`no SQLite database at ${sqlitePath}; nothing to migrate.`);
   }
@@ -6412,17 +8309,17 @@ async function runTaskfoldSqliteMigration(options) {
   if (fs15.existsSync(projectsJsonPath)) {
     blockers.push(`${projectsJsonPath} already exists`);
   }
-  const workDir = fs15.mkdtempSync(path21.join(os.tmpdir(), "taskfold-migrate-sqlite-"));
+  const workDir = fs15.mkdtempSync(path22.join(os.tmpdir(), "taskfold-migrate-sqlite-"));
   const created = [];
   let applied = false;
   try {
-    const pristine = copySqliteFiles(sqlitePath, path21.join(workDir, "pristine"), "taskfold");
-    const readDir = path21.join(workDir, "read");
+    const pristine = copySqliteFiles(sqlitePath, path22.join(workDir, "pristine"), "taskfold");
+    const readDir = path22.join(workDir, "read");
     fs15.mkdirSync(readDir);
     for (const file of pristine) {
-      fs15.copyFileSync(file, path21.join(readDir, path21.basename(file)));
+      fs15.copyFileSync(file, path22.join(readDir, path22.basename(file)));
     }
-    const source = await readSource(path21.join(readDir, "taskfold.sqlite"));
+    const source = await readSource(path22.join(readDir, "taskfold.sqlite"));
     const mainCheckoutCache = /* @__PURE__ */ new Map();
     const dataDirOf = (boardId) => {
       const board = source.boards.get(boardId)?.board;
@@ -6460,7 +8357,7 @@ async function runTaskfoldSqliteMigration(options) {
         ...board?.name ? { name: board.name } : {},
         archived: Boolean(board?.archivedAt),
         dataDir,
-        location: dataDir.startsWith(`${projectsRootDir}${path21.sep}`) ? "plugin" : "repository",
+        location: dataDir.startsWith(`${projectsRootDir}${path22.sep}`) ? "plugin" : "repository",
         skipped,
         source: source.counts.get(boardId) ?? zeroCounts(),
         absolutePaths: {
@@ -6507,10 +8404,10 @@ async function runTaskfoldSqliteMigration(options) {
       throw new TaskfoldSqliteMigrationError(`refusing to migrate: ${blockers.join("; ")}`, report);
     }
     if (mode === "apply") {
-      const backupDir = path21.join(pluginDir, "backup");
+      const backupDir = path22.join(pluginDir, "backup");
       fs15.mkdirSync(backupDir, { recursive: true, mode: TASKFOLD_FILE_STORE_DIR_MODE });
       for (const file of pristine) {
-        const target = path21.join(backupDir, path21.basename(file).replace(/^taskfold\./, `taskfold-premigrate-${stamp}.`));
+        const target = path22.join(backupDir, path22.basename(file).replace(/^taskfold\./, `taskfold-premigrate-${stamp}.`));
         fs15.copyFileSync(file, target, fs15.constants.COPYFILE_EXCL);
         fs15.chmodSync(target, TASKFOLD_FILE_STORE_FILE_MODE);
         report.backupFiles.push(target);
@@ -6521,9 +8418,9 @@ async function runTaskfoldSqliteMigration(options) {
     let index = 0;
     for (const plan of plans.values()) {
       index += 1;
-      const stagingDir = mode === "apply" ? stagingPathFor(plan.dataDir, stamp) : path21.join(workDir, "stage", String(index), ".taskfold");
+      const stagingDir = mode === "apply" ? stagingPathFor(plan.dataDir, stamp) : path22.join(workDir, "stage", String(index), ".taskfold");
       if (mode === "apply") {
-        if (!projectsRootExisted && plan.dataDir.startsWith(`${projectsRootDir}${path21.sep}`) && !created.includes(projectsRootDir)) {
+        if (!projectsRootExisted && plan.dataDir.startsWith(`${projectsRootDir}${path22.sep}`) && !created.includes(projectsRootDir)) {
           created.push(projectsRootDir);
         }
         created.push(stagingDir);
@@ -6561,7 +8458,7 @@ async function runTaskfoldSqliteMigration(options) {
       created.push(projectsJsonPath);
       writeFileAtomic(projectsJsonPath, JSON.stringify(Object.fromEntries(source.boards), null, 2));
       if (source.subscriptions.length > 0) {
-        const subscriptionsDir = path21.join(pluginDir, "subscriptions");
+        const subscriptionsDir = path22.join(pluginDir, "subscriptions");
         if (!fs15.existsSync(subscriptionsDir)) {
           created.push(subscriptionsDir);
         }
@@ -6735,9 +8632,6 @@ function writeLine(value) {
 }
 function splitLabels(value) {
   return value?.split(",").map((entry) => entry.trim()).filter(Boolean);
-}
-function isTaskfoldStatus2(value) {
-  return TASKFOLD_STATUSES.includes(value);
 }
 function formatCardLine2(card) {
   const boardId = card.metadata?.automation?.boardId ?? "default";
@@ -6956,19 +8850,48 @@ function registerTaskfoldCli(params) {
     }
   });
   taskfold.command("move").argument("<id>", "Card id or prefix").description("Move a Taskfold card to another status").requiredOption("--status <status>", "Target status").option("--json", "Print JSON", false).action(async (id, options) => {
-    if (!isTaskfoldStatus2(options.status)) {
-      throw new Error(`--status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`);
-    }
     const cards = await params.store.list();
     const { card, error } = resolveTaskfoldCardByIdOrPrefix(cards, id);
     if (!card) {
       throw new Error(error);
+    }
+    const registry = await params.store.statusRegistryFor(cardBoardId(card));
+    if (!acceptsStatusInput(registry, options.status)) {
+      throw new Error(`--status must be one of: ${registry.ids.join(", ")}.`);
     }
     const updated = await params.store.move(card.id, options.status, void 0);
     if (options.json) {
       writeJson({ card: redactClaimToken(updated) });
     } else {
       writeLine(formatCardLine2(updated));
+    }
+  });
+  taskfold.command("statuses").description("List a project's statuses (fixed categories, project-defined names)").option("--board <id>", "Board id (default project when omitted)").option("--json", "Print JSON", false).action(async (options) => {
+    const statuses = await params.store.listStatuses(options.board);
+    if (options.json) {
+      writeJson({ statuses });
+      return;
+    }
+    for (const status of statuses) {
+      const flags = [status.role ? `role=${status.role}` : "", status.default ? "default" : ""].filter(Boolean);
+      writeLine(`${status.id.padEnd(14)} ${status.category.padEnd(10)} ${status.name ?? ""} ${flags.join(" ")}`.trimEnd());
+    }
+  });
+  taskfold.command("migrate").description("Migrate a project to the status model (writes its statuses, rewrites legacy ready/scheduled/blocked cards)").option("--board <id>", "Board id (default project when omitted)").option("--dry-run", "Only print what would change", false).option("--json", "Print JSON", false).action(async (options) => {
+    const report = await params.store.migrateStatusModel(options.board, { dryRun: options.dryRun === true });
+    if (options.json) {
+      writeJson(report);
+      return;
+    }
+    writeLine(`${report.boardId}: ${report.total} cards, ${report.rewrites.length} to rewrite${report.dryRun ? " (dry run)" : ""}`);
+    for (const rewrite of report.rewrites) {
+      writeLine(`  ${rewrite.cardId.slice(0, 8)} ${rewrite.from} -> ${rewrite.to}`);
+    }
+    if (report.backupDir) {
+      writeLine(`Backup: ${report.backupDir}`);
+    }
+    if (!report.dryRun && !report.changed) {
+      writeLine("Already migrated; nothing to change.");
     }
   });
   addGatewayClientOptions(
@@ -7010,7 +8933,8 @@ function registerTaskfoldCli(params) {
 var init_cli = __esm({
   "src/backend/src/cli.ts"() {
     "use strict";
-    init_contract();
+    init_status_registry();
+    init_store_card_helpers();
     init_card_lookup();
     init_card_redaction();
   }
@@ -7038,1693 +8962,8 @@ import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor4
 // src/backend/src/dispatcher-workspace.ts
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor2 } from "openclaw/plugin-sdk/security-runtime";
 
-// ../core/src/store-card-helpers.ts
-init_sdk_utils();
-init_status_registry();
-init_store_constants();
-import { randomUUID as randomUUID4 } from "node:crypto";
-
-// ../core/src/store-normalizers.ts
-init_contract();
-init_store_constants();
-init_file_store_card_images();
-import { randomUUID as randomUUID3 } from "node:crypto";
-
-// ../core/src/workspace-path.ts
-function isAbsoluteWorkspacePath(value) {
-  return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
-}
-
-// ../core/src/store-normalizers.ts
-init_status_registry();
-function normalizeOptionalString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function normalizeBoardId(value, fallback) {
-  const raw = normalizeBoundedString(value, fallback, 80, "board id");
-  if (!raw) {
-    return void 0;
-  }
-  const boardId = raw.toLowerCase();
-  if (!isValidTaskfoldBoardId(boardId)) {
-    throw new Error("board id must match [a-z0-9][a-z0-9._-]{0,79}.");
-  }
-  return boardId;
-}
-function normalizeBoardIdRequired(value) {
-  return normalizeBoardId(value) ?? "default";
-}
-function normalizeBoardMetadata(input, fallback, now = Date.now()) {
-  const id = normalizeBoardId(input.id, fallback?.id) ?? "default";
-  const name = normalizeBoundedString(input.name, fallback?.name, 120, "board name");
-  const description = normalizeBoundedString(
-    input.description,
-    fallback?.description,
-    1e3,
-    "board description"
-  );
-  const icon = normalizeBoundedString(input.icon, fallback?.icon, 40, "board icon");
-  const color = normalizeBoundedString(input.color, fallback?.color, 40, "board color");
-  const position = Object.hasOwn(input, "position") ? normalizePosition(input.position, fallback?.position ?? 0) : fallback?.position;
-  const version = normalizeBoundedString(input.version, fallback?.version, 120, "project version");
-  const currentObjective = normalizeBoundedString(
-    input.currentObjective,
-    fallback?.currentObjective,
-    2e3,
-    "current objective"
-  );
-  const coreValue = normalizeBoundedString(input.coreValue, fallback?.coreValue, 2e3, "core value");
-  const sourceOfTruth = Object.hasOwn(input, "sourceOfTruth") ? normalizeExternalUrl(input.sourceOfTruth, fallback?.sourceOfTruth, "source of truth") : fallback?.sourceOfTruth;
-  const repositoryUrl = Object.hasOwn(input, "repositoryUrl") ? normalizeExternalUrl(input.repositoryUrl, fallback?.repositoryUrl, "repository URL") : fallback?.repositoryUrl;
-  const planningPath = normalizeBoundedString(
-    input.planningPath,
-    fallback?.planningPath,
-    2e3,
-    "planning path"
-  );
-  const homepageUrl = Object.hasOwn(input, "homepageUrl") ? normalizeExternalUrl(input.homepageUrl, fallback?.homepageUrl, "homepage URL") : fallback?.homepageUrl;
-  const defaultWorkspace = Object.hasOwn(input, "defaultWorkspace") ? normalizeWorkspace(input.defaultWorkspace, fallback?.defaultWorkspace) : fallback?.defaultWorkspace;
-  const orchestration = Object.hasOwn(input, "orchestration") ? normalizeOrchestration(input.orchestration, fallback?.orchestration) : fallback?.orchestration;
-  const boardView = Object.hasOwn(input, "boardView") ? normalizeBoardView(input.boardView, fallback?.boardView) : fallback?.boardView;
-  const archivedAt = Object.hasOwn(input, "archived") ? input.archived === false ? void 0 : now : fallback?.archivedAt;
-  return {
-    id,
-    ...name ? { name } : {},
-    ...description ? { description } : {},
-    ...icon ? { icon } : {},
-    ...color ? { color } : {},
-    ...position !== void 0 ? { position } : {},
-    ...version ? { version } : {},
-    ...currentObjective ? { currentObjective } : {},
-    ...coreValue ? { coreValue } : {},
-    ...sourceOfTruth ? { sourceOfTruth } : {},
-    ...repositoryUrl ? { repositoryUrl } : {},
-    ...planningPath ? { planningPath } : {},
-    ...homepageUrl ? { homepageUrl } : {},
-    ...defaultWorkspace ? { defaultWorkspace } : {},
-    ...orchestration ? { orchestration } : {},
-    ...boardView ? { boardView } : {},
-    createdAt: fallback?.createdAt ?? now,
-    updatedAt: now,
-    ...archivedAt ? { archivedAt } : {}
-  };
-}
-function defaultTaskfoldBoardView() {
-  return { groupBy: "status", sortBy: "priority", sortDirection: "asc" };
-}
-function normalizeBoardView(value, fallback) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    if (value === void 0) {
-      return fallback ?? defaultTaskfoldBoardView();
-    }
-    throw new Error("board view must be an object.");
-  }
-  const record = value;
-  const groupBy = typeof record.groupBy === "string" && TASKFOLD_BOARD_GROUP_BY.includes(record.groupBy) ? record.groupBy : fallback?.groupBy ?? "status";
-  const defaultSortBy = groupBy === "milestone" ? "manual" : "priority";
-  const sortBy = typeof record.sortBy === "string" && TASKFOLD_BOARD_SORT_BY.includes(record.sortBy) ? record.sortBy : fallback?.groupBy === groupBy ? fallback.sortBy : defaultSortBy;
-  if (groupBy !== "milestone" && sortBy === "manual") {
-    throw new Error("manual sorting is available only when grouping by milestone.");
-  }
-  const sortDirection = typeof record.sortDirection === "string" && TASKFOLD_BOARD_SORT_DIRECTIONS.includes(record.sortDirection) ? record.sortDirection : fallback?.sortDirection ?? "asc";
-  return { groupBy, sortBy, sortDirection };
-}
-function normalizeOrchestration(value, fallback) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-  const record = value;
-  const autoDecompose = typeof record.autoDecompose === "boolean" ? record.autoDecompose : fallback?.autoDecompose;
-  const autoDecomposePerDispatch = typeof record.autoDecomposePerDispatch === "number" && Number.isFinite(record.autoDecomposePerDispatch) ? Math.max(1, Math.min(20, Math.trunc(record.autoDecomposePerDispatch))) : fallback?.autoDecomposePerDispatch;
-  const defaultAssignee = normalizeBoundedString(
-    record.defaultAssignee,
-    fallback?.defaultAssignee,
-    120,
-    "default assignee"
-  );
-  const orchestratorProfile = normalizeBoundedString(
-    record.orchestratorProfile,
-    fallback?.orchestratorProfile,
-    120,
-    "orchestrator profile"
-  );
-  const next = {
-    ...autoDecompose !== void 0 ? { autoDecompose } : {},
-    ...autoDecomposePerDispatch ? { autoDecomposePerDispatch } : {},
-    ...defaultAssignee ? { defaultAssignee } : {},
-    ...orchestratorProfile ? { orchestratorProfile } : {}
-  };
-  return Object.keys(next).length ? next : void 0;
-}
-function normalizeNotificationKinds(value) {
-  if (value == null) {
-    return void 0;
-  }
-  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : [];
-  const kinds = [];
-  for (const entry of entries) {
-    const kind = typeof entry === "string" ? entry.trim() : "";
-    if (!TASKFOLD_NOTIFICATION_KINDS.includes(kind)) {
-      throw new Error(
-        `notification kind must be one of: ${TASKFOLD_NOTIFICATION_KINDS.join(", ")}.`
-      );
-    }
-    const notificationKind = kind;
-    if (!kinds.includes(notificationKind)) {
-      kinds.push(notificationKind);
-    }
-  }
-  return kinds.length ? kinds : void 0;
-}
-function normalizeNotificationSubscription(input, fallback, now = Date.now()) {
-  const boardId = normalizeBoardId(input.boardId, fallback?.boardId) ?? "default";
-  const cardId = normalizeBoundedString(input.cardId, fallback?.cardId, 120, "card id");
-  const sessionKey = normalizeBoundedString(
-    input.sessionKey,
-    fallback?.sessionKey,
-    240,
-    "session key"
-  );
-  const runId = normalizeBoundedString(input.runId, fallback?.runId, 160, "run id");
-  const target = normalizeBoundedString(input.target, fallback?.target, 240, "notification target");
-  if (!cardId && !sessionKey && !runId && !target) {
-    throw new Error("notification subscription needs cardId, sessionKey, runId, or target.");
-  }
-  const eventKinds = normalizeNotificationKinds(input.eventKinds);
-  const preservedFields = {};
-  if (fallback) {
-    if (fallback.lastEventAt) {
-      preservedFields.lastEventAt = fallback.lastEventAt;
-    }
-    if (fallback.lastEventId) {
-      preservedFields.lastEventId = fallback.lastEventId;
-    }
-    if (fallback.lastEventSequence) {
-      preservedFields.lastEventSequence = fallback.lastEventSequence;
-    }
-    if (fallback.deliveredEventIds?.length) {
-      preservedFields.deliveredEventIds = fallback.deliveredEventIds;
-    }
-  }
-  return {
-    id: fallback?.id ?? randomUUID3(),
-    boardId,
-    ...cardId ? { cardId } : {},
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {},
-    ...target ? { target } : {},
-    ...eventKinds ? { eventKinds } : {},
-    ...preservedFields,
-    createdAt: fallback?.createdAt ?? now,
-    updatedAt: now
-  };
-}
-function normalizeTitle(value) {
-  const title = normalizeOptionalString(value);
-  if (!title) {
-    throw new Error("title is required.");
-  }
-  if (title.length > 180) {
-    throw new Error("title must be 180 characters or fewer.");
-  }
-  return title;
-}
-function normalizeNotes(value) {
-  const notes = normalizeOptionalString(value);
-  if (!notes) {
-    return void 0;
-  }
-  if (notes.length > 4e3) {
-    throw new Error("notes must be 4000 characters or fewer.");
-  }
-  return notes;
-}
-function normalizeOptionalBoundedString(value, maxLength, fieldName) {
-  const normalized2 = normalizeOptionalString(value);
-  if (!normalized2) {
-    return void 0;
-  }
-  if (normalized2.length > maxLength) {
-    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized2;
-}
-function normalizeDeliveryState(value, allowed, fieldName) {
-  if (typeof value !== "string" || !value.trim()) {
-    return void 0;
-  }
-  if (!allowed.includes(value)) {
-    throw new Error(`${fieldName} must be one of: ${allowed.join(", ")}.`);
-  }
-  return value;
-}
-function normalizeDelivery(value, fallback, now = Date.now()) {
-  if (value === null) {
-    return void 0;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-  const record = value;
-  const readText = (key, maxLength, fieldName) => Object.hasOwn(record, key) ? normalizeOptionalBoundedString(record[key], maxLength, fieldName) : fallback?.[key];
-  const implementationState = Object.hasOwn(record, "implementationState") ? normalizeDeliveryState(
-    record.implementationState,
-    TASKFOLD_DELIVERY_IMPLEMENTATION_STATES,
-    "implementation state"
-  ) : fallback?.implementationState;
-  const verificationState = Object.hasOwn(record, "verificationState") ? normalizeDeliveryState(
-    record.verificationState,
-    TASKFOLD_DELIVERY_VERIFICATION_STATES,
-    "verification state"
-  ) : fallback?.verificationState;
-  const releaseState = Object.hasOwn(record, "releaseState") ? normalizeDeliveryState(
-    record.releaseState,
-    TASKFOLD_DELIVERY_RELEASE_STATES,
-    "release state"
-  ) : fallback?.releaseState;
-  const delivery = {
-    ...readText("objective", 2e3, "delivery objective") ? { objective: readText("objective", 2e3, "delivery objective") } : {},
-    ...readText("deliverySummary", 4e3, "delivery summary") ? { deliverySummary: readText("deliverySummary", 4e3, "delivery summary") } : {},
-    ...readText("openItems", 4e3, "delivery open items") ? { openItems: readText("openItems", 4e3, "delivery open items") } : {},
-    ...implementationState ? { implementationState } : {},
-    ...verificationState ? { verificationState } : {},
-    ...releaseState ? { releaseState } : {}
-  };
-  return Object.keys(delivery).length ? { ...delivery, updatedAt: now } : void 0;
-}
-function normalizeBoundedString(value, fallback, maxLength, fieldName) {
-  const normalized2 = normalizeOptionalString(value);
-  if (!normalized2) {
-    return fallback;
-  }
-  if (normalized2.length > maxLength) {
-    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized2;
-}
-function normalizeExternalUrl(value, fallback, fieldName) {
-  const normalized2 = normalizeBoundedString(value, fallback, 2e3, fieldName);
-  if (!normalized2) {
-    return void 0;
-  }
-  let parsed;
-  try {
-    parsed = new URL(normalized2);
-  } catch {
-    throw new Error(`${fieldName} must be a valid http or https URL.`);
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${fieldName} must be a valid http or https URL.`);
-  }
-  return parsed.toString();
-}
-function normalizeStatus(value, fallback, registry = LEGACY_STATUS_REGISTRY) {
-  if (typeof value !== "string" || !value.trim()) {
-    return fallback;
-  }
-  if (registry.has(value)) {
-    return value;
-  }
-  throw new Error(`status must be one of: ${registry.ids.join(", ")}.`);
-}
-function normalizeCardKind(value, fallback = "task") {
-  if (value === void 0 || value === null || value === "") {
-    return fallback;
-  }
-  if (typeof value === "string" && TASKFOLD_CARD_KINDS.includes(value)) {
-    return value;
-  }
-  throw new Error(`card kind must be one of: ${TASKFOLD_CARD_KINDS.join(", ")}.`);
-}
-function normalizePriority(value, fallback) {
-  if (typeof value !== "string" || !value.trim()) {
-    return fallback;
-  }
-  if (TASKFOLD_PRIORITIES.includes(value)) {
-    return value;
-  }
-  throw new Error(`priority must be one of: ${TASKFOLD_PRIORITIES.join(", ")}.`);
-}
-function normalizeLabels(value, fallback = []) {
-  if (value == null) {
-    return fallback;
-  }
-  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : void 0;
-  if (!entries) {
-    throw new Error("labels must be an array or comma-separated string.");
-  }
-  const labels = [];
-  for (const entry of entries) {
-    const label = normalizeOptionalString(entry);
-    if (!label || labels.includes(label)) {
-      continue;
-    }
-    if (label.length > 40) {
-      throw new Error("labels must be 40 characters or fewer.");
-    }
-    labels.push(label);
-    if (labels.length >= 12) {
-      break;
-    }
-  }
-  return labels;
-}
-function normalizeStringList(value, fieldName, maxLength = 80) {
-  if (value == null) {
-    return [];
-  }
-  const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value : void 0;
-  if (!entries) {
-    throw new Error(`${fieldName} must be an array or comma-separated string.`);
-  }
-  const values = [];
-  for (const entry of entries) {
-    if (Array.isArray(value) && typeof entry !== "string") {
-      throw new Error(`${fieldName} entries must be strings.`);
-    }
-    const normalized2 = normalizeBoundedString(entry, void 0, maxLength, fieldName);
-    if (normalized2 && !values.includes(normalized2)) {
-      values.push(normalized2);
-    }
-    if (values.length > 20) {
-      throw new Error(`${fieldName} supports at most 20 entries.`);
-    }
-  }
-  return values;
-}
-function normalizePosition(value, fallback) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.max(0, Math.trunc(value));
-}
-function normalizePositiveInteger(value, fieldName) {
-  if (value == null || value === "") {
-    return void 0;
-  }
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${fieldName} must be a number.`);
-  }
-  return Math.max(1, Math.trunc(value));
-}
-function normalizeWorkspace(value, fallback) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-  const record = value;
-  const kind = record.kind === "scratch" || record.kind === "dir" || record.kind === "worktree" ? record.kind : fallback?.kind;
-  if (!kind) {
-    throw new Error("workspace kind must be scratch, dir, or worktree.");
-  }
-  const workspacePath = normalizeBoundedString(record.path, fallback?.path, 2e3, "workspace path");
-  if (kind === "dir" && (!workspacePath || !isAbsoluteWorkspacePath(workspacePath))) {
-    throw new Error("dir workspace path must be absolute.");
-  }
-  const branch = normalizeBoundedString(record.branch, fallback?.branch, 160, "workspace branch");
-  const sourcePath = normalizeBoundedString(
-    record.sourcePath,
-    fallback?.sourcePath,
-    2e3,
-    "workspace source path"
-  );
-  if (sourcePath && !isAbsoluteWorkspacePath(sourcePath)) {
-    throw new Error("workspace source path must be absolute.");
-  }
-  const sourceBranch = normalizeBoundedString(
-    record.sourceBranch,
-    fallback?.sourceBranch,
-    160,
-    "workspace source branch"
-  );
-  return {
-    kind,
-    ...workspacePath ? { path: workspacePath } : {},
-    ...branch ? { branch } : {},
-    ...kind === "worktree" && sourcePath ? { sourcePath } : {},
-    ...kind === "worktree" && sourceBranch ? { sourceBranch } : {}
-  };
-}
-function normalizeAutomation(value, fallback = {}, options = {}) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return Object.keys(fallback).length ? fallback : void 0;
-  }
-  const record = value;
-  const tenant = normalizeBoundedString(record.tenant, fallback.tenant, 80, "tenant");
-  const boardId = Object.hasOwn(record, "boardId") ? normalizeBoardId(record.boardId, fallback.boardId) : fallback.boardId;
-  const createdByCardId = normalizeBoundedString(
-    record.createdByCardId,
-    fallback.createdByCardId,
-    120,
-    "created by card id"
-  );
-  const idempotencyKey = normalizeBoundedString(
-    record.idempotencyKey,
-    fallback.idempotencyKey,
-    160,
-    "idempotency key"
-  );
-  const summary = normalizeBoundedString(record.summary, fallback.summary, 2e3, "summary");
-  const skills = Object.hasOwn(record, "skills") ? normalizeStringList(record.skills, "skills") : fallback.skills;
-  const createdCardIds = Object.hasOwn(record, "createdCardIds") ? normalizeStringList(record.createdCardIds, "created card ids", 120) : fallback.createdCardIds;
-  const scheduledAt = Object.hasOwn(record, "scheduledAt") ? normalizeTimestamp(record.scheduledAt, 0) || void 0 : fallback.scheduledAt;
-  const maxRuntimeSeconds = Object.hasOwn(record, "maxRuntimeSeconds") ? normalizePositiveInteger(record.maxRuntimeSeconds, "max runtime seconds") : fallback.maxRuntimeSeconds;
-  const maxRetries = Object.hasOwn(record, "maxRetries") ? normalizePositiveInteger(record.maxRetries, "max retries") : fallback.maxRetries;
-  const dispatchCount = Object.hasOwn(record, "dispatchCount") ? normalizeTimestamp(record.dispatchCount, 0) || void 0 : fallback.dispatchCount;
-  const lastDispatchAt = Object.hasOwn(record, "lastDispatchAt") ? normalizeTimestamp(record.lastDispatchAt, 0) || void 0 : fallback.lastDispatchAt;
-  const workspace = Object.hasOwn(record, "workspace") ? normalizeWorkspace(record.workspace, fallback.workspace) : fallback.workspace;
-  const workspaceAccess = fallback.workspaceAccess;
-  const launch = normalizeLaunchState(
-    options.allowLaunchState && Object.hasOwn(record, "launch") ? record.launch : fallback.launch
-  );
-  const next = removeUndefinedAutomationFields({
-    ...tenant ? { tenant } : {},
-    ...boardId ? { boardId } : {},
-    ...createdByCardId ? { createdByCardId } : {},
-    ...idempotencyKey ? { idempotencyKey } : {},
-    ...skills?.length ? { skills } : {},
-    ...workspace ? { workspace } : {},
-    ...workspaceAccess ? { workspaceAccess } : {},
-    ...maxRuntimeSeconds ? { maxRuntimeSeconds } : {},
-    ...maxRetries ? { maxRetries } : {},
-    ...scheduledAt ? { scheduledAt } : {},
-    ...summary ? { summary } : {},
-    ...createdCardIds?.length ? { createdCardIds } : {},
-    ...dispatchCount ? { dispatchCount } : {},
-    ...lastDispatchAt ? { lastDispatchAt } : {},
-    ...launch ? { launch } : {}
-  });
-  return Object.keys(next).length ? next : void 0;
-}
-function normalizeLaunchTimestamp(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : void 0;
-}
-function normalizeLaunchString(value, maxLength) {
-  const normalized2 = normalizeOptionalString(value);
-  return normalized2 && normalized2.length <= maxLength ? normalized2 : void 0;
-}
-function normalizeLaunchState(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return void 0;
-  }
-  const record = value;
-  const requestedSessionKey = normalizeLaunchString(record.requestedSessionKey, 240);
-  const provisionalRunId = normalizeLaunchString(record.provisionalRunId, 160);
-  const preparedAt = normalizeLaunchTimestamp(record.preparedAt);
-  const preparedBy = normalizeLaunchString(record.preparedBy, 160);
-  if (!requestedSessionKey || !provisionalRunId || preparedAt === void 0 || !preparedBy) {
-    return void 0;
-  }
-  const identity = { requestedSessionKey, provisionalRunId, preparedAt, preparedBy };
-  if (record.phase === "prepared") {
-    return { phase: "prepared", ...identity };
-  }
-  if (record.phase === "accepted") {
-    const acceptedAt = normalizeLaunchTimestamp(record.acceptedAt);
-    const acceptedSessionKey = normalizeLaunchString(record.acceptedSessionKey, 240);
-    const acceptedRunId = normalizeLaunchString(record.acceptedRunId, 160);
-    return acceptedAt === void 0 || !acceptedSessionKey ? void 0 : {
-      phase: "accepted",
-      ...identity,
-      acceptedAt,
-      acceptedSessionKey,
-      ...acceptedRunId ? { acceptedRunId } : {}
-    };
-  }
-  if (record.phase === "failed") {
-    const failedAt = normalizeLaunchTimestamp(record.failedAt);
-    const reason = normalizeLaunchString(record.reason, 800);
-    return failedAt === void 0 || !reason ? void 0 : { phase: "failed", ...identity, failedAt, reason };
-  }
-  return void 0;
-}
-function deriveChildIdempotencyKey(parentKey, index) {
-  if (!parentKey) {
-    return void 0;
-  }
-  const key = `${parentKey}:child:${index}`;
-  return key.length <= 160 ? key : void 0;
-}
-function normalizeExecutionMode(value, fallback) {
-  if (typeof value === "string" && TASKFOLD_EXECUTION_MODES.includes(value)) {
-    return value;
-  }
-  return fallback;
-}
-function normalizeExecutionStatus(value, fallback) {
-  if (typeof value === "string" && TASKFOLD_EXECUTION_STATUSES.includes(value)) {
-    return value;
-  }
-  return fallback;
-}
-function normalizeAttemptStatus(value, fallback) {
-  if (typeof value === "string" && TASKFOLD_ATTEMPT_STATUSES.includes(value)) {
-    return value;
-  }
-  return fallback;
-}
-function normalizeLinkType(value, fallback) {
-  if (typeof value === "string" && TASKFOLD_LINK_TYPES.includes(value)) {
-    return value;
-  }
-  return fallback;
-}
-function normalizeProofStatus(value, fallback) {
-  if (typeof value === "string" && TASKFOLD_PROOF_STATUSES.includes(value)) {
-    return value;
-  }
-  return fallback;
-}
-function normalizeTemplateId(value) {
-  return typeof value === "string" && TASKFOLD_TEMPLATE_IDS.includes(value) ? value : void 0;
-}
-function normalizeTimestamp(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
-}
-function normalizeEvent(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const kind = TASKFOLD_EVENT_KINDS.includes(record.kind) ? record.kind : null;
-  const at = normalizeTimestamp(record.at, 0);
-  if (!id || !kind || !at) {
-    return null;
-  }
-  const fromStatus = typeof record.fromStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.fromStatus) ? record.fromStatus : void 0;
-  const toStatus = typeof record.toStatus === "string" && TASKFOLD_STATUS_ID_PATTERN.test(record.toStatus) ? record.toStatus : void 0;
-  const fromMilestoneId = normalizeBoundedString(
-    record.fromMilestoneId,
-    void 0,
-    120,
-    "event source milestone"
-  );
-  const toMilestoneId = normalizeBoundedString(
-    record.toMilestoneId,
-    void 0,
-    120,
-    "event target milestone"
-  );
-  const sessionKey = normalizeOptionalString(record.sessionKey);
-  const runId = normalizeOptionalString(record.runId);
-  return {
-    id,
-    kind,
-    at,
-    ...fromStatus ? { fromStatus } : {},
-    ...toStatus ? { toStatus } : {},
-    ...fromMilestoneId ? { fromMilestoneId } : {},
-    ...toMilestoneId ? { toMilestoneId } : {},
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {}
-  };
-}
-function normalizeEvents(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.map(normalizeEvent).filter((event) => event !== null).slice(-MAX_CARD_EVENTS);
-}
-function normalizeAttempt(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const startedAt = normalizeTimestamp(record.startedAt, 0);
-  if (!id || !startedAt) {
-    return null;
-  }
-  const endedAt = normalizeTimestamp(record.endedAt, 0);
-  const sessionKey = normalizeOptionalString(record.sessionKey);
-  const runId = normalizeOptionalString(record.runId);
-  const error = normalizeBoundedString(record.error, void 0, 800, "attempt error");
-  const engine = normalizeBoundedString(record.engine, void 0, 160, "attempt engine");
-  const model = normalizeBoundedString(record.model, void 0, 160, "attempt model");
-  const promptVersion = typeof record.promptVersion === "number" && Number.isSafeInteger(record.promptVersion) && record.promptVersion > 0 ? record.promptVersion : void 0;
-  return {
-    id,
-    status: normalizeAttemptStatus(record.status, "running"),
-    startedAt,
-    ...endedAt ? { endedAt } : {},
-    ...engine ? { engine } : {},
-    ...typeof record.mode === "string" && TASKFOLD_EXECUTION_MODES.includes(record.mode) ? { mode: record.mode } : {},
-    ...model ? { model } : {},
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {},
-    ...error ? { error } : {},
-    ...promptVersion !== void 0 ? { promptVersion } : {}
-  };
-}
-function normalizeComment(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const body = normalizeBoundedString(record.body, void 0, 2e3, "comment body");
-  const createdAt = normalizeTimestamp(record.createdAt, 0);
-  if (!id || !body || !createdAt) {
-    return null;
-  }
-  const updatedAt = normalizeTimestamp(record.updatedAt, 0);
-  return { id, body, createdAt, ...updatedAt ? { updatedAt } : {} };
-}
-function normalizeLink(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const createdAt = normalizeTimestamp(record.createdAt, 0);
-  if (!id || !createdAt) {
-    return null;
-  }
-  const targetCardId = normalizeBoundedString(record.targetCardId, void 0, 120, "link target");
-  const title = normalizeBoundedString(record.title, void 0, 180, "link title");
-  const url = normalizeBoundedString(record.url, void 0, 2e3, "link URL");
-  if (!targetCardId && !url) {
-    return null;
-  }
-  return {
-    id,
-    type: normalizeLinkType(record.type, "relates_to"),
-    createdAt,
-    ...targetCardId ? { targetCardId } : {},
-    ...title ? { title } : {},
-    ...url ? { url } : {}
-  };
-}
-function isDependencyLink(link) {
-  return link.type === "parent" || link.type === "child" || link.type === "contains" || link.type === "contained_by";
-}
-function normalizeProof(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const createdAt = normalizeTimestamp(record.createdAt, 0);
-  if (!id || !createdAt) {
-    return null;
-  }
-  const label = normalizeBoundedString(record.label, void 0, 160, "proof label");
-  const command = normalizeBoundedString(record.command, void 0, 1e3, "proof command");
-  const url = normalizeBoundedString(record.url, void 0, 2e3, "proof URL");
-  const note = normalizeBoundedString(record.note, void 0, 2e3, "proof note");
-  return {
-    id,
-    status: normalizeProofStatus(record.status, "unknown"),
-    createdAt,
-    ...label ? { label } : {},
-    ...command ? { command } : {},
-    ...url ? { url } : {},
-    ...note ? { note } : {}
-  };
-}
-function normalizeArtifact(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id) ?? randomUUID3();
-  const createdAt = normalizeTimestamp(record.createdAt, Date.now());
-  const label = normalizeBoundedString(record.label, void 0, 160, "artifact label");
-  const url = normalizeBoundedString(record.url, void 0, 2e3, "artifact URL");
-  const artifactPath = normalizeBoundedString(record.path, void 0, 2e3, "artifact path");
-  const mimeType = normalizeBoundedString(record.mimeType, void 0, 160, "artifact MIME type");
-  if (!url && !artifactPath) {
-    return null;
-  }
-  return {
-    id,
-    createdAt,
-    ...label ? { label } : {},
-    ...url ? { url } : {},
-    ...artifactPath ? { path: artifactPath } : {},
-    ...mimeType ? { mimeType } : {}
-  };
-}
-function normalizeAttachment(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const cardId = normalizeBoundedString(record.cardId, void 0, 120, "card id");
-  const fileName = normalizeBoundedString(record.fileName, void 0, 240, "attachment file name");
-  const createdAt = normalizeTimestamp(record.createdAt, 0);
-  const byteSize = typeof record.byteSize === "number" && Number.isFinite(record.byteSize) ? Math.max(0, Math.trunc(record.byteSize)) : 0;
-  if (!id || !cardId || !fileName || !createdAt || byteSize <= 0) {
-    return null;
-  }
-  const mimeType = normalizeBoundedString(record.mimeType, void 0, 160, "attachment MIME type");
-  const note = normalizeBoundedString(record.note, void 0, 400, "attachment note");
-  return {
-    id,
-    cardId,
-    createdAt,
-    fileName,
-    byteSize,
-    ...mimeType ? { mimeType } : {},
-    ...note ? { note } : {}
-  };
-}
-function normalizeWorkerLog(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id);
-  const message = normalizeBoundedString(record.message, void 0, 800, "worker log message");
-  const createdAt = normalizeTimestamp(record.createdAt, 0);
-  if (!id || !message || !createdAt) {
-    return null;
-  }
-  const level = record.level === "warning" || record.level === "error" || record.level === "info" ? record.level : "info";
-  const sessionKey = normalizeBoundedString(record.sessionKey, void 0, 240, "session key");
-  const runId = normalizeBoundedString(record.runId, void 0, 160, "run id");
-  return {
-    id,
-    level,
-    message,
-    createdAt,
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {}
-  };
-}
-function normalizeWorkerProtocol(value, fallback) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-  const record = value;
-  const state = record.state === "idle" || record.state === "running" || record.state === "completed" || record.state === "blocked" || record.state === "violated" ? record.state : fallback?.state;
-  if (!state) {
-    return void 0;
-  }
-  const updatedAt = normalizeTimestamp(record.updatedAt, fallback?.updatedAt ?? Date.now());
-  const detail = normalizeBoundedString(record.detail, fallback?.detail, 800, "protocol detail");
-  return {
-    state,
-    updatedAt,
-    ...detail ? { detail } : {}
-  };
-}
-function normalizeAttachmentInput(cardId, input, now) {
-  const fileName = normalizeBoundedString(input.fileName, void 0, 240, "attachment file name");
-  if (!fileName) {
-    throw new Error("attachment fileName is required.");
-  }
-  const contentBase64 = typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : void 0;
-  if (!contentBase64) {
-    throw new Error("attachment contentBase64 is required.");
-  }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0 || contentBase64.length > Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4) {
-    throw new Error("attachment contentBase64 must be canonical base64.");
-  }
-  const decoded = Buffer.from(contentBase64, "base64");
-  if (decoded.toString("base64") !== contentBase64) {
-    throw new Error("attachment contentBase64 must be canonical base64.");
-  }
-  const byteSize = decoded.length;
-  if (byteSize <= 0 || byteSize > MAX_ATTACHMENT_BYTES) {
-    throw new Error(`attachment must be between 1 and ${MAX_ATTACHMENT_BYTES} bytes.`);
-  }
-  const mimeType = normalizeBoundedString(input.mimeType, void 0, 160, "attachment MIME type");
-  const note = normalizeBoundedString(input.note, void 0, 400, "attachment note");
-  const attachment = {
-    id: randomUUID3(),
-    cardId,
-    createdAt: now,
-    fileName,
-    byteSize,
-    ...mimeType ? { mimeType } : {},
-    ...note ? { note } : {}
-  };
-  return { attachment, contentBase64 };
-}
-function normalizeCardImageInput(input) {
-  const contentBase64 = typeof input.contentBase64 === "string" && input.contentBase64 ? input.contentBase64 : void 0;
-  if (!contentBase64) {
-    throw new Error("card image contentBase64 is required.");
-  }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64) || contentBase64.length % 4 !== 0) {
-    throw new Error("card image contentBase64 must be canonical base64.");
-  }
-  const bytes = Buffer.from(contentBase64, "base64");
-  if (bytes.length === 0 || bytes.toString("base64") !== contentBase64) {
-    throw new Error("card image contentBase64 must be canonical base64.");
-  }
-  const declaredMime = typeof input.mimeType === "string" ? input.mimeType.trim() : "";
-  const fileName = typeof input.fileName === "string" ? input.fileName.trim() : "";
-  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
-  const extension = (declaredMime ? taskfoldCardImageExtensionForMime(declaredMime) : void 0) ?? (taskfoldCardImageMimeType(fileExtension) ? fileExtension : void 0);
-  if (!extension) {
-    throw new Error(
-      "card image must be png, jpeg, gif, webp, avif or bmp (set mimeType or a matching fileName extension)."
-    );
-  }
-  return { extension, mimeType: taskfoldCardImageMimeType(extension), bytes };
-}
-function normalizeClaim(value, fallback) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-  const record = value;
-  const ownerId = normalizeBoundedString(record.ownerId, fallback?.ownerId, 120, "claim owner");
-  const token = normalizeBoundedString(record.token, fallback?.token, 160, "claim token");
-  const claimedAt = normalizeTimestamp(record.claimedAt, fallback?.claimedAt ?? Date.now());
-  const lastHeartbeatAt = normalizeTimestamp(
-    record.lastHeartbeatAt,
-    fallback?.lastHeartbeatAt ?? claimedAt
-  );
-  const expiresAt = normalizeTimestamp(record.expiresAt, fallback?.expiresAt ?? 0);
-  if (!ownerId || !token || !claimedAt || !lastHeartbeatAt) {
-    return void 0;
-  }
-  return {
-    ownerId,
-    token,
-    claimedAt,
-    lastHeartbeatAt,
-    ...expiresAt ? { expiresAt } : {}
-  };
-}
-function normalizeDiagnosticAction(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const kind = record.kind === "claim" || record.kind === "unblock" || record.kind === "reassign" || record.kind === "add_proof" || record.kind === "open_session" ? record.kind : void 0;
-  const label = normalizeBoundedString(record.label, void 0, 120, "diagnostic action label");
-  return kind && label ? { kind, label } : null;
-}
-function normalizeDiagnostic(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const kind = TASKFOLD_DIAGNOSTIC_KINDS.includes(record.kind) ? record.kind : void 0;
-  const severity = TASKFOLD_DIAGNOSTIC_SEVERITIES.includes(
-    record.severity
-  ) ? record.severity : "warning";
-  const title = normalizeBoundedString(record.title, void 0, 160, "diagnostic title");
-  const detail = normalizeBoundedString(record.detail, void 0, 800, "diagnostic detail");
-  const firstSeenAt = normalizeTimestamp(record.firstSeenAt, Date.now());
-  const lastSeenAt = normalizeTimestamp(record.lastSeenAt, firstSeenAt);
-  if (!kind || !title || !detail) {
-    return null;
-  }
-  return {
-    kind,
-    severity,
-    title,
-    detail,
-    firstSeenAt,
-    lastSeenAt,
-    count: typeof record.count === "number" && Number.isFinite(record.count) ? Math.max(1, Math.trunc(record.count)) : 1,
-    actions: Array.isArray(record.actions) ? record.actions.map(normalizeDiagnosticAction).filter((action) => action !== null).slice(0, 4) : []
-  };
-}
-function normalizeNotification(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const record = value;
-  const id = normalizeOptionalString(record.id) ?? randomUUID3();
-  const kind = TASKFOLD_NOTIFICATION_KINDS.includes(record.kind) ? record.kind : void 0;
-  const createdAt = normalizeTimestamp(record.createdAt, Date.now());
-  const sequence = normalizeTimestamp(record.sequence, 0) || void 0;
-  const message = normalizeBoundedString(record.message, void 0, 240, "notification message");
-  if (!kind || !message) {
-    return null;
-  }
-  const sessionKey = normalizeBoundedString(record.sessionKey, void 0, 240, "session key");
-  const runId = normalizeBoundedString(record.runId, void 0, 120, "run id");
-  return {
-    id,
-    kind,
-    createdAt,
-    ...sequence ? { sequence } : {},
-    message,
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {}
-  };
-}
-function normalizeProofInput(input, now) {
-  const label = normalizeBoundedString(input.label, void 0, 160, "proof label");
-  const command = normalizeBoundedString(input.command, void 0, 1e3, "proof command");
-  const url = normalizeBoundedString(input.url, void 0, 2e3, "proof URL");
-  const note = normalizeBoundedString(input.note, void 0, 2e3, "proof note");
-  return {
-    id: randomUUID3(),
-    status: normalizeProofStatus(input.status, "unknown"),
-    createdAt: now,
-    ...label ? { label } : {},
-    ...command ? { command } : {},
-    ...url ? { url } : {},
-    ...note ? { note } : {}
-  };
-}
-function completionProofConflicts(existing, completion) {
-  return ["label", "command", "url", "note"].some(
-    (field) => completion[field] !== void 0 && completion[field] !== existing[field]
-  );
-}
-function appendCompletionProof(existing, proof, proofId) {
-  const entries = [...existing ?? []];
-  if (!proofId) {
-    return [...entries, proof].slice(-MAX_CARD_PROOF);
-  }
-  const index = entries.findIndex((entry) => entry.id === proofId);
-  const pending = index >= 0 ? entries[index] : void 0;
-  if (!pending) {
-    throw new Error(`proof not found: ${proofId}`);
-  }
-  if (proof.status === "unknown") {
-    throw new Error("completion proof status must be passed, failed, or skipped.");
-  }
-  if (completionProofConflicts(pending, proof)) {
-    throw new Error(`completion proof does not match pending proof: ${proofId}`);
-  }
-  if (pending.status !== "unknown") {
-    if (pending.status !== proof.status) {
-      throw new Error(`completion proof status does not match existing proof: ${proofId}`);
-    }
-    return entries.slice(-MAX_CARD_PROOF);
-  }
-  entries[index] = { ...pending, status: proof.status };
-  return entries.slice(-MAX_CARD_PROOF);
-}
-function normalizeMetadata(value, fallback = {}, options = {}) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return trimMetadataToBudget(fallback, options);
-  }
-  const record = value;
-  const stale = record.stale && typeof record.stale === "object" && !Array.isArray(record.stale) ? record.stale : null;
-  const hasArchivedAt = Object.hasOwn(record, "archivedAt");
-  const hasStale = Object.hasOwn(record, "stale");
-  const hasLifecycleStatusSourceUpdatedAt = Object.hasOwn(record, "lifecycleStatusSourceUpdatedAt");
-  const links = Array.isArray(record.links) ? record.links.map(normalizeLink).filter((link) => link !== null) : void 0;
-  const normalizedLinks = links === void 0 ? fallback.links : options.allowDependencyLinks === false ? (() => {
-    const dependencyLinks = (fallback.links ?? []).filter(isDependencyLink);
-    const ordinaryCapacity = Math.max(0, MAX_CARD_LINKS - dependencyLinks.length);
-    return [
-      ...dependencyLinks.slice(-MAX_CARD_LINKS),
-      ...ordinaryCapacity > 0 ? links.filter((link) => !isDependencyLink(link)).slice(-ordinaryCapacity) : []
-    ];
-  })() : links.slice(-MAX_CARD_LINKS);
-  const normalized2 = {
-    attempts: Array.isArray(record.attempts) ? record.attempts.map(normalizeAttempt).filter((attempt) => attempt !== null).slice(-MAX_CARD_ATTEMPTS) : fallback.attempts,
-    comments: Array.isArray(record.comments) ? record.comments.map(normalizeComment).filter((comment) => comment !== null).slice(-MAX_CARD_COMMENTS) : fallback.comments,
-    links: normalizedLinks,
-    proof: Array.isArray(record.proof) ? record.proof.map(normalizeProof).filter((proof) => proof !== null).slice(-MAX_CARD_PROOF) : fallback.proof,
-    artifacts: Array.isArray(record.artifacts) ? record.artifacts.map(normalizeArtifact).filter((artifact) => artifact !== null).slice(-MAX_CARD_ARTIFACTS) : fallback.artifacts,
-    attachments: Array.isArray(record.attachments) ? record.attachments.map(normalizeAttachment).filter((attachment) => attachment !== null).slice(-MAX_CARD_ATTACHMENTS) : fallback.attachments,
-    workerLogs: Array.isArray(record.workerLogs) ? record.workerLogs.map(normalizeWorkerLog).filter((log) => log !== null).slice(-MAX_CARD_WORKER_LOGS) : fallback.workerLogs,
-    workerProtocol: Object.hasOwn(record, "workerProtocol") ? normalizeWorkerProtocol(record.workerProtocol, fallback.workerProtocol) : fallback.workerProtocol,
-    automation: Object.hasOwn(record, "automation") ? normalizeAutomation(record.automation, fallback.automation, {
-      allowLaunchState: options.allowAutomationLaunch
-    }) : fallback.automation,
-    claim: Object.hasOwn(record, "claim") ? record.claim ? normalizeClaim(record.claim, fallback.claim) : void 0 : fallback.claim,
-    diagnostics: Array.isArray(record.diagnostics) ? record.diagnostics.map(normalizeDiagnostic).filter(
-      (diagnosticLocal) => diagnosticLocal !== null
-    ).slice(-MAX_CARD_DIAGNOSTICS) : fallback.diagnostics,
-    notifications: Array.isArray(record.notifications) ? record.notifications.map(normalizeNotification).filter((notification) => notification !== null).slice(-MAX_CARD_NOTIFICATIONS) : fallback.notifications,
-    templateId: normalizeTemplateId(record.templateId) ?? fallback.templateId,
-    archivedAt: hasArchivedAt ? normalizeTimestamp(record.archivedAt, 0) || void 0 : fallback.archivedAt,
-    stale: hasStale ? stale ? {
-      detectedAt: normalizeTimestamp(stale.detectedAt, Date.now()),
-      lastSessionUpdatedAt: normalizeTimestamp(stale.lastSessionUpdatedAt, 0) || void 0,
-      reason: normalizeBoundedString(stale.reason, fallback.stale?.reason, 240, "stale reason") ?? "Session has not reported recent activity."
-    } : void 0 : fallback.stale,
-    lifecycleStatusSourceUpdatedAt: hasLifecycleStatusSourceUpdatedAt ? normalizeTimestamp(record.lifecycleStatusSourceUpdatedAt, 0) : fallback.lifecycleStatusSourceUpdatedAt,
-    failureCount: typeof record.failureCount === "number" && Number.isFinite(record.failureCount) ? Math.max(0, Math.trunc(record.failureCount)) : fallback.failureCount
-  };
-  return trimMetadataToBudget(normalized2, options);
-}
-function normalizeExecution(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return void 0;
-  }
-  const record = value;
-  const now = Date.now();
-  const engine = normalizeBoundedString(record.engine, void 0, 160, "execution engine");
-  const model = normalizeBoundedString(record.model, void 0, 160, "execution model");
-  const normalizedId = normalizeOptionalString(record.id);
-  const sessionKey = normalizeOptionalString(record.sessionKey);
-  const runId = normalizeOptionalString(record.runId);
-  if (!normalizedId && !engine && !model && !sessionKey && !runId) {
-    return void 0;
-  }
-  const id = normalizedId ?? randomUUID3();
-  const startedAt = normalizeTimestamp(record.startedAt, now);
-  const updatedAt = normalizeTimestamp(record.updatedAt, startedAt);
-  return {
-    id,
-    kind: "agent-session",
-    mode: normalizeExecutionMode(record.mode, "autonomous"),
-    status: normalizeExecutionStatus(record.status, "idle"),
-    startedAt,
-    updatedAt,
-    ...engine ? { engine } : {},
-    ...model ? { model } : {},
-    ...sessionKey ? { sessionKey } : {},
-    ...runId ? { runId } : {}
-  };
-}
-function syncExecutionSessionKey(execution, sessionKey) {
-  if (!execution) {
-    return void 0;
-  }
-  return removeUndefinedExecutionFields({
-    ...execution,
-    sessionKey,
-    updatedAt: Date.now()
-  });
-}
-function removeUndefinedExecutionFields(execution) {
-  const next = { ...execution };
-  if (next.engine === void 0) {
-    delete next.engine;
-  }
-  if (next.model === void 0) {
-    delete next.model;
-  }
-  if (next.sessionKey === void 0) {
-    delete next.sessionKey;
-  }
-  if (next.runId === void 0) {
-    delete next.runId;
-  }
-  return next;
-}
-function removeUndefinedAutomationFields(automation) {
-  const next = { ...automation };
-  for (const key of [
-    "tenant",
-    "boardId",
-    "createdByCardId",
-    "idempotencyKey",
-    "skills",
-    "workspace",
-    "workspaceAccess",
-    "maxRuntimeSeconds",
-    "maxRetries",
-    "scheduledAt",
-    "summary",
-    "createdCardIds",
-    "dispatchCount",
-    "lastDispatchAt",
-    "launch"
-  ]) {
-    const value = next[key];
-    if (value === void 0 || Array.isArray(value) && value.length === 0 || typeof value === "object" && value !== null && Object.keys(value).length === 0) {
-      delete next[key];
-    }
-  }
-  return next;
-}
-function removeUndefinedMetadataFields(metadata) {
-  const next = { ...metadata };
-  for (const key of [
-    "attempts",
-    "comments",
-    "links",
-    "proof",
-    "artifacts",
-    "attachments",
-    "workerLogs",
-    "workerProtocol",
-    "automation",
-    "claim",
-    "diagnostics",
-    "notifications",
-    "templateId",
-    "archivedAt",
-    "stale",
-    "lifecycleStatusSourceUpdatedAt",
-    "failureCount"
-  ]) {
-    const value = next[key];
-    if (value === void 0 || Array.isArray(value) && value.length === 0 || typeof value === "number" && value === 0 && key === "failureCount") {
-      delete next[key];
-    }
-  }
-  return next;
-}
-function clearDiagnostics(metadata, kinds) {
-  if (!metadata?.diagnostics) {
-    return metadata ?? {};
-  }
-  return {
-    ...metadata,
-    diagnostics: metadata.diagnostics.filter((entry) => !kinds.includes(entry.kind))
-  };
-}
-function metadataIsEmpty(metadata) {
-  return !metadata || Object.keys(metadata).length === 0;
-}
-function metadataByteSize(metadata) {
-  return Buffer.byteLength(JSON.stringify(metadata), "utf8");
-}
-function dropFirst(items) {
-  if (!items?.length) {
-    return void 0;
-  }
-  const next = items.slice(1);
-  return next.length ? next : void 0;
-}
-function dropFirstProofExcept(items, preserveProofId) {
-  if (!items?.length) {
-    return void 0;
-  }
-  const index = preserveProofId ? items.findIndex((proof) => proof.id !== preserveProofId) : 0;
-  if (index < 0) {
-    return items.slice();
-  }
-  const next = items.filter((_, itemIndex) => itemIndex !== index);
-  return next.length ? next : void 0;
-}
-function dropFirstNonDependencyLink(items) {
-  if (!items?.length) {
-    return void 0;
-  }
-  const index = items.findIndex((link) => !isDependencyLink(link));
-  if (index < 0) {
-    return items.slice();
-  }
-  const next = items.filter((_, itemIndex) => itemIndex !== index);
-  return next.length ? next : void 0;
-}
-function appendLinkPreservingDependencies(links, link) {
-  const next = [...links, link];
-  if (next.length <= MAX_CARD_LINKS) {
-    return next;
-  }
-  const dropIndex = next.findIndex((entry) => !isDependencyLink(entry));
-  if (dropIndex < 0 || dropIndex === next.length - 1) {
-    throw new Error("card link limit reached.");
-  }
-  return next.filter((_, index) => index !== dropIndex);
-}
-function trimMetadataToBudget(metadata, options = {}) {
-  let next = removeUndefinedMetadataFields(metadata);
-  while (metadataByteSize(next) > MAX_CARD_METADATA_BYTES) {
-    const currentSize = metadataByteSize(next);
-    if (next.attempts?.length) {
-      next = removeUndefinedMetadataFields({ ...next, attempts: dropFirst(next.attempts) });
-    } else if (next.diagnostics?.length) {
-      next = removeUndefinedMetadataFields({ ...next, diagnostics: dropFirst(next.diagnostics) });
-    } else if (next.notifications?.length) {
-      next = removeUndefinedMetadataFields({
-        ...next,
-        notifications: dropFirst(next.notifications)
-      });
-    } else if (next.proof?.some((proof) => !options.preserveProofId || proof.id !== options.preserveProofId)) {
-      next = removeUndefinedMetadataFields({
-        ...next,
-        proof: dropFirstProofExcept(next.proof, options.preserveProofId)
-      });
-    } else if (next.artifacts?.length) {
-      next = removeUndefinedMetadataFields({ ...next, artifacts: dropFirst(next.artifacts) });
-    } else if (next.attachments?.length) {
-      next = removeUndefinedMetadataFields({
-        ...next,
-        attachments: dropFirst(next.attachments)
-      });
-    } else if (next.workerLogs?.length) {
-      next = removeUndefinedMetadataFields({ ...next, workerLogs: dropFirst(next.workerLogs) });
-    } else if (next.links?.length) {
-      const links = dropFirstNonDependencyLink(next.links);
-      if (links?.length === next.links.length) {
-        next = removeUndefinedMetadataFields({ ...next, comments: dropFirst(next.comments) });
-      } else {
-        next = removeUndefinedMetadataFields({ ...next, links });
-      }
-    } else if (next.comments?.length) {
-      next = removeUndefinedMetadataFields({ ...next, comments: dropFirst(next.comments) });
-    } else if (options.preserveProofId) {
-      throw new Error(`card metadata cannot retain proof: ${options.preserveProofId}`);
-    }
-    if (metadataByteSize(next) >= currentSize) {
-      if (options.preserveProofId) {
-        throw new Error(`card metadata cannot retain proof: ${options.preserveProofId}`);
-      }
-      break;
-    }
-  }
-  return next;
-}
-
-// ../core/src/store-card-helpers.ts
-function compareCards(left, right, statusRank = LEGACY_STATUS_REGISTRY.rank) {
-  if (left.status !== right.status) {
-    return statusRank(left.status) - statusRank(right.status);
-  }
-  if (left.position !== right.position) {
-    return left.position - right.position;
-  }
-  if (left.createdAt !== right.createdAt) {
-    return left.createdAt - right.createdAt;
-  }
-  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
-}
-function cardSessionKey(card) {
-  return card.sessionKey ?? card.execution?.sessionKey;
-}
-function cardRunId(card) {
-  return card.runId ?? card.execution?.runId;
-}
-function executionAttemptStatus(execution) {
-  if (execution.status === "running") {
-    return "running";
-  }
-  if (execution.status === "blocked") {
-    return "blocked";
-  }
-  if (execution.status === "done" || execution.status === "review") {
-    return "succeeded";
-  }
-  return "stopped";
-}
-function syncExecutionAttemptMetadata(metadata, execution, now) {
-  if (!execution) {
-    return metadata;
-  }
-  const attempts = [...metadata.attempts ?? []];
-  const key = execution.runId ?? execution.sessionKey ?? execution.id;
-  const existingIndex = attempts.findIndex(
-    (attempt) => execution.runId && attempt.runId === execution.runId || !execution.runId && attempt.id === key
-  );
-  const existingAttempt = existingIndex >= 0 ? attempts[existingIndex] : void 0;
-  const attemptStatus = execution.status === "blocked" && existingAttempt?.status === "stopped" ? "stopped" : executionAttemptStatus(execution);
-  const nextAttempt = {
-    id: existingAttempt?.id ?? key,
-    status: attemptStatus,
-    startedAt: existingAttempt?.startedAt ?? execution.startedAt,
-    mode: execution.mode,
-    ...execution.engine ? { engine: execution.engine } : {},
-    ...execution.model ? { model: execution.model } : {},
-    ...execution.sessionKey ? { sessionKey: execution.sessionKey } : {},
-    ...execution.runId ? { runId: execution.runId } : {},
-    ...attemptStatus !== "running" && { endedAt: execution.updatedAt || now },
-    ...attemptStatus !== "succeeded" && existingAttempt?.error ? { error: existingAttempt.error } : {},
-    // Stamped once when the attempt appears, then carried forward, so a prompt
-    // change mid-run cannot relabel an attempt already under way.
-    promptVersion: existingAttempt?.promptVersion ?? TASKFOLD_PROMPT_VERSION
-  };
-  if (existingIndex >= 0) {
-    attempts[existingIndex] = nextAttempt;
-  } else {
-    attempts.push(nextAttempt);
-  }
-  const previousFailed = existingAttempt?.status === "blocked" || existingAttempt?.status === "failed";
-  const attemptFailed = attemptStatus === "blocked" || attemptStatus === "failed";
-  const failureCount = attemptFailed ? previousFailed ? metadata.failureCount : (metadata.failureCount ?? 0) + 1 : attemptStatus === "succeeded" ? 0 : metadata.failureCount;
-  return removeUndefinedMetadataFields({
-    ...metadata,
-    attempts: attempts.slice(-MAX_CARD_ATTEMPTS),
-    failureCount
-  });
-}
-function appendEvent(card, event, at = Date.now()) {
-  return [
-    ...normalizeEvents(card.events),
-    {
-      id: randomUUID4(),
-      at,
-      ...event
-    }
-  ].slice(-MAX_CARD_EVENTS);
-}
-function latestMetadataIdChanged(existing, next) {
-  const latestId = next?.at(-1)?.id;
-  return Boolean(latestId && latestId !== existing?.at(-1)?.id);
-}
-function lifecycleStatusSourceUpdatedAtFromPatch(metadata) {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return void 0;
-  }
-  if (!Object.hasOwn(metadata, "lifecycleStatusSourceUpdatedAt")) {
-    return void 0;
-  }
-  const sourceUpdatedAt = normalizeTimestamp(
-    metadata.lifecycleStatusSourceUpdatedAt,
-    0
-  );
-  return sourceUpdatedAt;
-}
-function latestStatusTransitionAt(card) {
-  for (let index = (card.events?.length ?? 0) - 1; index >= 0; index -= 1) {
-    const event = card.events?.[index];
-    if ((event?.kind === "moved" || event?.kind === "created") && (event.kind === "created" && card.status !== "todo" || event.kind === "moved" && event.fromStatus !== event.toStatus) && event.toStatus === card.status && typeof event.at === "number" && Number.isFinite(event.at)) {
-      return event.at;
-    }
-  }
-  return void 0;
-}
-function shouldSkipPersistedLifecycleStatusUpdate(existing, sourceUpdatedAt) {
-  const lifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
-  if (lifecycleStatusSourceUpdatedAt !== void 0) {
-    return sourceUpdatedAt < lifecycleStatusSourceUpdatedAt;
-  }
-  const statusTransitionAt = latestStatusTransitionAt(existing);
-  return statusTransitionAt !== void 0 && sourceUpdatedAt < statusTransitionAt;
-}
-function updateEvent(existing, next) {
-  if (existing.metadata?.workerProtocol?.state !== next.metadata?.workerProtocol?.state && next.metadata?.workerProtocol?.state === "violated") {
-    return { kind: "protocol_violation" };
-  }
-  if (existing.status !== next.status || existing.position !== next.position) {
-    return {
-      kind: "moved",
-      fromStatus: existing.status,
-      toStatus: next.status
-    };
-  }
-  if (cardSessionKey(existing) !== cardSessionKey(next)) {
-    return {
-      kind: "linked",
-      ...cardSessionKey(next) ? { sessionKey: cardSessionKey(next) } : {}
-    };
-  }
-  if (existing.execution?.status !== next.execution?.status || existing.execution?.engine !== next.execution?.engine || cardRunId(existing) !== cardRunId(next)) {
-    const existingAttempts = existing.metadata?.attempts ?? [];
-    const nextAttempts = next.metadata?.attempts ?? [];
-    const latestAttempt = nextAttempts.at(-1);
-    if (nextAttempts.length > existingAttempts.length) {
-      return {
-        kind: "attempt_started",
-        ...latestAttempt?.sessionKey ? { sessionKey: latestAttempt.sessionKey } : {},
-        ...latestAttempt?.runId ? { runId: latestAttempt.runId } : {}
-      };
-    }
-    const previousAttempt = latestAttempt ? existingAttempts.find((attempt) => attempt.id === latestAttempt.id) : void 0;
-    if (latestAttempt && previousAttempt?.status !== latestAttempt.status) {
-      return {
-        kind: "attempt_updated",
-        ...latestAttempt.sessionKey ? { sessionKey: latestAttempt.sessionKey } : {},
-        ...latestAttempt.runId ? { runId: latestAttempt.runId } : {}
-      };
-    }
-    return {
-      kind: "execution_updated",
-      ...cardSessionKey(next) ? { sessionKey: cardSessionKey(next) } : {},
-      ...cardRunId(next) ? { runId: cardRunId(next) } : {}
-    };
-  }
-  if (existing.metadata?.claim?.token !== next.metadata?.claim?.token) {
-    return { kind: "claimed" };
-  }
-  if (existing.metadata?.claim?.lastHeartbeatAt !== next.metadata?.claim?.lastHeartbeatAt) {
-    return { kind: "heartbeat" };
-  }
-  if ((existing.metadata?.comments?.length ?? 0) !== (next.metadata?.comments?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.comments, next.metadata?.comments)) {
-    return { kind: "comment_added" };
-  }
-  if ((existing.metadata?.links?.length ?? 0) !== (next.metadata?.links?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.links, next.metadata?.links)) {
-    return { kind: "link_added" };
-  }
-  if ((existing.metadata?.proof?.length ?? 0) !== (next.metadata?.proof?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.proof, next.metadata?.proof)) {
-    return { kind: "proof_added" };
-  }
-  if ((existing.metadata?.artifacts?.length ?? 0) !== (next.metadata?.artifacts?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.artifacts, next.metadata?.artifacts)) {
-    return { kind: "artifact_added" };
-  }
-  if ((existing.metadata?.attachments?.length ?? 0) !== (next.metadata?.attachments?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.attachments, next.metadata?.attachments)) {
-    return (next.metadata?.attachments?.length ?? 0) > (existing.metadata?.attachments?.length ?? 0) ? { kind: "attachment_added" } : { kind: "edited" };
-  }
-  if (existing.metadata?.workerProtocol?.state !== next.metadata?.workerProtocol?.state) {
-    return { kind: "orchestration" };
-  }
-  if ((existing.metadata?.workerLogs?.length ?? 0) !== (next.metadata?.workerLogs?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.workerLogs, next.metadata?.workerLogs)) {
-    return { kind: "orchestration" };
-  }
-  if ((existing.metadata?.diagnostics?.length ?? 0) !== (next.metadata?.diagnostics?.length ?? 0)) {
-    return { kind: "diagnostic" };
-  }
-  if ((existing.metadata?.notifications?.length ?? 0) !== (next.metadata?.notifications?.length ?? 0) || latestMetadataIdChanged(existing.metadata?.notifications, next.metadata?.notifications)) {
-    return { kind: "notification" };
-  }
-  if (existing.metadata?.automation?.dispatchCount !== next.metadata?.automation?.dispatchCount || existing.metadata?.automation?.lastDispatchAt !== next.metadata?.automation?.lastDispatchAt) {
-    return { kind: "dispatch" };
-  }
-  if (!existing.metadata?.archivedAt && next.metadata?.archivedAt) {
-    return { kind: "archived" };
-  }
-  if (existing.metadata?.archivedAt && !next.metadata?.archivedAt) {
-    return { kind: "unarchived" };
-  }
-  if (!existing.metadata?.stale && next.metadata?.stale) {
-    return { kind: "stale" };
-  }
-  return { kind: "edited" };
-}
-function removeUndefinedCardFields(card) {
-  const next = { ...card };
-  for (const key of [
-    "notes",
-    "agentId",
-    "sessionKey",
-    "runId",
-    "taskId",
-    "sourceUrl",
-    "execution",
-    "delivery",
-    "sourceReferences",
-    "startedAt",
-    "completedAt",
-    "metadata"
-  ]) {
-    if (next[key] === void 0) {
-      delete next[key];
-    }
-  }
-  if (metadataIsEmpty(next.metadata)) {
-    delete next.metadata;
-  }
-  return next;
-}
-function assertCanMutateClaimedCard(card, scope) {
-  if (!scope) {
-    return;
-  }
-  const claim = card.metadata?.claim;
-  if (!claim) {
-    return;
-  }
-  const ownerId = normalizeOptionalString(scope.ownerId);
-  const token = normalizeOptionalString(scope.token);
-  if (claim.ownerId !== ownerId && !safeEqualSecret(token, claim.token)) {
-    throw new Error(`card is claimed by ${claim.ownerId}.`);
-  }
-}
-function retryBudgetExhausted(card) {
-  const maxRetries = card.metadata?.automation?.maxRetries;
-  return Boolean(maxRetries && (card.metadata?.failureCount ?? 0) > maxRetries);
-}
-function diagnostic(params, now) {
-  return {
-    ...params,
-    firstSeenAt: now,
-    lastSeenAt: now,
-    count: 1
-  };
-}
-function mergeDiagnostics(previous, next) {
-  const byKind = new Map(previous?.map((entry) => [entry.kind, entry]));
-  return next.map((entry) => {
-    const prior = byKind.get(entry.kind);
-    return prior ? {
-      ...entry,
-      firstSeenAt: prior.firstSeenAt,
-      count: prior.count + 1
-    } : entry;
-  });
-}
-function taskfoldLastActivityAt(card) {
-  return Math.max(
-    card.metadata?.claim?.lastHeartbeatAt ?? 0,
-    card.execution?.updatedAt ?? 0,
-    card.updatedAt
-  );
-}
-function computeCardDiagnostics(card, now) {
-  if (card.metadata?.archivedAt) {
-    if (card.status === "done") {
-      return [];
-    }
-    return [
-      diagnostic(
-        {
-          kind: "archived_but_active",
-          severity: "warning",
-          title: "Archived card is still in an active status",
-          detail: `Card status is "${card.status}" but it is archived, so it is excluded from dispatch without any start failure or error. Unarchive it or move it to "done" to stop the silent skip.`,
-          actions: []
-        },
-        now
-      )
-    ];
-  }
-  const diagnostics = [];
-  const claim = card.metadata?.claim;
-  const lastHeartbeatAt = taskfoldLastActivityAt(card);
-  if ((card.status === "todo" || card.status === "backlog" || card.status === "ready") && card.agentId && now - card.updatedAt > READY_STRANDED_MS) {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "stranded_ready",
-          severity: "warning",
-          title: "Assigned card is waiting",
-          detail: "The card has an assigned agent but has not been claimed recently.",
-          actions: [{ kind: "claim", label: "Claim card" }]
-        },
-        now
-      )
-    );
-  }
-  if (card.status === "running" && now - lastHeartbeatAt > RUNNING_HEARTBEAT_STALE_MS) {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "running_without_heartbeat",
-          severity: "error",
-          title: "Running card has no recent heartbeat",
-          detail: "The linked run or claim has not reported recent activity.",
-          actions: [
-            { kind: "open_session", label: "Open session" },
-            { kind: "reassign", label: "Reassign card" }
-          ]
-        },
-        now
-      )
-    );
-  }
-  if (card.status === "blocked" && now - card.updatedAt > BLOCKED_TOO_LONG_MS) {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "blocked_too_long",
-          severity: "warning",
-          title: "Blocked card needs attention",
-          detail: "The card has been blocked for more than a day.",
-          actions: [{ kind: "unblock", label: "Move to todo" }]
-        },
-        now
-      )
-    );
-  }
-  if ((card.metadata?.failureCount ?? 0) >= 2) {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "repeated_failures",
-          severity: "error",
-          title: "Repeated run failures",
-          detail: "Multiple attempts failed or blocked on this card.",
-          actions: [{ kind: "reassign", label: "Reassign card" }]
-        },
-        now
-      )
-    );
-  }
-  if (card.status === "done" && !(card.metadata?.proof?.length || card.metadata?.artifacts?.length || card.metadata?.attachments?.length)) {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "missing_proof",
-          severity: "warning",
-          title: "Done card has no proof",
-          detail: "The card is marked done without proof or an attached artifact.",
-          actions: [{ kind: "add_proof", label: "Add proof" }]
-        },
-        now
-      )
-    );
-  }
-  if (card.sessionKey && !card.execution && card.status === "running") {
-    diagnostics.push(
-      diagnostic(
-        {
-          kind: "orphaned_session",
-          severity: "warning",
-          title: "Running card has only a loose session link",
-          detail: "The card is running but has no execution record for lifecycle handoff.",
-          actions: [{ kind: "open_session", label: "Open session" }]
-        },
-        now
-      )
-    );
-  }
-  return diagnostics;
-}
-function capText(value, max) {
-  if (!value) {
-    return void 0;
-  }
-  return value.length <= max ? value : `${truncateUtf16Safe(value, Math.max(0, max - 1))}\u2026`;
-}
-function cardBoardId(card) {
-  return card.metadata?.automation?.boardId ?? "default";
-}
-function cardParentIds(card) {
-  return (card.metadata?.links ?? []).filter((link) => link.type === "parent" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
-}
-function cardChildIds(card) {
-  return (card.metadata?.links ?? []).filter((link) => link.type === "child" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
-}
-function cardRequirementId(card) {
-  return (card.metadata?.links ?? []).find(
-    (link) => link.type === "contained_by" && link.targetCardId
-  )?.targetCardId;
-}
-function cardRequirementChildIds(card) {
-  return (card.metadata?.links ?? []).filter((link) => link.type === "contains" && link.targetCardId).map((link) => link.targetCardId).filter((id, index, ids) => ids.indexOf(id) === index);
-}
-function isRequirementCard(card) {
-  return card.kind === "requirement" || cardRequirementChildIds(card).length > 0;
-}
-function latestRunningAttempt(card) {
-  return card.metadata?.attempts?.findLast((attempt) => attempt.status === "running");
-}
-function isDependencyPromotableStatus(status) {
-  return status === "backlog" || status === "triage" || status === "todo" || status === "scheduled" || status === "ready";
-}
-function isActiveDependencyTarget(card, options = {}) {
-  return Boolean(card.metadata?.claim) || card.execution?.status === "running" || Boolean(latestRunningAttempt(card)) || !options.allowStatusOnly && (card.status === "running" || card.status === "review");
-}
-function closeRunningAttempts(attempts, now, status, reason) {
-  if (!attempts?.some((attempt) => attempt.status === "running")) {
-    return attempts;
-  }
-  return attempts.map(
-    (attempt) => attempt.status === "running" ? { ...attempt, status, endedAt: now, ...reason ? { error: reason } : {} } : attempt
-  );
-}
-function notificationSequence(event) {
-  return typeof event.sequence === "number" && Number.isFinite(event.sequence) ? Math.trunc(event.sequence) : void 0;
-}
-function compareNotifications(a, b) {
-  if (a.createdAt !== b.createdAt) {
-    return a.createdAt - b.createdAt;
-  }
-  const aSequence = notificationSequence(a);
-  const bSequence = notificationSequence(b);
-  if (aSequence !== void 0 && bSequence !== void 0) {
-    return aSequence - bSequence || a.id.localeCompare(b.id);
-  }
-  if (aSequence !== void 0) {
-    return -1;
-  }
-  if (bSequence !== void 0) {
-    return 1;
-  }
-  return a.id.localeCompare(b.id);
-}
-
 // ../core/src/session-link.ts
+init_store_card_helpers();
 function sanitizeSessionSegment(value, fallback) {
   const sanitized = (value ?? fallback).trim().replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return (sanitized || fallback).slice(0, 96);
@@ -9145,12 +9384,16 @@ async function assertRestrictedTaskfoldTarget(params) {
 }
 
 // src/backend/src/dispatcher.ts
-import path16 from "node:path";
+import path17 from "node:path";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs as isFutureDateTimestampMs2 } from "openclaw/plugin-sdk/number-runtime";
 import { canonicalPathFromExistingAncestor as canonicalPathFromExistingAncestor3 } from "openclaw/plugin-sdk/security-runtime";
+init_card_phase();
+init_store_card_helpers();
 
 // ../core/src/worker-prompt.ts
+init_status_registry();
+init_store_card_helpers();
 init_store_constants();
 var RECENT_ATTEMPTS = 8;
 var FAILED_ATTEMPT_DETAIL = 3;
@@ -9187,7 +9430,7 @@ function retryGuidance(card) {
   }
   return lines;
 }
-function buildWorkerContext(card, cards = [], now = Date.now()) {
+function buildWorkerContext(card, cards = [], now = Date.now(), registry = UNCONFIGURED_STATUS_REGISTRY) {
   const lines = [
     `# Taskfold card ${card.id}`,
     `Title: ${card.title}`,
@@ -9265,7 +9508,7 @@ function buildWorkerContext(card, cards = [], now = Date.now()) {
     }
   }
   const cardsById = new Map(cards.map((entry) => [entry.id, entry]));
-  const parentResults = cardParentIds(card).map((parentId) => cardsById.get(parentId)).filter((parent) => parent !== void 0 && parent.status === "done").slice(-6);
+  const parentResults = cardParentIds(card).map((parentId) => cardsById.get(parentId)).filter((parent) => parent !== void 0 && registry.isCompleted(parent.status)).slice(-6);
   if (parentResults.length) {
     lines.push("", "## Parent results");
     for (const parent of parentResults) {
@@ -9275,7 +9518,7 @@ function buildWorkerContext(card, cards = [], now = Date.now()) {
     }
   }
   const recentAgentWork = card.agentId && cards.length ? cards.filter(
-    (entry) => entry.id !== card.id && cardBoardId(entry) === cardBoardId(card) && entry.agentId === card.agentId && entry.status === "done"
+    (entry) => entry.id !== card.id && cardBoardId(entry) === cardBoardId(card) && entry.agentId === card.agentId && registry.isCompleted(entry.status)
   ).toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, 5) : [];
   if (recentAgentWork.length) {
     lines.push("", `## Recent done work by ${card.agentId}`);
@@ -9306,7 +9549,7 @@ function buildWorkerContext(card, cards = [], now = Date.now()) {
       lines.push(`Summary: ${capText(automation.summary, 400)}`);
     }
   }
-  const diagnostics = computeCardDiagnostics(card, now);
+  const diagnostics = computeCardDiagnostics(card, now, registry);
   if (diagnostics.length) {
     lines.push("", "## Active diagnostics");
     for (const entry of diagnostics) {
@@ -9369,7 +9612,7 @@ async function materializeWorkspace(params) {
   }
   const sourcePath = workspace.sourcePath ?? workspace.path;
   const sourceBranch = workspace.sourcePath ? workspace.sourceBranch : workspace.branch;
-  if (!sourcePath || !path16.isAbsolute(sourcePath)) {
+  if (!sourcePath || !path17.isAbsolute(sourcePath)) {
     throw new Error("worktree workspace path must be an absolute git checkout path");
   }
   const canonicalSourcePath = await assertTaskfoldWorkspaceSourceAccess(
@@ -9437,14 +9680,14 @@ function sortReadyCards(a, b) {
 function resolveDispatchOwner(card, now, ownerOverride) {
   return ownerOverride || (cardHasActiveClaim(card, now) ? card.metadata?.claim?.ownerId : void 0) || card.agentId || DEFAULT_DISPATCH_OWNER;
 }
-function selectStartableCards(cards, limit, candidates, ownerOverride, now) {
+function selectStartableCards(cards, limit, candidates, ownerOverride, now, registryFor) {
   if (limit <= 0) {
     return [];
   }
   const runningByOwner = /* @__PURE__ */ new Map();
   for (const card of cards) {
     const claim = card.metadata?.claim;
-    const consumesOwnerSlot = !isTaskfoldClaimReclaimable(claim, now) && (card.status === "running" || card.status !== "done" && cardHasActiveClaim(card, now) || card.execution?.status === "running");
+    const consumesOwnerSlot = !isTaskfoldClaimReclaimable(claim, now) && (cardPhase(card, registryFor(card), now) === "running" || !registryFor(card).isTerminal(card.status) && cardHasActiveClaim(card, now) || card.execution?.status === "running");
     if (!consumesOwnerSlot || cardIsArchived(card)) {
       continue;
     }
@@ -9455,7 +9698,7 @@ function selectStartableCards(cards, limit, candidates, ownerOverride, now) {
   const fallback = [];
   const selectedOwners = /* @__PURE__ */ new Set();
   for (const card of candidates.filter(
-    (entry) => entry.status === "ready" && !cardHasActiveClaim(entry, now) && !cardIsArchived(entry)
+    (entry) => cardPhase(entry, registryFor(entry), now) === "ready" && !cardHasActiveClaim(entry, now) && !cardIsArchived(entry)
   ).toSorted(sortReadyCards)) {
     const owner = resolveDispatchOwner(card, now, ownerOverride);
     if ((runningByOwner.get(owner) ?? 0) > 0) {
@@ -9495,7 +9738,12 @@ async function runTaskfoldDispatch(params) {
   const maxAttempts = maxStarts * 2;
   let acceptedStarts = 0;
   let attemptedStarts = 0;
-  for (const card of selectStartableCards(cards, maxStarts, candidates, ownerOverride, now)) {
+  const registries = /* @__PURE__ */ new Map();
+  for (const boardId2 of new Set(cards.map(cardBoardId))) {
+    registries.set(boardId2, await params.store.statusRegistryFor(boardId2));
+  }
+  const registryFor = (entry) => registries.get(cardBoardId(entry));
+  for (const card of selectStartableCards(cards, maxStarts, candidates, ownerOverride, now, registryFor)) {
     const ownerId = resolveDispatchOwner(card, now, ownerOverride);
     if (acceptedStarts >= maxStarts || attemptedStarts >= maxAttempts) {
       break;
@@ -9745,6 +9993,7 @@ async function runTaskfoldDispatch(params) {
 }
 
 // src/backend/src/card-execution.ts
+init_store_card_helpers();
 var execFileAsync = promisify(execFile);
 var PREVIEW_LIMIT = 6;
 var PREVIEW_MAX_CHARS = 600;
@@ -9759,9 +10008,9 @@ function readOptionalString(value, maxLength = 4e3) {
 function activeExecution(card) {
   return card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
-async function gitCheckout(path22) {
+async function gitCheckout(path23) {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", path22, "rev-parse", "--show-toplevel"], {
+    const { stdout } = await execFileAsync("git", ["-C", path23, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       maxBuffer: 16 * 1024
     });
@@ -10166,7 +10415,6 @@ async function reconcileTaskfoldCardExecution(params) {
 }
 
 // src/backend/src/gateway-helpers.ts
-init_contract();
 import { formatErrorMessage as formatErrorMessage3 } from "openclaw/plugin-sdk/error-runtime";
 import { parseStrictPositiveInteger } from "openclaw/plugin-sdk/string-coerce-runtime";
 function respondError(respond, error) {
@@ -10220,7 +10468,12 @@ function assertNoCursorAdvance(params) {
 }
 async function listTaskfoldCards(store, boardId, redactCard) {
   const [cards, { boards }] = await Promise.all([store.list({ boardId }), store.listBoards()]);
-  return { cards: cards.map(redactCard), boards, statuses: TASKFOLD_STATUSES };
+  return {
+    cards: cards.map(redactCard),
+    boards,
+    // 该项目的状态定义（按看板列顺序）；查全部看板时给默认项目的。
+    statuses: await store.listStatuses(typeof boardId === "string" ? boardId : void 0)
+  };
 }
 function resolveGatewayTaskfoldWorkspaceAccess(params) {
   if (!params.client) {
@@ -10284,10 +10537,61 @@ function createTaskfoldDispatchHandler(params) {
 }
 
 // ../core/src/store-core.ts
-init_status_registry();
+init_card_phase();
 import { createHash as createHash3, randomUUID as randomUUID6 } from "node:crypto";
 
+// ../core/src/status-migration.ts
+init_card_phase();
+init_status_registry();
+function defaultMigratedStatuses(usage) {
+  const used = (id) => (usage[id] ?? 0) > 0;
+  return validateStatusDefinitions([
+    ...used("triage") ? [{ id: "triage", category: "unstarted", role: "intake" }] : [],
+    ...used("backlog") ? [{ id: "backlog", category: "unstarted" }] : [],
+    // 显式标默认：triage / backlog 排在前面时，新卡仍然落在待办。
+    { id: "todo", category: "unstarted", default: true },
+    { id: "running", category: "started" },
+    { id: "review", category: "started", role: "review" },
+    { id: "done", category: "completed" },
+    { id: "cancelled", category: "cancelled" }
+  ]);
+}
+function planStatusMigration(cards, configured) {
+  const usage = {};
+  for (const card of cards) {
+    usage[card.status] = (usage[card.status] ?? 0) + 1;
+  }
+  const statuses = configured ? [...configured] : defaultMigratedStatuses(usage);
+  const known = new Set(statuses.map((status) => status.id));
+  const registry = createStatusRegistry(statuses);
+  const rewrites = [];
+  const orphans = /* @__PURE__ */ new Set();
+  for (const card of cards) {
+    if (isRetiredTaskfoldStatusId(card.status)) {
+      if (!known.has(card.status)) {
+        rewrites.push({ cardId: card.id, from: card.status, to: migratedStatusFor(card, registry) });
+      }
+    } else if (!known.has(card.status)) {
+      orphans.add(card.status);
+    }
+  }
+  return { statuses, writeStatuses: configured === void 0, rewrites, usage, orphans: [...orphans].sort() };
+}
+function migratedStatusFor(card, registry) {
+  return rewriteForMigration(card, registry).status;
+}
+function rewriteForMigration(card, registry) {
+  const phase = cardPhase(card, registry, card.updatedAt);
+  return phasePatch(card, phase, registry, { now: card.updatedAt });
+}
+
+// ../core/src/store-core.ts
+init_file_store_format();
+init_status_registry();
+
 // ../core/src/store-automation.ts
+init_store_normalizers();
+init_workspace_path();
 function normalizeTrustedWorkspaceAccess(value, fallback) {
   if (value === void 0) {
     return fallback;
@@ -10345,6 +10649,9 @@ function normalizeAutomationPatch(patch, current) {
     ...workspaceAccess ? { workspaceAccess } : {}
   });
 }
+
+// ../core/src/store-core.ts
+init_store_card_helpers();
 
 // ../core/src/store-change-tracker.ts
 import { randomUUID as randomUUID5 } from "node:crypto";
@@ -10635,6 +10942,7 @@ function invertTaskfoldWorkspaceMutation(before, after, current) {
 
 // ../core/src/store-core.ts
 init_store_constants();
+init_store_normalizers();
 var TaskfoldRevisionConflictError = class extends Error {
   constructor(cardId, expectedRevision, reason = "revision") {
     super(`card ${cardId} changed since revision ${expectedRevision}.`);
@@ -10712,9 +11020,77 @@ var TaskfoldCoreStore = class {
     const configured = await this.statusConfig?.read(normalizeBoardId(boardId) ?? "default");
     return resolveStatusRegistry(configured);
   }
-  /** 该项目的状态定义，按看板列顺序。 */
+  /**
+   * 新项目一开始就有自己的状态集（默认 5 个），不继承"未配置"时的 triage / backlog 两列。
+   * 数据目录里已经有状态配置或已有卡片（接管一个现成的仓库）时不动。尽力而为：写不了（例如
+   * 数据格式比本版新）就保持"未配置"，项目照常可用。
+   */
+  async initializeProjectStatuses(boardId) {
+    if (!this.statusConfig || await this.statusConfig.read(boardId)) {
+      return;
+    }
+    if ((await this.cardsSharingStatuses(boardId)).length > 0) {
+      return;
+    }
+    try {
+      await this.statusConfig.write(boardId, DEFAULT_TASKFOLD_STATUSES);
+    } catch (error) {
+      if (!(error instanceof TaskfoldFormatTooNewError)) {
+        throw error;
+      }
+    }
+  }
+  /**
+   * 删除一个状态：还有卡在用时必须给 `moveCardsTo`，先把这些卡移过去再从列表里删掉。分两步（先移卡、
+   * 再保存），第二步失败时卡已经移走、状态还在，重跑即可。移卡是管理员式的重新归类，不检查依赖 /
+   * 定时约束（卡的依赖状态不变，只是换列）。
+   */
+  async deleteStatus(boardId, statusId, options = {}) {
+    const id = normalizeBoardId(boardId) ?? "default";
+    const current = await this.listStatuses(id);
+    if (!current.some((status) => status.id === statusId)) {
+      throw new Error(`status not found: ${statusId}`);
+    }
+    const next = current.filter((status) => status.id !== statusId);
+    const target = options.moveCardsTo;
+    if (target !== void 0 && (target === statusId || !next.some((status) => status.id === target))) {
+      throw new Error(`moveCardsTo must be another status of the project: ${target}`);
+    }
+    const stranded = (await this.cardsSharingStatuses(id)).filter((card) => card.status === statusId);
+    if (stranded.length > 0 && target === void 0) {
+      throw new Error(
+        `status "${statusId}" is used by ${stranded.length} card(s); choose the status to move them to.`
+      );
+    }
+    validateStatusDefinitions(next);
+    for (const card of stranded) {
+      await this.enqueueMutation(async () => await this.updateCard(card.id, { status: target }, {}));
+    }
+    return { statuses: await this.saveStatuses(id, next), moved: stranded.length };
+  }
+  /** 共用同一份状态配置的卡片：单项目后端是数据目录里的全部卡片，按看板路由的后端是该看板的卡片。 */
+  async cardsSharingStatuses(boardId) {
+    return this.statusConfig?.scope === "project" ? await this.list() : await this.list({ boardId });
+  }
+  /** 项目是否有自己配置过的状态集（`config.yml` 里有 `statuses`）；没有就在用"未配置"默认集。 */
+  async hasStatusConfig(boardId) {
+    return Boolean(await this.statusConfig?.read(normalizeBoardId(boardId) ?? "default"));
+  }
+  /**
+   * 该项目的状态定义，按看板列顺序（界面的列与下拉）。项目还没有自己的状态集时，只列默认 5 个加上
+   * 实际有卡在用的 triage / backlog——与迁移之后得到的一致，不会凭空多出两列空的旧状态；接受什么
+   * 输入仍由 {@link statusRegistryFor} 决定（那里不看卡片，旧值照常能用）。
+   */
   async listStatuses(boardId) {
-    return [...(await this.statusRegistryFor(boardId)).list];
+    const registry = await this.statusRegistryFor(boardId);
+    if (!this.statusConfig || await this.hasStatusConfig(boardId)) {
+      return [...registry.list];
+    }
+    const usage = {};
+    for (const card of await this.cardsSharingStatuses(normalizeBoardId(boardId) ?? "default")) {
+      usage[card.status] = (usage[card.status] ?? 0) + 1;
+    }
+    return defaultMigratedStatuses(usage);
   }
   /**
    * 整体保存该项目的状态定义。还有卡片在用、却不在新列表里的状态时拒绝（先把卡移走），这样
@@ -10729,7 +11105,7 @@ var TaskfoldCoreStore = class {
     return await this.enqueueMutation(async () => {
       const nextIds = new Set(next.map((definition) => definition.id));
       const stranded = /* @__PURE__ */ new Map();
-      for (const card of await this.list({ boardId: id })) {
+      for (const card of await this.cardsSharingStatuses(id)) {
         if (!nextIds.has(card.status)) {
           stranded.set(card.status, (stranded.get(card.status) ?? 0) + 1);
         }
@@ -10902,6 +11278,79 @@ var TaskfoldCoreStore = class {
       return { deleted: await this.boardStore.delete(boardId) };
     });
   }
+  /**
+   * 状态模型迁移（需求/22-状态模型 第 3 步）：把项目的状态集写进 `.taskfold/config.yml`（升到格式版本 4），
+   * 并把磁盘上已退役的 ready / scheduled / blocked 换成新表示。幂等：迁移过的项目再跑是空操作；
+   * 中途中断（崩溃、有卡输给并发写入）重跑即可补完。`dryRun` 只返回计划，什么都不写。
+   *
+   * 顺序：备份 → 写状态集（同时把旧版 core 挡进只读）→ 逐卡重写（保持更新时间、不记历史事件）。
+   * 先升格式再改卡，是为了不让旧版 core 在卡片已经半转换时还能写。
+   */
+  async migrateStatusModel(boardId, options = {}) {
+    if (!this.statusConfig) {
+      throw new Error("this store does not support custom statuses.");
+    }
+    const id = normalizeBoardId(boardId) ?? "default";
+    const dryRun = options.dryRun === true;
+    return await this.enqueueMutation(async () => {
+      const configured = await this.statusConfig.read(id);
+      const cards = await this.cardsSharingStatuses(id);
+      const plan = planStatusMigration(cards, configured);
+      if (plan.orphans.length > 0) {
+        throw new Error(
+          `cannot migrate: cards use statuses that are not in the project's status list: ${plan.orphans.join(", ")}. Add them to the project's statuses or move those cards first.`
+        );
+      }
+      const report = {
+        boardId: id,
+        dryRun,
+        changed: false,
+        statuses: plan.statuses,
+        wroteStatuses: false,
+        total: cards.length,
+        usage: plan.usage,
+        rewrites: plan.rewrites,
+        conflicts: []
+      };
+      if (dryRun || !plan.writeStatuses && plan.rewrites.length === 0) {
+        return report;
+      }
+      const label = new Date(options.now ?? Date.now()).toISOString().replace(/[:.]/g, "-");
+      const backupDir = await this.statusConfig.backup?.(id, label);
+      if (plan.writeStatuses) {
+        await this.statusConfig.write(id, plan.statuses);
+      }
+      const registry = createStatusRegistry(plan.statuses);
+      for (const rewrite of plan.rewrites) {
+        const card = await this.get(rewrite.cardId);
+        if (!card || !isRetiredTaskfoldStatusId(card.status) || registry.has(card.status)) {
+          continue;
+        }
+        const target = rewriteForMigration(card, registry);
+        const metadata = removeUndefinedMetadataFields({ ...card.metadata, ...target.flags });
+        const next = removeUndefinedCardFields({
+          ...card,
+          status: target.status,
+          ...metadataIsEmpty(metadata) ? { metadata: void 0 } : { metadata }
+        });
+        try {
+          await this.persistCard(next, card.revision);
+        } catch (error) {
+          if (error instanceof TaskfoldRevisionConflictError) {
+            report.conflicts.push(card.id);
+            continue;
+          }
+          throw error;
+        }
+      }
+      return {
+        ...report,
+        changed: true,
+        wroteStatuses: plan.writeStatuses,
+        ...backupDir ? { backupDir } : {}
+      };
+    });
+  }
   async stats(input = {}, now = Date.now()) {
     const cards = await this.list(input);
     const boardId = normalizeBoardId(input.boardId) ?? "all";
@@ -10916,7 +11365,7 @@ var TaskfoldCoreStore = class {
       if (card.metadata?.archivedAt) {
         archived += 1;
       }
-      if (card.status === "ready" && !card.metadata?.archivedAt) {
+      if (isDispatchReadyCard(card) && !card.metadata?.archivedAt) {
         oldestReadyAt = Math.min(oldestReadyAt ?? card.updatedAt, card.updatedAt);
       }
       updatedAt = Math.max(updatedAt ?? 0, card.updatedAt);
@@ -10977,13 +11426,21 @@ var TaskfoldCoreStore = class {
     const parents = normalizeStringList(input.parents, "parents", 120);
     const automation = normalizeCardAutomation(input);
     const statusRegistry = await this.statusRegistryFor(automation?.boardId);
-    const requestedStatus = normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
-    const heldBySchedule = Boolean(automation?.scheduledAt && automation.scheduledAt > now) && requestedStatus !== "blocked";
-    let status = heldBySchedule ? "scheduled" : requestedStatus;
+    const retiredInput = isRetiredTaskfoldStatusId(input.status) && !statusRegistry.has(input.status) ? phasePatch({ status: statusRegistry.defaultStatus }, input.status, statusRegistry, { now }) : void 0;
+    const requestedStatus = retiredInput?.status ?? normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
+    const heldBySchedule = Boolean(automation?.scheduledAt && automation.scheduledAt > now) && !retiredInput?.flags.blocked;
+    let status = requestedStatus;
+    let flags = retiredInput?.flags;
+    if (heldBySchedule && !statusRegistry.isUnstarted(status)) {
+      status = statusRegistry.defaultStatus;
+    }
     let heldByDependencies = false;
-    if (parents.length > 0 && (status === "running" || status === "review")) {
-      status = "todo";
+    if (parents.length > 0 && statusRegistry.isStarted(status)) {
+      status = statusRegistry.defaultStatus;
       heldByDependencies = true;
+    }
+    if (!statusRegistry.isUnstarted(status) && flags?.dispatchReady) {
+      flags = { ...flags, dispatchReady: void 0 };
     }
     if (automation?.idempotencyKey) {
       const existing = cards.find(
@@ -11018,13 +11475,15 @@ var TaskfoldCoreStore = class {
     const normalizedExecution = normalizeExecution(input.execution);
     const delivery = normalizeDelivery(input.delivery, void 0, now);
     const execution = normalizedExecution?.status === "running" && (heldBySchedule || heldByDependencies) ? void 0 : normalizedExecution;
-    const startedAt = input.startedAt === void 0 ? status === "running" ? now : void 0 : normalizeTimestamp(input.startedAt, 0) || void 0;
-    const completedAt = input.completedAt === void 0 ? status === "done" ? now : void 0 : normalizeTimestamp(input.completedAt, 0) || void 0;
+    const startedAt = input.startedAt === void 0 ? statusRegistry.isStarted(status) ? now : void 0 : normalizeTimestamp(input.startedAt, 0) || void 0;
+    const completedAt = input.completedAt === void 0 ? statusRegistry.isCompleted(status) ? now : void 0 : normalizeTimestamp(input.completedAt, 0) || void 0;
     const metadata = normalizeMetadata(
       input.metadata,
       {
         templateId: normalizeTemplateId(input.templateId),
-        ...childAutomation ? { automation: childAutomation } : {}
+        ...childAutomation ? { automation: childAutomation } : {},
+        ...flags?.blocked ? { blocked: flags.blocked } : {},
+        ...flags?.dispatchReady ? { dispatchReady: true } : {}
       },
       { allowDependencyLinks: false }
     );
@@ -11169,11 +11628,12 @@ var TaskfoldCoreStore = class {
     if (options.expectedRevision !== void 0 && existing.revision !== options.expectedRevision) {
       throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
     }
+    const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
     const lifecycleStatusSourceUpdatedAt = lifecycleStatusSourceUpdatedAtFromPatch(patch.metadata);
     const existingLifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
     const hasFreshLifecycleStatusSource = lifecycleStatusSourceUpdatedAt !== void 0 && lifecycleStatusSourceUpdatedAt !== existingLifecycleStatusSourceUpdatedAt;
     let effectivePatch = patch;
-    if (patch.status !== void 0 && lifecycleStatusSourceUpdatedAt !== void 0 && shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt)) {
+    if (patch.status !== void 0 && lifecycleStatusSourceUpdatedAt !== void 0 && shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt, statusRegistry)) {
       effectivePatch = { ...patch, status: void 0 };
       if (patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)) {
         const metadataPatch = patch.metadata;
@@ -11187,14 +11647,11 @@ var TaskfoldCoreStore = class {
         return existing;
       }
     }
-    const status = normalizeStatus(
-      effectivePatch.status,
-      existing.status,
-      await this.statusRegistryFor(cardBoardId(existing))
-    );
     const now = Date.now();
-    const startedAt = effectivePatch.startedAt === void 0 ? status === "running" ? existing.startedAt ?? now : existing.startedAt : normalizeTimestamp(effectivePatch.startedAt, 0) || void 0;
-    const completedAt = effectivePatch.completedAt === void 0 ? status === "done" ? existing.completedAt ?? now : void 0 : normalizeTimestamp(effectivePatch.completedAt, 0) || void 0;
+    const retiredInput = isRetiredTaskfoldStatusId(effectivePatch.status) && !statusRegistry.has(effectivePatch.status) ? phasePatch(existing, effectivePatch.status, statusRegistry, { now }) : void 0;
+    const status = retiredInput?.status ?? normalizeStatus(effectivePatch.status, existing.status, statusRegistry);
+    const startedAt = effectivePatch.startedAt === void 0 ? statusRegistry.isStarted(status) ? existing.startedAt ?? now : existing.startedAt : normalizeTimestamp(effectivePatch.startedAt, 0) || void 0;
+    const completedAt = effectivePatch.completedAt === void 0 ? statusRegistry.isCompleted(status) ? existing.completedAt ?? now : void 0 : normalizeTimestamp(effectivePatch.completedAt, 0) || void 0;
     const sessionKey = effectivePatch.sessionKey === void 0 ? existing.sessionKey : normalizeOptionalString(effectivePatch.sessionKey);
     const execution = effectivePatch.execution === void 0 ? effectivePatch.sessionKey === void 0 ? existing.execution : syncExecutionSessionKey(existing.execution, sessionKey) : normalizeExecution(effectivePatch.execution);
     let metadata = normalizeMetadata(effectivePatch.metadata, existing.metadata, {
@@ -11204,6 +11661,18 @@ var TaskfoldCoreStore = class {
     });
     if (status !== existing.status && !hasFreshLifecycleStatusSource) {
       metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: void 0 };
+    }
+    if (options.phaseFlags) {
+      metadata = { ...metadata, ...options.phaseFlags };
+    } else if (retiredInput) {
+      metadata = { ...metadata, ...retiredInput.flags };
+    } else if (effectivePatch.status !== void 0 && (status !== existing.status || options.enforceStatusHolds)) {
+      if (JSON.stringify(metadata.blocked) === JSON.stringify(existing.metadata?.blocked)) {
+        metadata = { ...metadata, blocked: void 0 };
+      }
+      if (metadata.dispatchReady === existing.metadata?.dispatchReady) {
+        metadata = { ...metadata, dispatchReady: void 0 };
+      }
     }
     const effectivePatchRecord = effectivePatch;
     const automationPatch = {};
@@ -11257,10 +11726,10 @@ var TaskfoldCoreStore = class {
       options
     );
     next.events = appendEvent(next, updateEvent(existing, next), now);
-    if (options.enforceStatusHolds && effectivePatch.status !== void 0) {
-      await this.assertActiveStatusAllowed(existing, next, now);
+    if (options.enforceStatusHolds && (effectivePatch.status !== void 0 || isDispatchReadyCard(next) && !isDispatchReadyCard(existing))) {
+      await this.assertActiveStatusAllowed(next, now, statusRegistry);
     }
-    if (status !== "done") {
+    if (!statusRegistry.isCompleted(status)) {
       delete next.completedAt;
     }
     if (effectivePatch.startedAt !== void 0 && !startedAt) {
@@ -11373,20 +11842,24 @@ var TaskfoldCoreStore = class {
       async () => await this.compensateCardMutation(before.id, before, after, invertTaskfoldWorkspaceMutation)
     );
   }
-  async assertActiveStatusAllowed(existing, next, now) {
-    if (next.status !== "ready" && next.status !== "running" && next.status !== "review" && next.status !== "done") {
+  async assertActiveStatusAllowed(next, now, registry) {
+    const intendsActive = isDispatchReadyCard(next) || registry.isStarted(next.status) || registry.isCompleted(next.status);
+    if (!intendsActive || isBlockedCard(next)) {
       return;
     }
     const parents = cardParentIds(next);
     const cards = parents.length > 0 ? new Map((await this.list()).map((card) => [card.id, card])) : void 0;
-    if (parents.length > 0 && !parents.every((parentId) => cards?.get(parentId)?.status === "done")) {
+    if (parents.length > 0 && !parents.every((parentId) => {
+      const parent = cards?.get(parentId);
+      return parent !== void 0 && registry.isCompleted(parent.status);
+    })) {
       throw new Error("card dependencies are not done.");
     }
-    if (next.status === "done") {
+    if (registry.isCompleted(next.status)) {
       return;
     }
     const scheduledAt = next.metadata?.automation?.scheduledAt;
-    if (scheduledAt && scheduledAt > now || existing.status === "scheduled" && !scheduledAt) {
+    if (scheduledAt && scheduledAt > now) {
       throw new Error("card is scheduled for later.");
     }
   }
@@ -11744,16 +12217,22 @@ var TaskfoldCoreStore = class {
     }
     assertCanMutateClaimedCard(parent, options.scope);
     assertCanMutateClaimedCard(child, options.scope);
-    if (child.status === "done" || child.status === "blocked") {
+    const statusRegistry = await this.statusRegistryFor(cardBoardId(child));
+    if (statusRegistry.isCompleted(child.status) || isBlockedCard(child)) {
       const cardsById = new Map((await this.list()).map((card) => [card.id, card]));
       const parentIds = [...cardParentIds(child), parent.id].filter(
         (id, index, ids) => ids.indexOf(id) === index
       );
-      if (parentIds.some((id) => cardsById.get(id)?.status !== "done")) {
+      if (parentIds.some((id) => {
+        const entry = cardsById.get(id);
+        return entry === void 0 || !statusRegistry.isCompleted(entry.status);
+      })) {
         throw new Error("terminal child cards cannot gain incomplete parent dependencies.");
       }
     }
-    if (isActiveDependencyTarget(child, { allowStatusOnly: options.allowStatusOnlyActiveChild })) {
+    if (isActiveDependencyTarget(child, statusRegistry, {
+      allowStatusOnly: options.allowStatusOnlyActiveChild
+    })) {
       throw new Error("active child cards cannot gain parent dependencies.");
     }
     if (await this.dependsOn(parent.id, child.id)) {
@@ -11796,30 +12275,32 @@ var TaskfoldCoreStore = class {
     }
     return await this.promoteDependencyReady(nextChild.id);
   }
-  async dependencyTargetStatus(card, now) {
+  /**
+   * 依赖与定时对一张未开始的卡意味着什么：返回应该切换到的阶段，不需要改动返回 `undefined`。
+   * 只有"未开始且没被阻塞"的卡会被自动推进；已经开始 / 结束 / 阻塞的卡不动。
+   */
+  async dependencyTargetPhase(card, now, registry) {
+    if (!isDependencyPromotableCard(card, registry)) {
+      return void 0;
+    }
+    const phase = cardPhase(card, registry, now);
     const scheduledAt = card.metadata?.automation?.scheduledAt;
     const parents = cardParentIds(card);
-    if (card.status === "scheduled" && !scheduledAt) {
-      return "scheduled";
+    let target;
+    if (scheduledAt && scheduledAt > now) {
+      target = "scheduled";
+    } else if (parents.length > 0) {
+      const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
+      const parentsDone = parentCards.every(
+        (parent) => parent !== void 0 && registry.isCompleted(parent.status)
+      );
+      target = parentsDone ? "ready" : isDispatchReadyCard(card) ? "todo" : void 0;
+    } else if (phase === "scheduled") {
+      target = "ready";
+    } else if (scheduledAt && phase === "todo" && !card.metadata?.automation?.dispatchCount && card.updatedAt <= scheduledAt) {
+      target = "ready";
     }
-    if (parents.length === 0) {
-      if (scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-        return "scheduled";
-      }
-      return card.status === "scheduled" ? "ready" : card.status;
-    }
-    const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
-    const parentsDone = parentCards.every((parent) => parent?.status === "done");
-    if (!parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-      return "scheduled";
-    }
-    if (!parentsDone && isDependencyPromotableStatus(card.status)) {
-      return "todo";
-    }
-    if (parentsDone && scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-      return "scheduled";
-    }
-    return parentsDone && isDependencyPromotableStatus(card.status) ? "ready" : card.status;
+    return target === void 0 || target === phase ? void 0 : target;
   }
   async dependsOn(cardId, targetParentId) {
     const cards = new Map((await this.list()).map((entry) => [entry.id, entry]));
@@ -11896,11 +12377,16 @@ var TaskfoldCoreStore = class {
     if (card.metadata?.archivedAt) {
       return card;
     }
-    const target = await this.dependencyTargetStatus(card, now);
-    if (target === card.status) {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    const target = await this.dependencyTargetPhase(card, now, registry);
+    if (target === void 0) {
       return card;
     }
-    return await this.updateCard(card.id, { status: target });
+    const patch = phasePatch(card, target, registry, { now });
+    return await this.updateCard(card.id, {
+      status: patch.status,
+      metadata: { ...card.metadata, ...patch.flags }
+    });
   }
 };
 
@@ -12087,7 +12573,7 @@ function registerTaskfoldWorkspaceWorkflowMethods(params) {
 init_card_image_ref();
 import { createHash as createHash4, randomUUID as randomUUID7 } from "node:crypto";
 import fs11 from "node:fs/promises";
-import path17 from "node:path";
+import path18 from "node:path";
 var MAX_PROJECT_DOCUMENT_BYTES = 1024 * 1024;
 var MARKDOWN_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown"]);
 function documentRevision(bytes) {
@@ -12122,11 +12608,11 @@ function assertMarkdownPath(document) {
   if (document.type !== "path" || !document.target) {
     throw new Error("only Markdown documents and Markdown file paths can be previewed.");
   }
-  const fileName = path17.basename(document.target).toLowerCase();
+  const fileName = path18.basename(document.target).toLowerCase();
   if (fileName === ".env" || fileName.startsWith(".env.")) {
     throw new Error("environment files cannot be previewed as project documents.");
   }
-  if (!MARKDOWN_EXTENSIONS.has(path17.extname(document.target).toLowerCase())) {
+  if (!MARKDOWN_EXTENSIONS.has(path18.extname(document.target).toLowerCase())) {
     throw new Error("project document paths must reference a Markdown file.");
   }
   return document.target;
@@ -12190,10 +12676,10 @@ async function writeTaskfoldProjectDocumentPath(params) {
   if (documentRevision(current.bytes) !== params.expectedRevision) {
     throw new Error("project document changed on disk; reload it before saving.");
   }
-  const directory = path17.dirname(current.path);
-  const temporaryPath = path17.join(
+  const directory = path18.dirname(current.path);
+  const temporaryPath = path18.join(
     directory,
-    `.${path17.basename(current.path)}.taskfold-${randomUUID7()}.tmp`
+    `.${path18.basename(current.path)}.taskfold-${randomUUID7()}.tmp`
   );
   const originalMode = Number(current.stat.mode) & 4095;
   try {
@@ -12216,6 +12702,87 @@ async function writeTaskfoldProjectDocumentPath(params) {
   });
 }
 var MAX_DOCUMENT_IMAGE_BYTES = 16 * 1024 * 1024;
+function documentAssetsDirName(documentFile) {
+  const base = path18.basename(documentFile, path18.extname(documentFile));
+  return `${base}.assets`;
+}
+function encodeRefSegment(segment) {
+  return encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+async function readTaskfoldProjectDocumentAsset(params) {
+  if (params.document.type !== "path") {
+    throw new Error("images are only available for Markdown file documents.");
+  }
+  if (typeof params.ref !== "string" || !isTaskfoldDocumentImageRef(params.ref)) {
+    throw new Error("invalid document image reference.");
+  }
+  let relative;
+  try {
+    relative = decodeURIComponent(params.ref);
+  } catch {
+    throw new Error("invalid document image reference.");
+  }
+  if (relative.includes("\0") || !isTaskfoldDocumentImageRef(relative)) {
+    throw new Error("invalid document image reference.");
+  }
+  const document = await resolveProjectDocumentFile(params);
+  const target = path18.resolve(path18.dirname(document.path), relative);
+  let resolvedPath;
+  try {
+    resolvedPath = await fs11.realpath(target);
+  } catch {
+    throw new Error("document image does not exist.");
+  }
+  await params.assertPathAllowed(resolvedPath);
+  const mimeType = taskfoldCardImageMimeType(path18.extname(resolvedPath).slice(1));
+  if (!mimeType) {
+    throw new Error("invalid document image reference.");
+  }
+  const stat2 = await fs11.stat(resolvedPath);
+  if (!stat2.isFile()) {
+    throw new Error("document image must be a regular file.");
+  }
+  if (stat2.size > MAX_DOCUMENT_IMAGE_BYTES) {
+    throw new Error("document image exceeds the size limit.");
+  }
+  return { mimeType, contentBase64: (await fs11.readFile(resolvedPath)).toString("base64") };
+}
+async function writeTaskfoldProjectDocumentAsset(params) {
+  if (params.document.type !== "path") {
+    throw new Error("images are only available for Markdown file documents.");
+  }
+  const content = typeof params.contentBase64 === "string" ? params.contentBase64 : "";
+  if (!content || !/^[A-Za-z0-9+/]*={0,2}$/.test(content) || content.length % 4 !== 0) {
+    throw new Error("document image contentBase64 must be canonical base64.");
+  }
+  const bytes = Buffer.from(content, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== content) {
+    throw new Error("document image contentBase64 must be canonical base64.");
+  }
+  const fileName = typeof params.fileName === "string" ? params.fileName.trim() : "";
+  const fileExtension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase() : "";
+  const extension = (typeof params.mimeType === "string" ? taskfoldCardImageExtensionForMime(params.mimeType) : void 0) ?? (taskfoldCardImageMimeType(fileExtension) ? fileExtension : void 0);
+  if (!extension) {
+    throw new Error("document image must be png, jpeg, gif, webp, avif or bmp.");
+  }
+  const document = await resolveProjectDocumentFile(params);
+  const directory = path18.dirname(document.path);
+  const assetsDirName = documentAssetsDirName(document.path);
+  const assetsDir = path18.join(directory, assetsDirName);
+  const existing = await fs11.lstat(assetsDir).catch(() => void 0);
+  if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) {
+    throw new Error(`${assetsDirName} must be a regular directory.`);
+  }
+  await fs11.mkdir(assetsDir, { recursive: true });
+  const name = `img-${Date.now().toString(36)}-${randomUUID7().slice(0, 6)}.${extension}`;
+  await fs11.writeFile(path18.join(assetsDir, name), bytes, { flag: "wx", mode: 420 });
+  return {
+    ref: `${encodeRefSegment(assetsDirName)}/${name}`,
+    name,
+    mimeType: taskfoldCardImageMimeType(extension),
+    byteSize: bytes.byteLength
+  };
+}
 
 // src/backend/src/project-document-reader.ts
 function pathAccess(access) {
@@ -12234,6 +12801,25 @@ async function writeTaskfoldProjectDocumentPath2(params) {
     document: params.document,
     content: params.content,
     expectedRevision: params.expectedRevision,
+    assertPathAllowed: pathAccess(params.access)
+  });
+}
+async function readTaskfoldProjectDocumentAsset2(params) {
+  return await readTaskfoldProjectDocumentAsset({
+    document: params.document,
+    ref: params.ref,
+    assertPathAllowed: pathAccess(params.access)
+  });
+}
+async function writeTaskfoldProjectDocumentAsset2(params) {
+  if (!params.access.unrestricted && !params.access.writable) {
+    throw new Error("project document workspace access is read-only.");
+  }
+  return await writeTaskfoldProjectDocumentAsset({
+    document: params.document,
+    fileName: params.fileName,
+    mimeType: params.mimeType,
+    contentBase64: params.contentBase64,
     assertPathAllowed: pathAccess(params.access)
   });
 }
@@ -12479,6 +13065,43 @@ function registerTaskfoldProjectGatewayMethods(params) {
       }
     },
     { scope: READ_SCOPE }
+  );
+  api.registerGatewayMethod(
+    "taskfold.projects.documents.assets.get",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const access = await resolveProjectWorkspaceReadAccess(request);
+        const document = await store.getProjectDocument(readId(requestParams));
+        respond(true, await readTaskfoldProjectDocumentAsset2({ document, ref: requestParams.ref, access }));
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE }
+  );
+  api.registerGatewayMethod(
+    "taskfold.projects.documents.assets.add",
+    async (request) => {
+      const { params: requestParams, respond } = request;
+      try {
+        const access = await resolveProjectWorkspaceWriteAccess(request);
+        const document = await store.getProjectDocument(readId(requestParams));
+        respond(
+          true,
+          await writeTaskfoldProjectDocumentAsset2({
+            document,
+            fileName: requestParams.fileName,
+            mimeType: requestParams.mimeType,
+            contentBase64: requestParams.contentBase64,
+            access
+          })
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE2 }
   );
   api.registerGatewayMethod(
     "taskfold.projects.documents.write",
@@ -13193,6 +13816,65 @@ function registerTaskfoldGatewayMethods(params) {
     },
     { scope: READ_SCOPE2 }
   );
+  api.registerGatewayMethod(
+    "taskfold.statuses.list",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, { statuses: await store.listStatuses(requestParams.boardId) });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: READ_SCOPE2 }
+  );
+  api.registerGatewayMethod(
+    "taskfold.statuses.save",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(true, {
+          statuses: await store.saveStatuses(
+            requestParams.boardId,
+            requestParams.statuses
+          )
+        });
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE3 }
+  );
+  api.registerGatewayMethod(
+    "taskfold.statuses.delete",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(
+          true,
+          await store.deleteStatus(requestParams.boardId, String(requestParams.id ?? ""), {
+            ...typeof requestParams.moveCardsTo === "string" ? { moveCardsTo: requestParams.moveCardsTo } : {}
+          })
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE3 }
+  );
+  api.registerGatewayMethod(
+    "taskfold.statuses.migrate",
+    async ({ params: requestParams, respond }) => {
+      try {
+        respond(
+          true,
+          await store.migrateStatusModel(requestParams.boardId, {
+            dryRun: requestParams.dryRun === true
+          })
+        );
+      } catch (error) {
+        respondError(respond, error);
+      }
+    },
+    { scope: WRITE_SCOPE3 }
+  );
   registerTaskfoldWorkspaceBoardMethod({ api, store, redactCard: redactClaimToken });
   api.registerGatewayMethod(
     "taskfold.boards.archive",
@@ -13474,7 +14156,8 @@ function createTaskfoldChangeEventService(store) {
 }
 
 // src/backend/src/command.ts
-init_contract();
+init_status_registry();
+init_store_card_helpers();
 init_card_lookup();
 var ADMIN_SCOPE = "operator.admin";
 var WRITE_SCOPE4 = "operator.write";
@@ -13520,9 +14203,6 @@ function optionValue(tokens, flag) {
 function withoutOption(tokens, flag) {
   const index = tokens.indexOf(flag);
   return index >= 0 ? [...tokens.slice(0, index), ...tokens.slice(index + 2)] : tokens;
-}
-function isTaskfoldStatus(value) {
-  return TASKFOLD_STATUSES.includes(value);
 }
 function canMutateTaskfold(params) {
   const scopes = params.gatewayClientScopes;
@@ -13670,16 +14350,17 @@ async function handleTaskfoldCommand(params) {
         isError: true
       };
     }
-    if (!isTaskfoldStatus(status)) {
-      return {
-        text: `status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`,
-        isError: true
-      };
-    }
     const cards = await params.store.list();
     const { card, error } = resolveTaskfoldCardByIdOrPrefix(cards, id);
     if (!card) {
       return { text: error, isError: true };
+    }
+    const registry = await params.store.statusRegistryFor(cardBoardId(card));
+    if (!acceptsStatusInput(registry, status)) {
+      return {
+        text: `status must be one of: ${registry.ids.join(", ")}.`,
+        isError: true
+      };
     }
     return { text: formatCardLine(await params.store.move(card.id, status, void 0)) };
   }
@@ -13750,18 +14431,22 @@ function registerTaskfoldCommand(params) {
 init_project_routed_stores();
 
 // src/backend/src/reconciler.ts
+init_card_phase();
 import { formatErrorMessage as formatErrorMessage4 } from "openclaw/plugin-sdk/error-runtime";
 
 // src/backend/src/lifecycle.ts
+init_card_phase();
+init_status_registry();
+init_store_card_helpers();
 init_store_constants();
 var ABANDONED_RUN_GRACE_MS = 10 * 60 * 1e3;
-function claimsRunning(card) {
-  return card.status === "running" || card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running")) || Boolean(card.metadata?.claim);
+function claimsRunning(card, registry) {
+  return cardPhase(card, registry) === "running" || card.execution?.status === "running" || Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running")) || Boolean(card.metadata?.claim);
 }
 var TERMINAL_EXECUTION_STATUSES = /* @__PURE__ */ new Set(["done", "review", "blocked"]);
 function taskfoldRunEvidence(params) {
-  const { card, now } = params;
-  if (!claimsRunning(card) || !cardSessionKey(card)) {
+  const { card, now, registry = UNCONFIGURED_STATUS_REGISTRY } = params;
+  if (!claimsRunning(card, registry) || !cardSessionKey(card)) {
     return "unlinked";
   }
   if (card.metadata?.automation?.launch?.phase === "prepared") {
@@ -13777,8 +14462,8 @@ function taskfoldRunEvidence(params) {
   }
   return silentFor <= RUNNING_HEARTBEAT_STALE_MS + ABANDONED_RUN_GRACE_MS ? "stale" : "abandoned";
 }
-function staleRunState(card, now) {
-  if (taskfoldRunEvidence({ card, now }) !== "stale") {
+function staleRunState(card, now, registry = UNCONFIGURED_STATUS_REGISTRY) {
+  if (taskfoldRunEvidence({ card, now, registry }) !== "stale") {
     return void 0;
   }
   return {
@@ -13788,8 +14473,8 @@ function staleRunState(card, now) {
   };
 }
 function getTaskfoldLifecycle(params) {
-  const { card, now } = params;
-  const state = taskfoldRunEvidence({ card, now });
+  const { card, now, registry } = params;
+  const state = taskfoldRunEvidence({ card, now, ...registry ? { registry } : {} });
   if (state === "unlinked" || state === "launching") {
     return { state };
   }
@@ -13798,15 +14483,15 @@ function getTaskfoldLifecycle(params) {
     case "finished":
       return {
         state,
-        ...card.execution?.status === "done" || card.execution?.status === "review" ? { targetStatus: "review" } : { targetStatus: "blocked" },
+        ...card.execution?.status === "done" || card.execution?.status === "review" ? { targetPhase: "review" } : { targetPhase: "blocked" },
         sourceUpdatedAt
       };
     case "live":
-      return { state, targetStatus: "running", sourceUpdatedAt };
+      return { state, targetPhase: "running", sourceUpdatedAt };
     case "stale":
-      return { state, targetStatus: "running", sourceUpdatedAt };
+      return { state, targetPhase: "running", sourceUpdatedAt };
     case "abandoned":
-      return { state, targetStatus: "blocked", sourceUpdatedAt };
+      return { state, targetPhase: "blocked", sourceUpdatedAt };
   }
 }
 function executionStatusForLifecycle(lifecycle) {
@@ -13829,15 +14514,16 @@ function executionStatusForLifecycle(lifecycle) {
 function shouldCloseOrphanedRun(params) {
   return taskfoldRunEvidence(params) === "abandoned";
 }
-function shouldSyncCardStatus(card, targetStatus) {
-  if (!targetStatus || card.status === targetStatus) {
+function shouldSyncCardStatus(card, targetPhase, registry = UNCONFIGURED_STATUS_REGISTRY, now = Date.now()) {
+  const phase = cardPhase(card, registry, now);
+  if (!targetPhase || phase === targetPhase) {
     return false;
   }
-  if (targetStatus === "running") {
-    return card.status === "backlog" || card.status === "todo" || card.status === "ready";
+  if (targetPhase === "running") {
+    return isStartablePhase(phase);
   }
-  if (targetStatus === "blocked" || targetStatus === "review") {
-    return card.status === "running" || card.status === "todo" || card.status === "ready";
+  if (targetPhase === "blocked" || targetPhase === "review") {
+    return phase === "running" || isStartablePhase(phase);
   }
   return false;
 }
@@ -13846,15 +14532,16 @@ function shouldSyncExecutionStatus(card, targetStatus) {
 }
 
 // src/backend/src/reconciler.ts
+init_store_card_helpers();
 init_store_constants();
 var RECONCILE_INTERVAL_MS = 15e3;
 var LAUNCH_ACCEPT_GRACE_MS = 10 * 60 * 1e3;
 function hasRunningAttempt(card) {
   return Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running"));
 }
-function activeCards(cards) {
+function activeCards(cards, registryFor) {
   return cards.filter(
-    (card) => !card.metadata?.archivedAt && (card.status === "running" || card.execution?.status === "running" || hasRunningAttempt(card) || Boolean(card.metadata?.claim))
+    (card) => !card.metadata?.archivedAt && (cardPhase(card, registryFor(card)) === "running" || card.execution?.status === "running" || hasRunningAttempt(card) || Boolean(card.metadata?.claim))
   );
 }
 async function failStaleLaunch(params) {
@@ -13869,19 +14556,24 @@ async function failStaleLaunch(params) {
   });
 }
 async function applyLifecycle(params) {
-  const { store, card, now } = params;
-  const lifecycle = getTaskfoldLifecycle({ card, now });
+  const { store, card, now, registry } = params;
+  const lifecycle = getTaskfoldLifecycle({ card, now, registry });
   const executionStatus = executionStatusForLifecycle(lifecycle);
   const patch = {};
   const metadataPatch = {};
-  if (lifecycle.sourceUpdatedAt !== void 0 && shouldSyncCardStatus(card, lifecycle.targetStatus)) {
-    patch.status = lifecycle.targetStatus;
+  if (lifecycle.sourceUpdatedAt !== void 0 && lifecycle.targetPhase !== void 0 && shouldSyncCardStatus(card, lifecycle.targetPhase, registry, now)) {
+    const phase = phasePatch(card, lifecycle.targetPhase, registry, {
+      now,
+      ...lifecycle.targetPhase === "blocked" ? { reason: "Linked run is no longer reporting." } : {}
+    });
+    patch.status = phase.status;
+    Object.assign(metadataPatch, phase.flags);
     metadataPatch.lifecycleStatusSourceUpdatedAt = lifecycle.sourceUpdatedAt;
   }
   if (shouldSyncExecutionStatus(card, executionStatus)) {
     patch.execution = { ...card.execution, status: executionStatus, updatedAt: now };
   }
-  const stale = staleRunState(card, now);
+  const stale = staleRunState(card, now, registry);
   const existingStale = card.metadata?.stale;
   if (stale) {
     const changed = !existingStale || existingStale.lastSessionUpdatedAt !== stale.lastSessionUpdatedAt || existingStale.reason !== stale.reason;
@@ -13901,9 +14593,9 @@ async function applyLifecycle(params) {
   return true;
 }
 async function finishOrphanedRun(params) {
-  const { store, card, runtime, now } = params;
+  const { store, card, runtime, now, registry } = params;
   const runId = cardRunId(card);
-  if (!runId || !shouldCloseOrphanedRun({ card, now })) {
+  if (!runId || !shouldCloseOrphanedRun({ card, now, registry })) {
     return false;
   }
   await store.finishExecutionForRun(runId, {
@@ -13926,18 +14618,31 @@ async function reconcileTaskfoldCards(params) {
     staleLaunches: 0,
     skipped: 0
   };
-  for (const card of activeCards(await params.store.list())) {
+  const registries = /* @__PURE__ */ new Map();
+  const allCards = await params.store.list();
+  for (const boardId of new Set(allCards.map(cardBoardId))) {
+    try {
+      registries.set(boardId, await params.store.statusRegistryFor(boardId));
+    } catch (error) {
+      params.onCardError?.(`board:${boardId}`, error);
+    }
+  }
+  for (const card of activeCards(
+    allCards.filter((entry) => registries.has(cardBoardId(entry))),
+    (entry) => registries.get(cardBoardId(entry))
+  )) {
+    const registry = registries.get(cardBoardId(card));
     outcome.checked += 1;
     try {
       if (await failStaleLaunch({ store: params.store, card, now })) {
         outcome.staleLaunches += 1;
         continue;
       }
-      if (await finishOrphanedRun({ ...params, card, now })) {
+      if (await finishOrphanedRun({ ...params, card, now, registry })) {
         outcome.finished += 1;
         continue;
       }
-      if (await applyLifecycle({ ...params, card, now })) {
+      if (await applyLifecycle({ ...params, card, now, registry })) {
         outcome.updated += 1;
       }
       if (isTaskfoldClaimReclaimable(card.metadata?.claim, now)) {
@@ -14013,13 +14718,13 @@ function createTaskfoldReconcilerService(params) {
 
 // src/backend/src/sqlite-migration-check.ts
 import fs13 from "node:fs";
-import path19 from "node:path";
+import path20 from "node:path";
 function createTaskfoldSqliteMigrationCheckService(pluginDir) {
   return {
     id: "taskfold-sqlite-migration-check",
     start(ctx) {
-      const sqlitePath = path19.join(pluginDir, "taskfold.sqlite");
-      const projectsJsonPath = path19.join(pluginDir, "projects.json");
+      const sqlitePath = path20.join(pluginDir, "taskfold.sqlite");
+      const projectsJsonPath = path20.join(pluginDir, "projects.json");
       if (fs13.existsSync(sqlitePath) && !fs13.existsSync(projectsJsonPath)) {
         ctx.logger.warn(
           `taskfold: ${sqlitePath} exists but ${projectsJsonPath} does not: Taskfold now stores data in files and your SQLite data has not been migrated yet. Run "openclaw taskfold migrate-sqlite --dry-run" to preview, then "openclaw taskfold migrate-sqlite --apply".`
@@ -14030,29 +14735,47 @@ function createTaskfoldSqliteMigrationCheckService(pluginDir) {
 }
 
 // ../core/src/store-dispatch.ts
+init_card_phase();
+init_store_card_helpers();
 import { randomUUID as randomUUID13 } from "node:crypto";
 init_store_constants();
+init_store_normalizers();
 
 // ../core/src/store-projects.ts
 init_contract();
+init_store_card_helpers();
+init_card_phase();
+init_store_constants();
+init_store_normalizers();
 import { randomUUID as randomUUID12 } from "node:crypto";
 import { stat } from "node:fs/promises";
-init_store_constants();
+
+// ../core/src/store-notifications.ts
+init_store_card_helpers();
+init_store_normalizers();
 
 // ../core/src/store-workflow.ts
+init_card_phase();
 init_sdk_utils();
 import { randomUUID as randomUUID11 } from "node:crypto";
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
+init_store_card_helpers();
 init_store_constants();
+init_store_normalizers();
 
 // ../core/src/store-promote.ts
-import { randomUUID as randomUUID10 } from "node:crypto";
+init_card_phase();
+init_store_card_helpers();
 init_store_constants();
+import { randomUUID as randomUUID10 } from "node:crypto";
 
 // ../core/src/store-enrichment.ts
 init_file_store_card_images();
-import { randomUUID as randomUUID9 } from "node:crypto";
+init_card_phase();
+init_store_card_helpers();
 init_store_constants();
+import { randomUUID as randomUUID9 } from "node:crypto";
+init_store_normalizers();
 var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
   async addProof(id, input, scope) {
     const now = Date.now();
@@ -14288,11 +15011,14 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
         ...sessionKey || cardSessionKey(card) ? { sessionKey: sessionKey ?? cardSessionKey(card) } : {},
         ...runId || cardRunId(card) ? { runId: runId ?? cardRunId(card) } : {}
       };
+      const registry = await this.statusRegistryFor(cardBoardId(card));
+      const blockedPatch = registry.isTerminal(card.status) ? void 0 : phasePatch(card, "blocked", registry, { reason: detail, now });
       return await this.updateCard(card.id, {
-        status: card.status === "done" ? card.status : "blocked",
+        status: blockedPatch?.status ?? card.status,
         ...execution ? { execution } : {},
         metadata: {
           ...card.metadata,
+          ...blockedPatch?.flags ?? {},
           workerLogs: [...card.metadata?.workerLogs ?? [], log].slice(-MAX_CARD_WORKER_LOGS),
           workerProtocol: {
             state: "violated",
@@ -14312,13 +15038,15 @@ var TaskfoldEnrichmentStore = class extends TaskfoldCoreStore {
 };
 
 // ../core/src/store-promote.ts
+init_store_normalizers();
 var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
   async promoteReady(now = Date.now()) {
     return await this.enqueueMutation(async () => {
       const promoted = [];
       for (const card of await this.list()) {
+        const registry = await this.statusRegistryFor(cardBoardId(card));
         const next = await this.promoteDependencyReady(card.id, now);
-        if (next.status !== card.status) {
+        if (cardPhase(next, registry, now) !== cardPhase(card, registry, now)) {
           promoted.push(next);
         }
       }
@@ -14361,17 +15089,22 @@ var TaskfoldPromoteStore = class extends TaskfoldEnrichmentStore {
         ...existing.metadata?.comments ?? [],
         { id: randomUUID10(), body: reason, createdAt: Date.now() }
       ].slice(-MAX_CARD_COMMENTS) : existing.metadata?.comments;
+      const ready = phasePatch(existing, "ready", await this.statusRegistryFor(cardBoardId(existing)));
       return await this.updateCard(
         id,
         {
-          status: "ready",
+          status: ready.status,
           metadata: {
             ...clearDiagnostics(existing.metadata, ["stranded_ready", "blocked_too_long"]),
             comments,
             stale: null
           }
         },
-        { enforceStatusHolds: input.force !== true, expectedRevision: existing.revision }
+        {
+          enforceStatusHolds: input.force !== true,
+          expectedRevision: existing.revision,
+          phaseFlags: ready.flags
+        }
       );
     }));
   }
@@ -14427,6 +15160,18 @@ function executionAssociationPatch(card, input) {
   };
 }
 var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
+  /**
+   * 拆解 / 规格化之后这张卡该落在哪个状态：停在 intake 状态（原 triage）或"想法类"未开始状态
+   * （如 backlog）的卡退到项目默认的未开始状态，其余原样。
+   */
+  async specifiedStatusFor(card) {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    const phase = cardPhase(card, registry);
+    if (phase === "triage" || phase === "todo" && card.status !== registry.defaultStatus) {
+      return registry.defaultStatus;
+    }
+    return card.status;
+  }
   async claimExecution(id, input) {
     const ownerId = normalizeBoundedString(input.ownerId, void 0, 120, "claim owner");
     if (!ownerId) {
@@ -14666,16 +15411,18 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           failedAt,
           reason
         };
-        const nextStatus = existing.status === "running" ? "blocked" : existing.status;
+        const registry = await this.statusRegistryFor(cardBoardId(existing));
+        const failed = cardPhase(existing, registry, failedAt) === "running" ? phasePatch(existing, "blocked", registry, { reason, now: failedAt }) : void 0;
         await this.updateCard(
           id,
           {
-            status: nextStatus,
+            status: failed?.status ?? existing.status,
             sessionKey: null,
             runId: null,
             execution: null,
             metadata: {
               ...metadata,
+              ...failed?.flags ?? {},
               claim: void 0,
               attempts: closeRunningAttempts(metadata.attempts, failedAt, "blocked", reason),
               automation: { ...metadata.automation, launch }
@@ -14818,14 +15565,15 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       ))) {
         throw new Error("card workspace authority changed before claim.");
       }
+      const guardedPhase = cardPhase(guarded, await this.statusRegistryFor(cardBoardId(guarded)), now);
       const existingClaim = guarded.metadata?.claim;
       const activeClaim = existingClaim && (isFutureDateTimestampMs(existingClaim.expiresAt, { nowMs: now }) || // Direct claims must honor the same running-worker heartbeat grace
       // as dispatcher recovery; otherwise they silently steal live tokens.
-      guarded.status === "running" && !isTaskfoldClaimReclaimable(existingClaim, now)) ? existingClaim : void 0;
-      if (cardParentIds(guarded).length > 0 && guarded.status !== "ready" && !activeClaim) {
+      guardedPhase === "running" && !isTaskfoldClaimReclaimable(existingClaim, now)) ? existingClaim : void 0;
+      if (cardParentIds(guarded).length > 0 && guardedPhase !== "ready" && !activeClaim) {
         throw new Error("card dependencies are not done.");
       }
-      if (guarded.status === "scheduled") {
+      if (guardedPhase === "scheduled") {
         throw new Error("card is scheduled for later.");
       }
       if (retryBudgetExhausted(guarded)) {
@@ -14854,11 +15602,14 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
     });
   }
   async markClaimedCardRunning(card, ownerId) {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    const running = isStartablePhase(cardPhase(card, registry)) ? phasePatch(card, "running", registry) : void 0;
     return await this.updateCard(
       card.id,
       {
-        status: card.status === "backlog" || card.status === "todo" || card.status === "ready" ? "running" : card.status,
-        agentId: card.agentId ?? ownerId
+        status: running?.status ?? card.status,
+        agentId: card.agentId ?? ownerId,
+        ...running ? { metadata: { ...card.metadata, ...running.flags } } : {}
       },
       { expectedRevision: card.revision }
     );
@@ -14900,7 +15651,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       if (!existing) {
         throw new Error(`card not found: ${id}`);
       }
-      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      const status = optionalStatusInput(input.status) ?? existing.status;
       const claim = existing.metadata?.claim;
       if (claim) {
         assertClaimIdentity(claim, input);
@@ -14961,13 +15712,15 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       ...cardRunId(existing) ? { runId: cardRunId(existing) } : {}
     };
     const execution = existing.execution?.status === "running" ? { ...existing.execution, status: "done", updatedAt: now } : existing.execution;
+    const donePatch = phasePatch(existing, "done", await this.statusRegistryFor(cardBoardId(existing)), { now });
     return await this.updateCard(
       id,
       {
-        status: "done",
+        status: donePatch.status,
         ...execution ? { execution } : {},
         metadata: {
           ...metadata,
+          ...donePatch.flags,
           claim: void 0,
           attempts: closeRunningAttempts(metadata.attempts, now, "succeeded"),
           failureCount: 0,
@@ -15017,13 +15770,18 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         ...cardRunId(existing) ? { runId: cardRunId(existing) } : {}
       };
       const execution = existing.execution?.status === "running" ? { ...existing.execution, status: "blocked", updatedAt: now } : existing.execution;
+      const blockedPatch = phasePatch(existing, "blocked", await this.statusRegistryFor(cardBoardId(existing)), {
+        reason,
+        now
+      });
       return await this.updateCard(
         id,
         {
-          status: "blocked",
+          status: blockedPatch.status,
           ...execution ? { execution } : {},
           metadata: {
             ...metadata,
+            ...blockedPatch.flags,
             claim: void 0,
             attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
             failureCount: (metadata.failureCount ?? 0) + 1,
@@ -15048,9 +15806,10 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       }
       assertCanMutateClaimedCard(existing, scope);
       const metadata = clearDiagnostics(existing.metadata, ["blocked_too_long"]);
+      const todo = phasePatch(existing, "todo", await this.statusRegistryFor(cardBoardId(existing)));
       return await this.updateCard(
         id,
-        { status: "todo", metadata: { ...metadata, stale: null } },
+        { status: todo.status, metadata: { ...metadata, ...todo.flags, stale: null } },
         { expectedRevision: existing.revision }
       );
     }));
@@ -15063,7 +15822,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       }
       assertCanMutateClaimedCard(existing, scope === null ? void 0 : scope);
       const agentId = input.agentId === void 0 ? existing.agentId : normalizeOptionalString(input.agentId);
-      const status = input.status === void 0 ? existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      const status = optionalStatusInput(input.status) ?? existing.status;
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "reassign reason");
       const shouldResetFailures = input.resetFailures !== false;
       const baseMetadata = shouldResetFailures ? clearDiagnostics(existing.metadata, ["blocked_too_long", "repeated_failures"]) : existing.metadata;
@@ -15091,7 +15850,9 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
       assertCanMutateClaimedCard(existing, scope === null ? void 0 : scope);
       const now = Date.now();
       const reason = normalizeBoundedString(input.reason, void 0, 1e3, "reclaim reason") ?? "Taskfold claim reclaimed.";
-      const targetStatus = input.status === void 0 ? existing.status === "running" ? "ready" : existing.status : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      const registry = await this.statusRegistryFor(cardBoardId(existing));
+      const requeued = input.status === void 0 && cardPhase(existing, registry, now) === "running" ? phasePatch(existing, "ready", registry, { now }) : void 0;
+      const targetStatus = requeued?.status ?? optionalStatusInput(input.status) ?? existing.status;
       const reclaimed = await this.updateCard(
         id,
         {
@@ -15099,6 +15860,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           execution: existing.execution?.status === "running" ? null : existing.execution,
           metadata: {
             ...existing.metadata,
+            ...requeued?.flags ?? {},
             claim: void 0,
             attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
             comments: [
@@ -15128,13 +15890,15 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         throw new Error(`card not found: ${id}`);
       }
       assertCanMutateClaimedCard(existing, scope === null ? void 0 : scope);
-      if (existing.status !== "triage" && existing.status !== "backlog" && existing.status !== "todo") {
-        throw new Error("only triage, backlog, or todo cards can be specified.");
-      }
       const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
-      const requestedStatus = normalizeStatus(input.status, "todo", statusRegistry);
-      if (requestedStatus !== "todo") {
-        throw new Error("specified cards must move to todo.");
+      const existingPhase = cardPhase(existing, statusRegistry);
+      if (existingPhase !== "triage" && existingPhase !== "todo") {
+        throw new Error("only cards that have not started (triage, backlog or todo) can be specified.");
+      }
+      const specifiedStatus = statusRegistry.defaultStatus;
+      const requestedStatus = optionalStatusInput(input.status) ?? specifiedStatus;
+      if (requestedStatus !== specifiedStatus) {
+        throw new Error(`specified cards must move to ${specifiedStatus}.`);
       }
       const now = Date.now();
       const summary = normalizeBoundedString(input.summary, void 0, 2e3, "spec summary");
@@ -15157,8 +15921,8 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
         id,
         {
           ...cardPatch,
-          status: "todo",
-          metadata
+          status: specifiedStatus,
+          metadata: { ...metadata, blocked: void 0, dispatchReady: void 0 }
         },
         { enforceStatusHolds: true, expectedRevision: existing.revision }
       );
@@ -15232,7 +15996,7 @@ var TaskfoldWorkflowStore = class extends TaskfoldPromoteStore {
           return await this.updateCard(
             parent.id,
             {
-              status: latestParent.status === "triage" || latestParent.status === "backlog" ? "todo" : latestParent.status,
+              status: await this.specifiedStatusFor(latestParent),
               metadata: {
                 ...latestParent.metadata,
                 automation: normalizeAutomation(
@@ -15402,7 +16166,7 @@ var TaskfoldNotificationStore = class extends TaskfoldWorkflowStore {
 // ../core/src/project-document-discovery.ts
 import { createHash as createHash5 } from "node:crypto";
 import fs14 from "node:fs/promises";
-import path20 from "node:path";
+import path21 from "node:path";
 var MAX_DISCOVERED_DOCUMENTS = 500;
 var MARKDOWN_EXTENSIONS2 = /* @__PURE__ */ new Set([".md", ".markdown"]);
 var TOP_LEVEL_AI_INSTRUCTION_NAMES = /* @__PURE__ */ new Set(["agents.md", "claude.md"]);
@@ -15424,14 +16188,14 @@ var EXTRA_DOCUMENT_PATHS = [
   ".claude/skills/deploy-prod/SKILL.md"
 ];
 function isPathInside2(root, candidate) {
-  const relative = path20.relative(root, candidate);
-  return relative === "" || !relative.startsWith(`..${path20.sep}`) && relative !== "..";
+  const relative = path21.relative(root, candidate);
+  return relative === "" || !relative.startsWith(`..${path21.sep}`) && relative !== "..";
 }
 function normalizedRelativePath(root, target) {
-  return path20.relative(root, target).split(path20.sep).join("/");
+  return path21.relative(root, target).split(path21.sep).join("/");
 }
 function isMarkdownPath(relativePath) {
-  return MARKDOWN_EXTENSIONS2.has(path20.extname(relativePath).toLocaleLowerCase());
+  return MARKDOWN_EXTENSIONS2.has(path21.extname(relativePath).toLocaleLowerCase());
 }
 function sourceForDocument(relativePath) {
   const normalized2 = relativePath.toLocaleLowerCase();
@@ -15461,7 +16225,7 @@ function candidateKey(relativePath, source) {
   return `file.${createHash5("sha256").update(relativePath).digest("hex").slice(0, 24)}`;
 }
 function candidateTitle(relativePath) {
-  return path20.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
+  return path21.basename(relativePath).replace(/\.(?:md|markdown)$/i, "");
 }
 async function directoryEntries(directory) {
   try {
@@ -15474,7 +16238,7 @@ async function addCandidate(params) {
   if (params.results.length >= MAX_DISCOVERED_DOCUMENTS || !isMarkdownPath(params.relativePath)) {
     return;
   }
-  const candidatePath = path20.join(params.root, params.relativePath);
+  const candidatePath = path21.join(params.root, params.relativePath);
   let target;
   try {
     target = await fs14.realpath(candidatePath);
@@ -15507,12 +16271,12 @@ async function addCandidate(params) {
   params.targets.add(target);
 }
 async function addDirectoryMarkdownFiles(params) {
-  const directory = path20.join(params.root, params.relativeDirectory);
+  const directory = path21.join(params.root, params.relativeDirectory);
   const entries = await directoryEntries(directory);
   for (const entry of entries.filter((entry2) => entry2.isFile() && isMarkdownPath(entry2.name)).toSorted((left, right) => left.name.localeCompare(right.name))) {
     await addCandidate({
       ...params,
-      relativePath: path20.join(params.relativeDirectory, entry.name)
+      relativePath: path21.join(params.relativeDirectory, entry.name)
     });
   }
 }
@@ -15521,13 +16285,13 @@ async function addTopLevelModuleAiInstructions(params) {
   for (const entry of entries.filter(
     (entry2) => entry2.isDirectory() && !entry2.isSymbolicLink() && !entry2.name.startsWith(".") && !EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES.has(entry2.name)
   ).toSorted((left, right) => left.name.localeCompare(right.name))) {
-    const moduleEntries = await directoryEntries(path20.join(params.root, entry.name));
+    const moduleEntries = await directoryEntries(path21.join(params.root, entry.name));
     for (const instruction of moduleEntries.filter(
       (moduleEntry) => moduleEntry.isFile() && TOP_LEVEL_AI_INSTRUCTION_NAMES.has(moduleEntry.name.toLocaleLowerCase())
     ).toSorted((left, right) => left.name.localeCompare(right.name))) {
       await addCandidate({
         ...params,
-        relativePath: path20.join(entry.name, instruction.name)
+        relativePath: path21.join(entry.name, instruction.name)
       });
     }
   }
@@ -15551,11 +16315,11 @@ async function resolveTaskfoldProjectDocumentWorkspacePath(workspacePath) {
   return root;
 }
 function isTaskfoldProjectDocumentDiscoveryPath(workspaceRoot, target) {
-  if (!target || !path20.isAbsolute(target)) {
+  if (!target || !path21.isAbsolute(target)) {
     return false;
   }
-  const root = path20.resolve(workspaceRoot);
-  const resolvedTarget = path20.resolve(target);
+  const root = path21.resolve(workspaceRoot);
+  const resolvedTarget = path21.resolve(target);
   if (!isPathInside2(root, resolvedTarget)) {
     return false;
   }
@@ -15589,7 +16353,7 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   for (const directory of PLANNING_DOCUMENT_DIRECTORIES) {
     await addDirectoryMarkdownFiles({
       ...params,
-      relativeDirectory: path20.join(".planning", directory)
+      relativeDirectory: path21.join(".planning", directory)
     });
   }
   for (const relativePath of EXTRA_DOCUMENT_PATHS) {
@@ -15695,9 +16459,9 @@ function normalizeDocumentBody(input, type, fallback) {
     ...content ? { content } : {}
   };
 }
-function boardRunningCards(cards) {
+function boardRunningCards(cards, registry) {
   return cards.filter(
-    (card) => card.status === "running" || card.execution?.status === "running" || card.metadata?.attempts?.some((attempt) => attempt.status === "running")
+    (card) => cardPhase(card, registry) === "running" || card.execution?.status === "running" || card.metadata?.attempts?.some((attempt) => attempt.status === "running")
   );
 }
 var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
@@ -15805,7 +16569,13 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       const board = await this.ensureProjectDirect(boardId);
       const milestones = await this.listMilestonesDirect(boardId);
       const cards = await this.list({ boardId });
-      return { board, milestones, cards };
+      return {
+        board,
+        milestones,
+        cards,
+        statuses: await this.listStatuses(boardId),
+        statusesConfigured: await this.hasStatusConfig(boardId)
+      };
     });
   }
   async createProject(input) {
@@ -15859,10 +16629,13 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
         await this.boardStore.delete(board.id);
         throw error;
       }
+      await this.initializeProjectStatuses(board.id);
       return {
         board,
         milestones: milestone ? [milestone] : [],
-        cards: []
+        cards: [],
+        statuses: await this.listStatuses(board.id),
+        statusesConfigured: await this.hasStatusConfig(board.id)
       };
     });
   }
@@ -15925,7 +16698,7 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       await this.boardStore.register(boardId, { version: 1, board });
       return {
         board,
-        runningCards: archived === false ? [] : boardRunningCards(await this.list({ boardId }))
+        runningCards: archived === false ? [] : boardRunningCards(await this.list({ boardId }), await this.statusRegistryFor(boardId))
       };
     });
   }
@@ -16028,8 +16801,9 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
       if (milestone.state !== "active") {
         throw new Error("only active milestones can be completed.");
       }
+      const milestoneRegistry = await this.statusRegistryFor(milestone.boardId);
       const unfinished = (await this.list({ boardId: milestone.boardId })).filter(
-        (card) => card.milestoneId === milestone.id && !card.metadata?.archivedAt && card.status !== "done"
+        (card) => card.milestoneId === milestone.id && !card.metadata?.archivedAt && !milestoneRegistry.isTerminal(card.status)
       );
       if (unfinished.length > 0) {
         throw new Error(
@@ -16386,7 +17160,11 @@ var TaskfoldProjectStore = class extends TaskfoldNotificationStore {
 // ../core/src/store-dispatch.ts
 var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
   async shouldAutoOrchestrate(card) {
-    if (card.status !== "triage" || card.metadata?.archivedAt || card.metadata?.workerProtocol?.state === "idle") {
+    if (card.metadata?.archivedAt || card.metadata?.workerProtocol?.state === "idle") {
+      return false;
+    }
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    if (cardPhase(card, registry) !== "triage") {
       return false;
     }
     const board = await this.boardStore.lookup(cardBoardId(card));
@@ -16409,8 +17187,10 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
           if (card.metadata?.archivedAt) {
             continue;
           }
+          const registry = await this.statusRegistryFor(cardBoardId(card));
+          const phaseBefore = cardPhase(card, registry, now);
           let latest = await this.promoteDependencyReady(card.id, now);
-          const wasPromoted = latest.status !== card.status;
+          const wasPromoted = cardPhase(latest, registry, now) !== phaseBefore;
           const claim = latest.metadata?.claim;
           const latestAttempt = latestRunningAttempt(latest);
           const maxRuntimeSeconds = latest.metadata?.automation?.maxRuntimeSeconds;
@@ -16418,14 +17198,16 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
           const timedOut = Boolean(maxRuntimeSeconds && runtimeStartedAt) && now - runtimeStartedAt > secondsToDurationMs(maxRuntimeSeconds);
           const claimExpired = isTaskfoldClaimReclaimable(claim, now);
           const retriesExhausted = retryBudgetExhausted(latest);
-          if (latest.status === "running" && (timedOut || claimExpired)) {
+          if (cardPhase(latest, registry, now) === "running" && (timedOut || claimExpired)) {
             const reason = timedOut ? "Run exceeded the card max runtime." : "Claim expired without a recent heartbeat.";
             const execution = latest.execution?.status === "running" ? { ...latest.execution, status: "blocked", updatedAt: now } : latest.execution;
+            const blockedPatch = phasePatch(latest, "blocked", registry, { reason, now });
             latest = await this.updateCard(latest.id, {
-              status: "blocked",
+              status: blockedPatch.status,
               ...execution ? { execution } : {},
               metadata: {
                 ...latest.metadata,
+                ...blockedPatch.flags,
                 claim: void 0,
                 attempts: closeRunningAttempts(latest.metadata?.attempts, now, "blocked", reason),
                 failureCount: (latest.metadata?.failureCount ?? 0) + 1,
@@ -16448,11 +17230,16 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
             }, { expectedRevision: latest.revision });
             reclaimed.push(latest);
           }
-          if (!latest.metadata?.claim && retriesExhausted && isDependencyPromotableStatus(latest.status)) {
+          if (!latest.metadata?.claim && retriesExhausted && isDependencyPromotableCard(latest, registry)) {
+            const blockedPatch = phasePatch(latest, "blocked", registry, {
+              reason: "Card exhausted its retry budget.",
+              now
+            });
             latest = await this.updateCard(latest.id, {
-              status: "blocked",
+              status: blockedPatch.status,
               metadata: {
                 ...latest.metadata,
+                ...blockedPatch.flags,
                 notifications: [
                   ...latest.metadata?.notifications ?? [],
                   {
@@ -16467,7 +17254,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
             }, { expectedRevision: latest.revision });
             blocked.push(latest);
           }
-          if (latest.status === "ready" && !latest.metadata?.archivedAt) {
+          if (cardPhase(latest, registry, now) === "ready" && !latest.metadata?.archivedAt) {
             latest = await this.recordDispatch(latest, now);
           }
           if (await this.shouldAutoOrchestrate(latest)) {
@@ -16481,7 +17268,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
               orchestratedByBoard.set(latestBoardId, boardCount + 1);
             }
           }
-          if (wasPromoted && latest.status !== "blocked") {
+          if (wasPromoted && cardPhase(latest, registry, now) !== "blocked") {
             promoted.push(latest);
           }
         } catch (error) {
@@ -16527,8 +17314,12 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
   }
   async diagnostics(now = Date.now()) {
     const cards = await this.list();
+    const registries = /* @__PURE__ */ new Map();
+    for (const boardId of new Set(cards.map(cardBoardId))) {
+      registries.set(boardId, await this.statusRegistryFor(boardId));
+    }
     const rows = cards.flatMap((card) => {
-      const diagnostics = computeCardDiagnostics(card, now);
+      const diagnostics = computeCardDiagnostics(card, now, registries.get(cardBoardId(card)));
       return diagnostics.length ? [{ card, diagnostics }] : [];
     });
     return {
@@ -16547,7 +17338,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
         }
         const diagnostics = mergeDiagnostics(
           latest.metadata?.diagnostics,
-          computeCardDiagnostics(latest, now)
+          computeCardDiagnostics(latest, now, await this.statusRegistryFor(cardBoardId(latest)))
         );
         if (diagnostics.length === 0 && !latest.metadata?.diagnostics?.length) {
           continue;
@@ -16573,7 +17364,7 @@ var TaskfoldDispatchStore = class extends TaskfoldProjectStore {
     if (!card) {
       throw new Error(`card not found: ${id}`);
     }
-    return buildWorkerContext(card, await this.list());
+    return buildWorkerContext(card, await this.list(), Date.now(), await this.statusRegistryFor(cardBoardId(card)));
   }
 };
 
@@ -16602,6 +17393,9 @@ var TaskfoldStore = class _TaskfoldStore extends TaskfoldDispatchStore {
 };
 
 // src/backend/src/tools.ts
+init_card_phase();
+init_status_registry();
+init_store_card_helpers();
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/core";
 import { safeEqualSecret as safeEqualSecret2 } from "openclaw/plugin-sdk/security-runtime";
 
@@ -20982,7 +21776,6 @@ __export(typebox_exports, {
 init_card_redaction();
 
 // src/backend/src/tools-card-mutations.ts
-init_contract();
 var ClaimTokenFieldName = "token";
 function cardIdField() {
   return typebox_exports.String({ description: "Taskfold card id." });
@@ -20998,10 +21791,10 @@ function createTaskfoldMoveTool(params) {
     parameters: typebox_exports.Object(
       {
         id: cardIdField(),
-        status: typebox_exports.Union(
-          TASKFOLD_STATUSES.map((status) => typebox_exports.Literal(status)),
-          { description: "Target Taskfold status." }
-        ),
+        status: typebox_exports.String({
+          minLength: 1,
+          description: "Target status id in the card's project (default statuses: todo, running, review, done, cancelled; projects can define their own). The old ready (queue the card for dispatch) and blocked (mark it blocked) are still accepted."
+        }),
         [ClaimTokenFieldName]: claimTokenField("Claim token for claimed cards.")
       },
       { additionalProperties: false }
@@ -21068,11 +21861,13 @@ async function requireClaimedCard(store, cardId, ownerId, token) {
   }
   return card;
 }
-function summarizeCard(card) {
+function summarizeCard(card, registry) {
   return {
     id: card.id,
     title: card.title,
     status: card.status,
+    // 阻塞 / 已派发 / 定时未到是卡片标记，不是状态：只有 phase 里看得出来。
+    phase: cardPhase(card, registry),
     priority: card.priority,
     agentId: card.agentId,
     tenant: card.metadata?.automation?.tenant,
@@ -21158,7 +21953,11 @@ function createTaskfoldTools(params) {
       description: "List Taskfold cards with compact claim and diagnostic state. Use before choosing or routing board work.",
       parameters: typebox_exports.Object(
         {
-          status: typebox_exports.Optional(typebox_exports.String({ description: "Optional card status filter." })),
+          status: typebox_exports.Optional(
+            typebox_exports.String({
+              description: "Optional status filter: a status id of the project, or the phase ready / blocked / scheduled (cards queued for dispatch, blocked, or waiting for their scheduled time)."
+            })
+          ),
           agentId: typebox_exports.Optional(typebox_exports.String({ description: "Optional agent id filter." })),
           tenant: typebox_exports.Optional(typebox_exports.String({ description: "Optional tenant filter." })),
           boardId: typebox_exports.Optional(typebox_exports.String({ description: "Optional board id filter." })),
@@ -21184,7 +21983,26 @@ function createTaskfoldTools(params) {
         const tenant = typeof record.tenant === "string" ? record.tenant : void 0;
         const boardId = typeof record.boardId === "string" ? record.boardId : void 0;
         const limit = typeof record.limit === "number" && Number.isFinite(record.limit) ? Math.max(1, Math.min(200, Math.trunc(record.limit))) : 50;
-        const cards = (await store.list({ boardId })).filter((card) => record.includeArchived === true || !card.metadata?.archivedAt).filter((card) => !status || card.status === status).filter((card) => !agentId || card.agentId === agentId).filter((card) => !tenant || card.metadata?.automation?.tenant === tenant).slice(0, limit).map(summarizeCard);
+        const registries = /* @__PURE__ */ new Map();
+        const registryFor = async (card) => {
+          const id = cardBoardId(card);
+          if (!registries.has(id)) {
+            registries.set(id, await store.statusRegistryFor(id));
+          }
+          return registries.get(id);
+        };
+        const candidates = (await store.list({ boardId })).filter((card) => record.includeArchived === true || !card.metadata?.archivedAt).filter((card) => !agentId || card.agentId === agentId).filter((card) => !tenant || card.metadata?.automation?.tenant === tenant);
+        const cards = [];
+        for (const card of candidates) {
+          const registry = await registryFor(card);
+          const matches = !status || (isRetiredTaskfoldStatusId(status) && !registry.has(status) ? cardPhase(card, registry) === status : card.status === status);
+          if (matches) {
+            cards.push(summarizeCard(card, registry));
+          }
+          if (cards.length >= limit) {
+            break;
+          }
+        }
         return jsonResult({ cards });
       }
     },

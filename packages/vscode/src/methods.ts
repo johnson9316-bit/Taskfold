@@ -22,7 +22,12 @@ import type {
   TaskfoldMilestone,
   TaskfoldProjectDocument,
 } from "@taskfold/core/contract/index.js";
-import { readTaskfoldProjectDocument, writeTaskfoldProjectDocumentPath } from "@taskfold/core/project-document-reader.js";
+import {
+  readTaskfoldProjectDocument,
+  readTaskfoldProjectDocumentAsset,
+  writeTaskfoldProjectDocumentAsset,
+  writeTaskfoldProjectDocumentPath,
+} from "@taskfold/core/project-document-reader.js";
 import { splitCardRuntime } from "@taskfold/core/file-store-card-runtime.js";
 import { findCardFilePath } from "@taskfold/core/file-store-cards.js";
 import { createMarkdownCardCodec } from "@taskfold/core/file-store-codec.js";
@@ -259,8 +264,31 @@ export function createTaskfoldVscodeMethods(deps: {
           board: presentBoard(project, view.board),
           milestones: view.milestones.map((milestone) => presentMilestone(project, milestone)),
           cards: view.cards.map((card) => presentCard(project, card)),
+          statuses: view.statuses,
+          statusesConfigured: view.statusesConfigured,
         },
       };
+    },
+
+    // 状态定义（需求/22-状态模型）存在仓库 `.taskfold/config.yml` 里，与 CLI、OpenClaw 共用。
+    "taskfold.statuses.list": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      return { statuses: await project.store.listStatuses(project.boardId) };
+    },
+    "taskfold.statuses.save": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      return { statuses: await project.store.saveStatuses(project.boardId, params.statuses as never) };
+    },
+    "taskfold.statuses.delete": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      return await project.store.deleteStatus(project.boardId, String(params.id ?? ""), {
+        ...(typeof params.moveCardsTo === "string" ? { moveCardsTo: params.moveCardsTo } : {}),
+      });
+    },
+    "taskfold.statuses.migrate": async (params) => {
+      const project = await registry.byKey(params.boardId);
+      const report = await project.store.migrateStatusModel(project.boardId, { dryRun: params.dryRun === true });
+      return { ...report, boardId: project.key };
     },
 
     // 没有 pluginDir 时 core 的项目注册表只在进程内存里，这里另存一份到 workspaceState，
@@ -281,6 +309,25 @@ export function createTaskfoldVscodeMethods(deps: {
       const { project, document } = await registry.byDocumentId(params.id);
       const preview = await readTaskfoldProjectDocument({ document, assertPathAllowed: documentPathAccess(project) });
       return { preview: { ...preview, document: presentDocument(project, preview.document) } };
+    },
+    // 资料库文档里的图片：存在文档旁的 `<文档名>.assets/`，只支持仓库里的 Markdown 文件文档。
+    "taskfold.projects.documents.assets.get": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      return await readTaskfoldProjectDocumentAsset({
+        document,
+        ref: params.ref,
+        assertPathAllowed: documentPathAccess(project),
+      });
+    },
+    "taskfold.projects.documents.assets.add": async (params) => {
+      const { project, document } = await registry.byDocumentId(params.id);
+      return await writeTaskfoldProjectDocumentAsset({
+        document,
+        fileName: params.fileName,
+        mimeType: params.mimeType,
+        contentBase64: params.contentBase64,
+        assertPathAllowed: documentPathAccess(project),
+      });
     },
     "taskfold.projects.documents.write": async (params) => {
       const { project, document } = await registry.byDocumentId(params.id);

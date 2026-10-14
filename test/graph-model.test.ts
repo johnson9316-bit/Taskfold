@@ -8,7 +8,7 @@ function card(id: string, extra: Partial<TaskfoldCard> = {}): TaskfoldCard {
   return { id, title: id, status: "todo", priority: "normal", labels: [], position: 1, createdAt: 1, updatedAt: 1, revision: 1, ...extra };
 }
 function project(cards: TaskfoldCard[]): TaskfoldProjectView {
-  return { board: { id: "project", name: "Project", position: 1, createdAt: 1, updatedAt: 1, boardView: { groupBy: "milestone", sortBy: "manual", sortDirection: "asc" } }, milestones: [], cards } as TaskfoldProjectView;
+  return { board: { id: "project", name: "Project", position: 1, createdAt: 1, updatedAt: 1, boardView: { groupBy: "milestone", sortBy: "manual", sortDirection: "asc" } }, milestones: [], cards, statuses: [], statusesConfigured: false } as TaskfoldProjectView;
 }
 
 describe("graph model", () => {

@@ -4,7 +4,7 @@
 // 与宿主无关：只依赖一个 `request(method, params)`，OpenClaw 网关与 VS Code 扩展都实现了
 // 同名的两个方法（`add` / `get`），图片以 base64 经 RPC 往返，显示用 data URL
 // （两个宿主的 CSP 都放行 `data:` 图片；VS Code 不放行 `blob:`）。
-import { parseTaskfoldCardImageRef } from "@taskfold/core/card-image-ref.js";
+import { isTaskfoldDocumentImageRef, parseTaskfoldCardImageRef } from "@taskfold/core/card-image-ref.js";
 
 export type CardImageRequest = (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
@@ -143,6 +143,46 @@ export function createCardImageClient(request: CardImageRequest): CardImageClien
     hasPending: (markdown) => new RegExp(PENDING_IMAGE.source).test(markdown),
     clearPending() {
       staged.clear();
+    },
+  };
+}
+
+export type DocumentImageClient = {
+  /** 存一张图到文档旁的 `<文档名>.assets/`，返回写进 Markdown 的相对引用。 */
+  upload(documentId: string, file: File): Promise<string>;
+  /** 文档里的引用 → data URL；不是合法的相对图片引用或取不到返回 `undefined`。 */
+  resolve(documentId: string, ref: string): Promise<string | undefined>;
+};
+
+export function createDocumentImageClient(request: CardImageRequest): DocumentImageClient {
+  const resolved = new Map<string, Promise<string | undefined>>();
+  return {
+    async upload(documentId, file) {
+      const result = (await request("taskfold.projects.documents.assets.add", {
+        id: documentId,
+        fileName: file.name,
+        mimeType: file.type,
+        contentBase64: await readAsBase64(file),
+      })) as AddResult;
+      return result.ref;
+    },
+    resolve(documentId, ref) {
+      if (!isTaskfoldDocumentImageRef(ref)) {
+        return Promise.resolve(undefined);
+      }
+      const key = `${documentId}\u0000${ref}`;
+      let cached = resolved.get(key);
+      if (!cached) {
+        cached = (async () => {
+          const image = (await request("taskfold.projects.documents.assets.get", { id: documentId, ref })) as GetResult;
+          return `data:${image.mimeType};base64,${image.contentBase64}`;
+        })().catch((error) => {
+          resolved.delete(key);
+          throw error;
+        });
+        resolved.set(key, cached);
+      }
+      return cached;
     },
   };
 }

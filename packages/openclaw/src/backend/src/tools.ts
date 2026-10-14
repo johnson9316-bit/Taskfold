@@ -1,4 +1,7 @@
+import { cardPhase } from "@taskfold/core/card-phase.js";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { isRetiredTaskfoldStatusId, type TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
+import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 // Taskfold plugin module implements tools behavior.
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/core";
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
@@ -82,11 +85,13 @@ async function requireClaimedCard(
   return card;
 }
 
-function summarizeCard(card: TaskfoldCard) {
+function summarizeCard(card: TaskfoldCard, registry: TaskfoldStatusRegistry) {
   return {
     id: card.id,
     title: card.title,
     status: card.status,
+    // 阻塞 / 已派发 / 定时未到是卡片标记，不是状态：只有 phase 里看得出来。
+    phase: cardPhase(card, registry),
     priority: card.priority,
     agentId: card.agentId,
     tenant: card.metadata?.automation?.tenant,
@@ -212,7 +217,13 @@ export function createTaskfoldTools(params: {
         "List Taskfold cards with compact claim and diagnostic state. Use before choosing or routing board work.",
       parameters: Type.Object(
         {
-          status: Type.Optional(Type.String({ description: "Optional card status filter." })),
+          status: Type.Optional(
+            Type.String({
+              description:
+                "Optional status filter: a status id of the project, or the phase ready / blocked / scheduled " +
+                "(cards queued for dispatch, blocked, or waiting for their scheduled time).",
+            }),
+          ),
           agentId: Type.Optional(Type.String({ description: "Optional agent id filter." })),
           tenant: Type.Optional(Type.String({ description: "Optional tenant filter." })),
           boardId: Type.Optional(Type.String({ description: "Optional board id filter." })),
@@ -241,13 +252,33 @@ export function createTaskfoldTools(params: {
           typeof record.limit === "number" && Number.isFinite(record.limit)
             ? Math.max(1, Math.min(200, Math.trunc(record.limit)))
             : 50;
-        const cards = (await store.list({ boardId }))
+        const registries = new Map<string, TaskfoldStatusRegistry>();
+        const registryFor = async (card: TaskfoldCard) => {
+          const id = cardBoardId(card);
+          if (!registries.has(id)) {
+            registries.set(id, await store.statusRegistryFor(id));
+          }
+          return registries.get(id)!;
+        };
+        const candidates = (await store.list({ boardId }))
           .filter((card) => record.includeArchived === true || !card.metadata?.archivedAt)
-          .filter((card) => !status || card.status === status)
           .filter((card) => !agentId || card.agentId === agentId)
-          .filter((card) => !tenant || card.metadata?.automation?.tenant === tenant)
-          .slice(0, limit)
-          .map(summarizeCard);
+          .filter((card) => !tenant || card.metadata?.automation?.tenant === tenant);
+        const cards: Array<ReturnType<typeof summarizeCard>> = [];
+        for (const card of candidates) {
+          const registry = await registryFor(card);
+          const matches =
+            !status ||
+            (isRetiredTaskfoldStatusId(status) && !registry.has(status)
+              ? cardPhase(card, registry) === status
+              : card.status === status);
+          if (matches) {
+            cards.push(summarizeCard(card, registry));
+          }
+          if (cards.length >= limit) {
+            break;
+          }
+        }
         return jsonResult({ cards });
       },
     },

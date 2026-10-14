@@ -55,6 +55,14 @@ Control UI 已迁到宿主原生注入（前端源码 `packages/ui/src/` → 产
 
 登录用 Gateway token（`gateway.auth.token`）填进页面的「Gateway 密钥」框（`#login-gate-credential`）。判断原生注入是否生效：侧边栏 Taskfold 项指向 `/plugin?plugin=taskfold&id=taskfold`（旧 iframe 是 `/plugins/taskfold/`），面板区域应该**零 `<iframe>`**。
 
+### 跑 Playwright 与改后端时的坑（2026-10-14 核实）
+
+- **Python 解释器**：`~/.claude/skills/webapp-testing/.venv` 是按 3.12 建的，系统 `python3` 已升到 3.14，直接用 venv 的 `python` 会报 `No module named 'greenlet._greenlet'`（`test/e2e/control-ui-baseline.test.ts` 默认用的也是它，会被跳过）。可用的跑法：`PYTHONPATH=~/.claude/skills/webapp-testing/.venv/lib/python3.12/site-packages ~/.local/bin/python3.12 脚本.py`（`~/.local/bin/python3.12` 是 uv 装的）。
+- **改了网关方法 / 后端要先构建后端再重启**：Gateway 加载的是 `packages/openclaw/dist/index.js`（`cd packages/openclaw && npm run build:backend`），不是源码，也不是 `build:control-ui` 的产物。只构建前端再 `plugins.controlUi.reload` 时，新增的 `taskfold.*` 网关方法仍报 `unknown method`；构建后端后还要 `openclaw gateway restart`。`packages/openclaw/dist/` 下的 `index.js` 与 `control-ui/` 都入库（[[19-ClawHub发布流程]] 第 3 步依赖它们），改了源码要重建并随提交带上。
+- **VS Code Webview 的 CSP 下 `page.wait_for_function` 不能用**：它在页面里 `eval`，被 `script-src 'nonce-…'` 拦掉。改成 Python 侧循环轮询 `page.evaluate(...)`（`evaluate` 走 CDP，不受影响）。真实 OpenClaw 面板的 CSP 没有这个限制。
+- **前端 DOM 单测用 jsdom，不要用 happy-dom**：happy-dom 的 `NodeIterator` 不完整，DOMPurify 在里面会漏处理节点（`<iframe>` 都能原样留下），净化相关的断言会得出错误结论。测试文件顶部写 `// @vitest-environment jsdom`；jsdom 没有 `ClipboardEvent` / `DragEvent`，测粘贴要自己补垫片（见 `test/markdown-editor.test.ts`）。
+- **`tsconfig.json` 用 `moduleResolution: Bundler`**：Milkdown 的 `.d.ts` 用不带扩展名的相对导入，`NodeNext` 下解析不了，`skipLibCheck` 会把错误藏起来，表现为「模块没有导出成员」。
+
 ## 四份历史数据库
 
 `Flowboard → Taskfold` 改名迁移已经跑完，`~/.openclaw/plugins/` 下留有四份历史数据：

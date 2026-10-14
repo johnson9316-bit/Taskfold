@@ -1,8 +1,6 @@
-import {
-  TASKFOLD_STATUSES,
-  type TaskfoldCard,
-  type TaskfoldStatus,
-} from "@taskfold/core/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { acceptsStatusInput } from "@taskfold/core/status-registry.js";
+import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 // Taskfold plugin module implements command behavior.
 import type { OpenClawPluginApi } from "../api.js";
 import { resolveTaskfoldCardByIdOrPrefix } from "@taskfold/core/card-lookup.js";
@@ -83,10 +81,6 @@ function optionValue(tokens: string[], flag: string): string | undefined {
 function withoutOption(tokens: string[], flag: string): string[] {
   const index = tokens.indexOf(flag);
   return index >= 0 ? [...tokens.slice(0, index), ...tokens.slice(index + 2)] : tokens;
-}
-
-function isTaskfoldStatus(value: string): value is TaskfoldStatus {
-  return (TASKFOLD_STATUSES as readonly string[]).includes(value);
 }
 
 function canMutateTaskfold(params: {
@@ -264,16 +258,17 @@ async function handleTaskfoldCommand(params: {
         isError: true,
       };
     }
-    if (!isTaskfoldStatus(status)) {
-      return {
-        text: `status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`,
-        isError: true,
-      };
-    }
     const cards = await params.store.list();
     const { card, error } = resolveTaskfoldCardByIdOrPrefix(cards, id);
     if (!card) {
       return { text: error, isError: true };
+    }
+    const registry = await params.store.statusRegistryFor(cardBoardId(card));
+    if (!acceptsStatusInput(registry, status)) {
+      return {
+        text: `status must be one of: ${registry.ids.join(", ")}.`,
+        isError: true,
+      };
     }
     return { text: formatCardLine(await params.store.move(card.id, status, undefined)) };
   }

@@ -64,6 +64,12 @@ function readFormatVersion(configPath: string): number | string | undefined {
   return /^\d+$/.test(unquoted) ? Number(unquoted) : raw;
 }
 
+/** config.yml 的格式版本是否已经 >= `target`（没有 config.yml / 没有版本键 / 无法识别都算没到）。 */
+export function taskfoldFormatVersionAtLeast(configPath: string, target: number): boolean {
+  const version = readFormatVersion(configPath);
+  return typeof version === "number" && version >= target;
+}
+
 /** 本版 core 写不了的版本（原样的字符串）；能写（含没有 config.yml、没有版本键，按当前版本处理）为 `undefined`。 */
 function unsupportedFormatVersion(configPath: string): string | undefined {
   const version = readFormatVersion(configPath);

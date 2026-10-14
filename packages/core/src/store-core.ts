@@ -20,7 +20,31 @@ import type {
   TaskfoldKeyedStore,
   TaskfoldStatusConfigPort,
 } from "./persistence-types.js";
-import { resolveStatusRegistry, validateStatusDefinitions, type TaskfoldStatusRegistry } from "./status-registry.js";
+import {
+  cardPhase,
+  isBlockedCard,
+  isDependencyPromotableCard,
+  isDispatchReadyCard,
+  phasePatch,
+  type TaskfoldCardPhase,
+  type TaskfoldPhaseFlags,
+  type TaskfoldPhasePatch,
+} from "./card-phase.js";
+import {
+  defaultMigratedStatuses,
+  planStatusMigration,
+  rewriteForMigration,
+  type TaskfoldStatusMigrationReport,
+} from "./status-migration.js";
+import { TaskfoldFormatTooNewError } from "./file-store-format.js";
+import {
+  createStatusRegistry,
+  DEFAULT_TASKFOLD_STATUSES,
+  isRetiredTaskfoldStatusId,
+  resolveStatusRegistry,
+  validateStatusDefinitions,
+  type TaskfoldStatusRegistry,
+} from "./status-registry.js";
 import type { TaskfoldCardImageStore } from "./file-store-card-images.js";
 import { normalizeAutomationPatch, normalizeCardAutomation } from "./store-automation.js";
 import {
@@ -32,7 +56,6 @@ import {
   compareCards,
   isRequirementCard,
   isActiveDependencyTarget,
-  isDependencyPromotableStatus,
   lifecycleStatusSourceUpdatedAtFromPatch,
   removeUndefinedCardFields,
   shouldSkipPersistedLifecycleStatusUpdate,
@@ -74,6 +97,7 @@ import type {
 import {
   appendLinkPreservingDependencies,
   metadataIsEmpty,
+  removeUndefinedMetadataFields,
   normalizeAutomation,
   normalizeBoardId,
   normalizeBoardIdRequired,
@@ -176,7 +200,7 @@ export class TaskfoldCoreStore {
   /** 卡片图片（`attachments/<卡 uuid>/`）；只有文件后端提供，内存 store 等没有。 */
   protected readonly cardImageStore: TaskfoldCardImageStore | undefined;
   /** 项目的状态定义；没有（内存 store 等）时所有项目用过渡默认集。 */
-  private readonly statusConfig: TaskfoldStatusConfigPort | undefined;
+  protected readonly statusConfig: TaskfoldStatusConfigPort | undefined;
 
   constructor(
     store: TaskfoldKeyedStore,
@@ -229,9 +253,85 @@ export class TaskfoldCoreStore {
     return resolveStatusRegistry(configured);
   }
 
-  /** 该项目的状态定义，按看板列顺序。 */
+  /**
+   * 新项目一开始就有自己的状态集（默认 5 个），不继承"未配置"时的 triage / backlog 两列。
+   * 数据目录里已经有状态配置或已有卡片（接管一个现成的仓库）时不动。尽力而为：写不了（例如
+   * 数据格式比本版新）就保持"未配置"，项目照常可用。
+   */
+  protected async initializeProjectStatuses(boardId: string): Promise<void> {
+    if (!this.statusConfig || (await this.statusConfig.read(boardId))) {
+      return;
+    }
+    if ((await this.cardsSharingStatuses(boardId)).length > 0) {
+      return;
+    }
+    try {
+      await this.statusConfig.write(boardId, DEFAULT_TASKFOLD_STATUSES);
+    } catch (error) {
+      if (!(error instanceof TaskfoldFormatTooNewError)) {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * 删除一个状态：还有卡在用时必须给 `moveCardsTo`，先把这些卡移过去再从列表里删掉。分两步（先移卡、
+   * 再保存），第二步失败时卡已经移走、状态还在，重跑即可。移卡是管理员式的重新归类，不检查依赖 /
+   * 定时约束（卡的依赖状态不变，只是换列）。
+   */
+  async deleteStatus(
+    boardId: string | undefined,
+    statusId: string,
+    options: { moveCardsTo?: string } = {},
+  ): Promise<{ statuses: TaskfoldStatusDefinition[]; moved: number }> {
+    const id = normalizeBoardId(boardId) ?? "default";
+    const current = await this.listStatuses(id);
+    if (!current.some((status) => status.id === statusId)) {
+      throw new Error(`status not found: ${statusId}`);
+    }
+    const next = current.filter((status) => status.id !== statusId);
+    const target = options.moveCardsTo;
+    if (target !== undefined && (target === statusId || !next.some((status) => status.id === target))) {
+      throw new Error(`moveCardsTo must be another status of the project: ${target}`);
+    }
+    const stranded = (await this.cardsSharingStatuses(id)).filter((card) => card.status === statusId);
+    if (stranded.length > 0 && target === undefined) {
+      throw new Error(
+        `status "${statusId}" is used by ${stranded.length} card(s); choose the status to move them to.`,
+      );
+    }
+    validateStatusDefinitions(next);
+    for (const card of stranded) {
+      await this.enqueueMutation(async () => await this.updateCard(card.id, { status: target }, {}));
+    }
+    return { statuses: await this.saveStatuses(id, next), moved: stranded.length };
+  }
+
+  /** 共用同一份状态配置的卡片：单项目后端是数据目录里的全部卡片，按看板路由的后端是该看板的卡片。 */
+  private async cardsSharingStatuses(boardId: string): Promise<TaskfoldCard[]> {
+    return this.statusConfig?.scope === "project" ? await this.list() : await this.list({ boardId });
+  }
+
+  /** 项目是否有自己配置过的状态集（`config.yml` 里有 `statuses`）；没有就在用"未配置"默认集。 */
+  async hasStatusConfig(boardId?: string): Promise<boolean> {
+    return Boolean(await this.statusConfig?.read(normalizeBoardId(boardId) ?? "default"));
+  }
+
+  /**
+   * 该项目的状态定义，按看板列顺序（界面的列与下拉）。项目还没有自己的状态集时，只列默认 5 个加上
+   * 实际有卡在用的 triage / backlog——与迁移之后得到的一致，不会凭空多出两列空的旧状态；接受什么
+   * 输入仍由 {@link statusRegistryFor} 决定（那里不看卡片，旧值照常能用）。
+   */
   async listStatuses(boardId?: string): Promise<TaskfoldStatusDefinition[]> {
-    return [...(await this.statusRegistryFor(boardId)).list];
+    const registry = await this.statusRegistryFor(boardId);
+    if (!this.statusConfig || (await this.hasStatusConfig(boardId))) {
+      return [...registry.list];
+    }
+    const usage: Record<string, number> = {};
+    for (const card of await this.cardsSharingStatuses(normalizeBoardId(boardId) ?? "default")) {
+      usage[card.status] = (usage[card.status] ?? 0) + 1;
+    }
+    return defaultMigratedStatuses(usage);
   }
 
   /**
@@ -250,7 +350,7 @@ export class TaskfoldCoreStore {
     return await this.enqueueMutation(async () => {
       const nextIds = new Set(next.map((definition) => definition.id));
       const stranded = new Map<string, number>();
-      for (const card of await this.list({ boardId: id })) {
+      for (const card of await this.cardsSharingStatuses(id)) {
         if (!nextIds.has(card.status)) {
           stranded.set(card.status, (stranded.get(card.status) ?? 0) + 1);
         }
@@ -459,6 +559,84 @@ export class TaskfoldCoreStore {
     });
   }
 
+  /**
+   * 状态模型迁移（需求/22-状态模型 第 3 步）：把项目的状态集写进 `.taskfold/config.yml`（升到格式版本 4），
+   * 并把磁盘上已退役的 ready / scheduled / blocked 换成新表示。幂等：迁移过的项目再跑是空操作；
+   * 中途中断（崩溃、有卡输给并发写入）重跑即可补完。`dryRun` 只返回计划，什么都不写。
+   *
+   * 顺序：备份 → 写状态集（同时把旧版 core 挡进只读）→ 逐卡重写（保持更新时间、不记历史事件）。
+   * 先升格式再改卡，是为了不让旧版 core 在卡片已经半转换时还能写。
+   */
+  async migrateStatusModel(
+    boardId: string | undefined,
+    options: { dryRun?: boolean; now?: number } = {},
+  ): Promise<TaskfoldStatusMigrationReport> {
+    if (!this.statusConfig) {
+      throw new Error("this store does not support custom statuses.");
+    }
+    const id = normalizeBoardId(boardId) ?? "default";
+    const dryRun = options.dryRun === true;
+    return await this.enqueueMutation(async () => {
+      const configured = await this.statusConfig!.read(id);
+      const cards = await this.cardsSharingStatuses(id);
+      const plan = planStatusMigration(cards, configured);
+      if (plan.orphans.length > 0) {
+        throw new Error(
+          `cannot migrate: cards use statuses that are not in the project's status list: ${plan.orphans.join(", ")}. ` +
+            "Add them to the project's statuses or move those cards first.",
+        );
+      }
+      const report: TaskfoldStatusMigrationReport = {
+        boardId: id,
+        dryRun,
+        changed: false,
+        statuses: plan.statuses,
+        wroteStatuses: false,
+        total: cards.length,
+        usage: plan.usage,
+        rewrites: plan.rewrites,
+        conflicts: [],
+      };
+      if (dryRun || (!plan.writeStatuses && plan.rewrites.length === 0)) {
+        return report;
+      }
+      const label = new Date(options.now ?? Date.now()).toISOString().replace(/[:.]/g, "-");
+      const backupDir = await this.statusConfig!.backup?.(id, label);
+      if (plan.writeStatuses) {
+        await this.statusConfig!.write(id, plan.statuses);
+      }
+      const registry = createStatusRegistry(plan.statuses);
+      for (const rewrite of plan.rewrites) {
+        const card = await this.get(rewrite.cardId);
+        if (!card || !isRetiredTaskfoldStatusId(card.status) || registry.has(card.status)) {
+          continue;
+        }
+        const target = rewriteForMigration(card, registry);
+        const metadata = removeUndefinedMetadataFields({ ...card.metadata, ...target.flags });
+        const next = removeUndefinedCardFields({
+          ...card,
+          status: target.status,
+          ...(metadataIsEmpty(metadata) ? { metadata: undefined } : { metadata }),
+        });
+        try {
+          await this.persistCard(next, card.revision);
+        } catch (error) {
+          if (error instanceof TaskfoldRevisionConflictError) {
+            report.conflicts.push(card.id);
+            continue;
+          }
+          throw error;
+        }
+      }
+      return {
+        ...report,
+        changed: true,
+        wroteStatuses: plan.writeStatuses,
+        ...(backupDir ? { backupDir } : {}),
+      };
+    });
+  }
+
   async stats(input: TaskfoldListOptions = {}, now = Date.now()): Promise<TaskfoldStatsResult> {
     const cards = await this.list(input);
     const boardId = normalizeBoardId(input.boardId) ?? "all";
@@ -473,7 +651,7 @@ export class TaskfoldCoreStore {
       if (card.metadata?.archivedAt) {
         archived += 1;
       }
-      if (card.status === "ready" && !card.metadata?.archivedAt) {
+      if (isDispatchReadyCard(card) && !card.metadata?.archivedAt) {
         oldestReadyAt = Math.min(oldestReadyAt ?? card.updatedAt, card.updatedAt);
       }
       updatedAt = Math.max(updatedAt ?? 0, card.updatedAt);
@@ -549,15 +727,28 @@ export class TaskfoldCoreStore {
     const parents = normalizeStringList(input.parents, "parents", 120);
     const automation = normalizeCardAutomation(input);
     const statusRegistry = await this.statusRegistryFor(automation?.boardId);
-    const requestedStatus = normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
+    // 已退役的 scheduled / ready / blocked 当输入时按旧含义翻译成"默认状态 + 标记"。
+    const retiredInput =
+      isRetiredTaskfoldStatusId(input.status) && !statusRegistry.has(input.status)
+        ? phasePatch({ status: statusRegistry.defaultStatus }, input.status, statusRegistry, { now })
+        : undefined;
+    const requestedStatus =
+      retiredInput?.status ?? normalizeStatus(input.status, statusRegistry.defaultStatus, statusRegistry);
     const heldBySchedule =
-      Boolean(automation?.scheduledAt && automation.scheduledAt > now) &&
-      requestedStatus !== "blocked";
-    let status: TaskfoldStatus = heldBySchedule ? "scheduled" : requestedStatus;
+      Boolean(automation?.scheduledAt && automation.scheduledAt > now) && !retiredInput?.flags.blocked;
+    let status: TaskfoldStatus = requestedStatus;
+    let flags: TaskfoldPhasePatch["flags"] | undefined = retiredInput?.flags;
+    if (heldBySchedule && !statusRegistry.isUnstarted(status)) {
+      // 定时未到的卡一定还没开始：落在默认的未开始状态，定时由 scheduledAt 推导。
+      status = statusRegistry.defaultStatus;
+    }
     let heldByDependencies = false;
-    if (parents.length > 0 && (status === "running" || status === "review")) {
-      status = "todo";
+    if (parents.length > 0 && statusRegistry.isStarted(status)) {
+      status = statusRegistry.defaultStatus;
       heldByDependencies = true;
+    }
+    if (!statusRegistry.isUnstarted(status) && flags?.dispatchReady) {
+      flags = { ...flags, dispatchReady: undefined };
     }
     if (automation?.idempotencyKey) {
       const existing = cards.find(
@@ -601,13 +792,13 @@ export class TaskfoldCoreStore {
         : normalizedExecution;
     const startedAt =
       input.startedAt === undefined
-        ? status === "running"
+        ? statusRegistry.isStarted(status)
           ? now
           : undefined
         : normalizeTimestamp(input.startedAt, 0) || undefined;
     const completedAt =
       input.completedAt === undefined
-        ? status === "done"
+        ? statusRegistry.isCompleted(status)
           ? now
           : undefined
         : normalizeTimestamp(input.completedAt, 0) || undefined;
@@ -616,6 +807,8 @@ export class TaskfoldCoreStore {
       {
         templateId: normalizeTemplateId(input.templateId),
         ...(childAutomation ? { automation: childAutomation } : {}),
+        ...(flags?.blocked ? { blocked: flags.blocked } : {}),
+        ...(flags?.dispatchReady ? { dispatchReady: true as const } : {}),
       },
       { allowDependencyLinks: false },
     );
@@ -802,6 +995,11 @@ export class TaskfoldCoreStore {
        * write can never mint or clobber a launch phase.
        */
       allowAutomationLaunch?: boolean;
+      /**
+       * 引擎经 {@link phasePatch} 写入阶段时给出：这组阻塞 / 派发标记原样生效，并跳过
+       * "换状态就清掉原样带过来的标记"的规则（否则对已派发的卡再次派发会把标记清掉）。
+       */
+      phaseFlags?: TaskfoldPhaseFlags;
     } = {},
   ): Promise<TaskfoldCard> {
     const existing = await this.get(id);
@@ -811,6 +1009,7 @@ export class TaskfoldCoreStore {
     if (options.expectedRevision !== undefined && existing.revision !== options.expectedRevision) {
       throw new TaskfoldRevisionConflictError(id, options.expectedRevision);
     }
+    const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
     const lifecycleStatusSourceUpdatedAt = lifecycleStatusSourceUpdatedAtFromPatch(patch.metadata);
     const existingLifecycleStatusSourceUpdatedAt =
       existing.metadata?.lifecycleStatusSourceUpdatedAt;
@@ -821,7 +1020,7 @@ export class TaskfoldCoreStore {
     if (
       patch.status !== undefined &&
       lifecycleStatusSourceUpdatedAt !== undefined &&
-      shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt)
+      shouldSkipPersistedLifecycleStatusUpdate(existing, lifecycleStatusSourceUpdatedAt, statusRegistry)
     ) {
       // Ignore stale lifecycle status writes, but still accept any non-status updates in the patch.
       effectivePatch = { ...patch, status: undefined };
@@ -837,21 +1036,23 @@ export class TaskfoldCoreStore {
         return existing;
       }
     }
-    const status = normalizeStatus(
-      effectivePatch.status,
-      existing.status,
-      await this.statusRegistryFor(cardBoardId(existing)),
-    );
     const now = Date.now();
+    // 已退役的 scheduled / ready / blocked 当输入时按旧含义翻译成"状态 + 标记"（CLI、API 的旧脚本照常可用）。
+    const retiredInput =
+      isRetiredTaskfoldStatusId(effectivePatch.status) && !statusRegistry.has(effectivePatch.status)
+        ? phasePatch(existing, effectivePatch.status, statusRegistry, { now })
+        : undefined;
+    const status =
+      retiredInput?.status ?? normalizeStatus(effectivePatch.status, existing.status, statusRegistry);
     const startedAt =
       effectivePatch.startedAt === undefined
-        ? status === "running"
+        ? statusRegistry.isStarted(status)
           ? (existing.startedAt ?? now)
           : existing.startedAt
         : normalizeTimestamp(effectivePatch.startedAt, 0) || undefined;
     const completedAt =
       effectivePatch.completedAt === undefined
-        ? status === "done"
+        ? statusRegistry.isCompleted(status)
           ? (existing.completedAt ?? now)
           : undefined
         : normalizeTimestamp(effectivePatch.completedAt, 0) || undefined;
@@ -874,6 +1075,23 @@ export class TaskfoldCoreStore {
       // Status patches often spread existing metadata. Only a newly supplied
       // lifecycle source is provenance; copied markers must not survive a manual transition.
       metadata = { ...metadata, lifecycleStatusSourceUpdatedAt: undefined };
+    }
+    if (options.phaseFlags) {
+      metadata = { ...metadata, ...options.phaseFlags };
+    } else if (retiredInput) {
+      metadata = { ...metadata, ...retiredInput.flags };
+    } else if (
+      effectivePatch.status !== undefined &&
+      (status !== existing.status || options.enforceStatusHolds)
+    ) {
+      // 把卡移到另一个状态（或用户显式指定状态）会清掉原样带过来的阻塞 / 派发标记；
+      // 补丁里明确改过的标记（引擎经 phasePatch 写入）保持不变。
+      if (JSON.stringify(metadata.blocked) === JSON.stringify(existing.metadata?.blocked)) {
+        metadata = { ...metadata, blocked: undefined };
+      }
+      if (metadata.dispatchReady === existing.metadata?.dispatchReady) {
+        metadata = { ...metadata, dispatchReady: undefined };
+      }
     }
     const effectivePatchRecord = effectivePatch as Record<string, unknown>;
     const automationPatch: Record<string, unknown> = {};
@@ -956,10 +1174,13 @@ export class TaskfoldCoreStore {
       options,
     );
     next.events = appendEvent(next, updateEvent(existing, next), now);
-    if (options.enforceStatusHolds && effectivePatch.status !== undefined) {
-      await this.assertActiveStatusAllowed(existing, next, now);
+    if (
+      options.enforceStatusHolds &&
+      (effectivePatch.status !== undefined || (isDispatchReadyCard(next) && !isDispatchReadyCard(existing)))
+    ) {
+      await this.assertActiveStatusAllowed(next, now, statusRegistry);
     }
-    if (status !== "done") {
+    if (!statusRegistry.isCompleted(status)) {
       delete next.completedAt;
     }
     if (effectivePatch.startedAt !== undefined && !startedAt) {
@@ -1086,16 +1307,14 @@ export class TaskfoldCoreStore {
   }
 
   private async assertActiveStatusAllowed(
-    existing: TaskfoldCard,
     next: TaskfoldCard,
     now: number,
+    registry: TaskfoldStatusRegistry,
   ): Promise<void> {
-    if (
-      next.status !== "ready" &&
-      next.status !== "running" &&
-      next.status !== "review" &&
-      next.status !== "done"
-    ) {
+    // 只管"进入活动阶段"：派发标记、进行中（含评审）、已完成；回到未开始 / 取消不受依赖约束。
+    const intendsActive =
+      isDispatchReadyCard(next) || registry.isStarted(next.status) || registry.isCompleted(next.status);
+    if (!intendsActive || isBlockedCard(next)) {
       return;
     }
     const parents = cardParentIds(next);
@@ -1103,15 +1322,18 @@ export class TaskfoldCoreStore {
       parents.length > 0 ? new Map((await this.list()).map((card) => [card.id, card])) : undefined;
     if (
       parents.length > 0 &&
-      !parents.every((parentId) => cards?.get(parentId)?.status === "done")
+      !parents.every((parentId) => {
+        const parent = cards?.get(parentId);
+        return parent !== undefined && registry.isCompleted(parent.status);
+      })
     ) {
       throw new Error("card dependencies are not done.");
     }
-    if (next.status === "done") {
+    if (registry.isCompleted(next.status)) {
       return;
     }
     const scheduledAt = next.metadata?.automation?.scheduledAt;
-    if ((scheduledAt && scheduledAt > now) || (existing.status === "scheduled" && !scheduledAt)) {
+    if (scheduledAt && scheduledAt > now) {
       throw new Error("card is scheduled for later.");
     }
   }
@@ -1549,16 +1771,26 @@ export class TaskfoldCoreStore {
     }
     assertCanMutateClaimedCard(parent, options.scope);
     assertCanMutateClaimedCard(child, options.scope);
-    if (child.status === "done" || child.status === "blocked") {
+    const statusRegistry = await this.statusRegistryFor(cardBoardId(child));
+    if (statusRegistry.isCompleted(child.status) || isBlockedCard(child)) {
       const cardsById = new Map((await this.list()).map((card) => [card.id, card]));
       const parentIds = [...cardParentIds(child), parent.id].filter(
         (id, index, ids) => ids.indexOf(id) === index,
       );
-      if (parentIds.some((id) => cardsById.get(id)?.status !== "done")) {
+      if (
+        parentIds.some((id) => {
+          const entry = cardsById.get(id);
+          return entry === undefined || !statusRegistry.isCompleted(entry.status);
+        })
+      ) {
         throw new Error("terminal child cards cannot gain incomplete parent dependencies.");
       }
     }
-    if (isActiveDependencyTarget(child, { allowStatusOnly: options.allowStatusOnlyActiveChild })) {
+    if (
+      isActiveDependencyTarget(child, statusRegistry, {
+        allowStatusOnly: options.allowStatusOnlyActiveChild,
+      })
+    ) {
       throw new Error("active child cards cannot gain parent dependencies.");
     }
     if (await this.dependsOn(parent.id, child.id)) {
@@ -1611,40 +1843,45 @@ export class TaskfoldCoreStore {
     return await this.promoteDependencyReady(nextChild.id);
   }
 
-  private async dependencyTargetStatus(card: TaskfoldCard, now: number): Promise<TaskfoldStatus> {
+  /**
+   * 依赖与定时对一张未开始的卡意味着什么：返回应该切换到的阶段，不需要改动返回 `undefined`。
+   * 只有"未开始且没被阻塞"的卡会被自动推进；已经开始 / 结束 / 阻塞的卡不动。
+   */
+  private async dependencyTargetPhase(
+    card: TaskfoldCard,
+    now: number,
+    registry: TaskfoldStatusRegistry,
+  ): Promise<TaskfoldCardPhase | undefined> {
+    if (!isDependencyPromotableCard(card, registry)) {
+      return undefined;
+    }
+    const phase = cardPhase(card, registry, now);
     const scheduledAt = card.metadata?.automation?.scheduledAt;
     const parents = cardParentIds(card);
-    if (card.status === "scheduled" && !scheduledAt) {
-      return "scheduled";
-    }
-    if (parents.length === 0) {
-      if (scheduledAt && scheduledAt > now && isDependencyPromotableStatus(card.status)) {
-        return "scheduled";
-      }
-      return card.status === "scheduled" ? "ready" : card.status;
-    }
-    const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
-    const parentsDone = parentCards.every((parent) => parent?.status === "done");
-    if (
-      !parentsDone &&
+    let target: TaskfoldCardPhase | undefined;
+    if (scheduledAt && scheduledAt > now) {
+      target = "scheduled";
+    } else if (parents.length > 0) {
+      const parentCards = await Promise.all(parents.map((parentId) => this.get(parentId)));
+      const parentsDone = parentCards.every(
+        (parent) => parent !== undefined && registry.isCompleted(parent.status),
+      );
+      // 父卡没完成时只需要收回派发标记；triage / backlog / todo 本来就是"未开始"，不用动。
+      target = parentsDone ? "ready" : isDispatchReadyCard(card) ? "todo" : undefined;
+    } else if (phase === "scheduled") {
+      // 旧的 `scheduled` 状态（定时早已过期）：放行。
+      target = "ready";
+    } else if (
       scheduledAt &&
-      scheduledAt > now &&
-      isDependencyPromotableStatus(card.status)
+      phase === "todo" &&
+      !card.metadata?.automation?.dispatchCount &&
+      card.updatedAt <= scheduledAt
     ) {
-      return "scheduled";
+      // 定时到了：创建（或最后一次改动）发生在定时之前、还没被派发过的卡，放行一次。之后人工把它
+      // 退回待办（更新时间晚于定时）就不会被再次放行。
+      target = "ready";
     }
-    if (!parentsDone && isDependencyPromotableStatus(card.status)) {
-      return "todo";
-    }
-    if (
-      parentsDone &&
-      scheduledAt &&
-      scheduledAt > now &&
-      isDependencyPromotableStatus(card.status)
-    ) {
-      return "scheduled";
-    }
-    return parentsDone && isDependencyPromotableStatus(card.status) ? "ready" : card.status;
+    return target === undefined || target === phase ? undefined : target;
   }
 
   private async dependsOn(cardId: string, targetParentId: string): Promise<boolean> {
@@ -1728,11 +1965,16 @@ export class TaskfoldCoreStore {
     if (card.metadata?.archivedAt) {
       return card;
     }
-    const target = await this.dependencyTargetStatus(card, now);
-    if (target === card.status) {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    const target = await this.dependencyTargetPhase(card, now, registry);
+    if (target === undefined) {
       return card;
     }
-    return await this.updateCard(card.id, { status: target });
+    const patch = phasePatch(card, target, registry, { now });
+    return await this.updateCard(card.id, {
+      status: patch.status,
+      metadata: { ...card.metadata, ...patch.flags },
+    });
   }
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

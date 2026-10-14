@@ -3,7 +3,7 @@
 // 就地换成新版本的块。
 import fs from "node:fs";
 import path from "node:path";
-import { TASKFOLD_PRIORITIES, TASKFOLD_STATUSES } from "@taskfold/core/contract/index.js";
+import { TASKFOLD_PRIORITIES, TASKFOLD_STATUS_CATEGORIES } from "@taskfold/core/contract/index.js";
 import { TASKFOLD_CLI_EXIT_CODES } from "./errors.js";
 import { TaskfoldCliError } from "./errors.js";
 import { TASKFOLD_CLI_SCHEMA_VERSION, TASKFOLD_CLI_VERSION } from "./version.js";
@@ -165,12 +165,21 @@ user and do not rename existing items unless asked.
 | \`taskfold delete <id>\` | deletes a card permanently (and its images) |
 | \`taskfold attach <id> <file...> [--append-notes]\` | stores image(s) in the card's folder and prints the Markdown to reference them |
 | \`taskfold boards\` | reads boards and card counts |
+| \`taskfold statuses [list \\| add \\| edit \\| move \\| remove]\` | shows or changes the project's statuses (\`.taskfold/config.yml\`) |
+| \`taskfold migrate [--dry-run]\` | moves a project to the status model: writes its statuses, rewrites legacy ready / scheduled / blocked cards (backs up first) |
 | \`taskfold instructions\` | prints this text |
 | \`taskfold guidelines [file...]\` | writes the short Taskfold block into AGENTS.md / CLAUDE.md |
 
 Run \`taskfold <command> --help\` for every flag and more examples.
 
-- Statuses: ${TASKFOLD_STATUSES.join(", ")}. New cards start as \`todo\`.
+- Statuses belong to the project: run \`taskfold statuses\` to see them. Every status sits in one of four
+  fixed categories (${TASKFOLD_STATUS_CATEGORIES.join(", ")}); a new project starts with todo, running,
+  review, done and cancelled, and new cards start in the project's default (normally \`todo\`). Pass a status id
+  to \`--status\`; an id that is not one of the project's statuses is an INVALID_ARGUMENT error.
+- Blocked, queued-for-dispatch and scheduled are **marks on a card, not statuses**. \`phase\` in the JSON
+  (and the \`(blocked)\` / \`(ready)\` / \`(scheduled)\` note in text output) shows them. The old
+  \`--status ready\` / \`blocked\` / \`scheduled\` still work: \`update --status ready\` queues a card for dispatch,
+  and \`list --status blocked\` lists blocked cards.
 - Priorities: ${TASKFOLD_PRIORITIES.join(", ")}.
 - \`--notes-file -\` / \`--append-notes-file -\` read the text from stdin.
 - Images: \`taskfold attach <id> shot.png\` copies the file to \`.taskfold/attachments/<card uuid>/\`
@@ -196,11 +205,13 @@ Run \`taskfold <command> --help\` for every flag and more examples.
 
 | kind | printed by | payload |
 | --- | --- | --- |
-| \`card\` | show, create, update | \`card\`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
+| \`card\` | show, create, update | \`card\`: id, shortId, displayId, title, status, phase, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | \`card-list\` | list | \`boardId\` (null = all boards), \`cards\`: the same fields as \`card\` without notes |
 | \`card-deleted\` | delete | \`id\` |
 | \`card-images\` | attach | \`cardId\`, \`images\`: file, name, ref, markdown, mimeType, byteSize; \`card\` (the updated card with \`--append-notes\`, otherwise null) |
 | \`board-list\` | boards | \`defaultBoardId\` (null if ambiguous), \`boards\`: id, total, active, archived, byStatus |
+| \`status-list\` | statuses (and its subcommands) | \`configured\` (false = the built-in defaults are in use), \`statuses\`: id, name?, category, color?, role?, default?; \`moved\` (remove only) |
+| \`migration\` | migrate | \`dryRun\`, \`changed\`, \`statuses\`, \`total\`, \`usage\`, \`rewrites\`: cardId, from, to; \`backupDir\`, \`conflicts\` |
 | \`init\` | init | \`dataDir\`, \`created\`, \`formatVersion\` |
 | \`guidelines\` | guidelines | \`version\`, \`files\`: path, action (created / inserted / updated / unchanged) |
 | \`instructions\` | instructions | \`version\`, \`text\` |

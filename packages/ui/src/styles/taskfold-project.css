@@ -624,6 +624,42 @@
   opacity: 0.4;
 }
 
+/* 卡片标记（阻塞 / 已派发 / 定时未到）：它们不是状态，所以不占列，只在卡上提示。 */
+.taskfold-project__mark {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border-radius: 3px;
+  /* 卡片主体是两列网格（优先级点 + 内容）：标记放进内容列，自己占一行。 */
+  display: block;
+  grid-column: 2;
+  margin: 3px 0;
+  width: fit-content;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0 5px;
+}
+
+.taskfold-project__mark.tf-mark-blocked {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.taskfold-project__mark.tf-mark-ready {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.taskfold-project__mark.tf-mark-scheduled {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+}
+
+/* 项目自定义的状态列强调色：列顶一条色带。 */
+.taskfold-project__column.tf-has-accent {
+  border-top: 3px solid var(--tf-column-accent);
+}
+
 .taskfold-project .taskfold-project__card-check {
   accent-color: var(--accent);
   flex: 0 0 auto;
@@ -1130,14 +1166,6 @@ select.taskfold-project__document-source-filter {
   gap: 10px;
 }
 
-.taskfold-project__document-editor-toolbar {
-  align-items: center;
-  border: 1px solid var(--border);
-  display: flex;
-  gap: 2px;
-  padding: 4px;
-}
-
 .taskfold-project__editor-button {
   align-items: center;
   background: transparent;
@@ -1154,49 +1182,6 @@ select.taskfold-project__document-source-filter {
 .taskfold-project__editor-button:hover {
   background: var(--panel-strong);
   border-color: var(--border);
-}
-
-.taskfold-project__rich-editor {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.65;
-  min-height: 460px;
-  overflow-wrap: anywhere;
-  padding: 14px;
-}
-
-.taskfold-project__rich-editor:focus {
-  border-color: var(--accent);
-  outline: 2px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  outline-offset: 1px;
-}
-
-.taskfold-project__rich-editor > :first-child {
-  margin-top: 0;
-}
-
-.taskfold-project__rich-editor h1,
-.taskfold-project__rich-editor h2,
-.taskfold-project__rich-editor h3,
-.taskfold-project__rich-editor h4 {
-  line-height: 1.3;
-}
-
-.taskfold-project__rich-editor code {
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.92em;
-  padding: 1px 4px;
-}
-
-.taskfold-project__rich-editor pre {
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  overflow: auto;
-  padding: 12px;
 }
 
 .taskfold-project__document-editor-actions {
@@ -2016,3 +2001,125 @@ details.taskfold-project__detail-section[open] {
     position: static;
   }
 }
+
+/* 状态设置页（需求/22-状态模型）。 */
+.taskfold-project__statuses {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 980px;
+}
+
+.taskfold-project__status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.taskfold-project__status-row,
+.taskfold-project__status-add {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 28px minmax(120px, 1fr) minmax(70px, 100px) 110px 190px 104px 34px auto 30px;
+}
+
+.taskfold-project__status-add {
+  grid-template-columns: minmax(120px, 160px) minmax(120px, 1fr) 130px auto;
+}
+
+.taskfold-project__status-row {
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.taskfold-project .taskfold-project__status-color {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 4px;
+  cursor: pointer;
+  height: 28px;
+  padding: 2px;
+  width: 28px;
+}
+
+/* 全局 input 样式会把单选框撑成大圆：这里收回，与卡片勾选框同一做法。 */
+.taskfold-project .taskfold-project__status-default input[type="radio"] {
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  width: 14px;
+}
+
+.taskfold-project__status-id {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskfold-project__status-default {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.taskfold-project__status-count {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.taskfold-project__status-note,
+.taskfold-project__status-preview {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.taskfold-project__status-migrate p {
+  margin: 4px 0;
+}
+
+.taskfold-project__status-migrate ul {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .taskfold-project__status-row {
+    grid-template-columns: 28px 1fr 1fr;
+  }
+}
+
+/* 详情右栏的"派发"区：标记与流转动作。 */
+.taskfold-project__flow {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taskfold-project__flow-block summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.taskfold-project__flow-block form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+

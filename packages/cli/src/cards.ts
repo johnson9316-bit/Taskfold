@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveTaskfoldCardByIdOrPrefix } from "@taskfold/core/card-lookup.js";
 import { extractTaskfoldSectionUuid } from "@taskfold/core/markdown-card-format.js";
+import { cardPhase } from "@taskfold/core/card-phase.js";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { UNCONFIGURED_STATUS_REGISTRY, type TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
 import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import type { TaskfoldCardPatch } from "@taskfold/core/store-inputs.js";
@@ -19,6 +21,9 @@ export type TaskfoldCliCardSummary = {
   displayId: string | null;
   title: string;
   status: string;
+  /** 阶段：todo / scheduled / ready / running / review / blocked / done / cancelled（阻塞、已派发、定时未到
+   * 是卡片标记，不是状态，所以只有 phase 里看得出来）。 */
+  phase: string;
   priority: string;
   labels: string[];
   agentId: string | null;
@@ -56,13 +61,18 @@ export function readCardDisplayIds(dataDir: string): CardDisplayIds {
   return ids;
 }
 
-export function toCardSummary(card: TaskfoldCard, displayIds: CardDisplayIds = new Map()): TaskfoldCliCardSummary {
+export function toCardSummary(
+  card: TaskfoldCard,
+  displayIds: CardDisplayIds = new Map(),
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
+): TaskfoldCliCardSummary {
   return {
     id: card.id,
     shortId: card.id.slice(0, SHORT_ID_LENGTH),
     displayId: displayIds.get(card.id) ?? null,
     title: card.title,
     status: card.status,
+    phase: cardPhase(card, registry),
     priority: card.priority,
     labels: [...card.labels],
     agentId: card.agentId ?? null,
@@ -75,8 +85,12 @@ export function toCardSummary(card: TaskfoldCard, displayIds: CardDisplayIds = n
   };
 }
 
-export function toCardDetail(card: TaskfoldCard, displayIds: CardDisplayIds = new Map()): TaskfoldCliCardDetail {
-  return { ...toCardSummary(card, displayIds), notes: card.notes ?? "" };
+export function toCardDetail(
+  card: TaskfoldCard,
+  displayIds: CardDisplayIds = new Map(),
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
+): TaskfoldCliCardDetail {
+  return { ...toCardSummary(card, displayIds, registry), notes: card.notes ?? "" };
 }
 
 /** 完整 id 或唯一前缀 → 卡片；不存在 NOT_FOUND，前缀命中多张 AMBIGUOUS。 */

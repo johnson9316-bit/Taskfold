@@ -12,6 +12,8 @@
 // before the event was delivered. See `lifecycle.ts` for why that judgement is made
 // from local evidence instead of asking the host.
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { cardPhase, phasePatch } from "@taskfold/core/card-phase.js";
+import type { TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import type { OpenClawPluginService } from "../api.js";
@@ -24,7 +26,7 @@ import {
   shouldSyncExecutionStatus,
   staleRunState,
 } from "./lifecycle.js";
-import { cardRunId } from "@taskfold/core/store-card-helpers.js";
+import { cardBoardId, cardRunId } from "@taskfold/core/store-card-helpers.js";
 import { isTaskfoldClaimReclaimable } from "@taskfold/core/store-constants.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 import type { TaskfoldStore } from "./store.js";
@@ -50,11 +52,14 @@ function hasRunningAttempt(card: TaskfoldCard): boolean {
 }
 
 /** Cards whose recorded state claims work is in flight, so it can be checked. */
-function activeCards(cards: readonly TaskfoldCard[]): TaskfoldCard[] {
+function activeCards(
+  cards: readonly TaskfoldCard[],
+  registryFor: (card: TaskfoldCard) => TaskfoldStatusRegistry,
+): TaskfoldCard[] {
   return cards.filter(
     (card) =>
       !card.metadata?.archivedAt &&
-      (card.status === "running" ||
+      (cardPhase(card, registryFor(card)) === "running" ||
         card.execution?.status === "running" ||
         hasRunningAttempt(card) ||
         Boolean(card.metadata?.claim)),
@@ -105,15 +110,25 @@ async function applyLifecycle(params: {
   store: TaskfoldStore;
   card: TaskfoldCard;
   now: number;
+  registry: TaskfoldStatusRegistry;
 }): Promise<boolean> {
-  const { store, card, now } = params;
-  const lifecycle = getTaskfoldLifecycle({ card, now });
+  const { store, card, now, registry } = params;
+  const lifecycle = getTaskfoldLifecycle({ card, now, registry });
   const executionStatus = executionStatusForLifecycle(lifecycle);
   const patch: Record<string, unknown> = {};
   const metadataPatch: Record<string, unknown> = {};
 
-  if (lifecycle.sourceUpdatedAt !== undefined && shouldSyncCardStatus(card, lifecycle.targetStatus)) {
-    patch.status = lifecycle.targetStatus;
+  if (
+    lifecycle.sourceUpdatedAt !== undefined &&
+    lifecycle.targetPhase !== undefined &&
+    shouldSyncCardStatus(card, lifecycle.targetPhase, registry, now)
+  ) {
+    const phase = phasePatch(card, lifecycle.targetPhase, registry, {
+      now,
+      ...(lifecycle.targetPhase === "blocked" ? { reason: "Linked run is no longer reporting." } : {}),
+    });
+    patch.status = phase.status;
+    Object.assign(metadataPatch, phase.flags);
     // Provenance for the status write. The store rejects it if the card already
     // carries a newer source, which is what keeps a slow pass from winning.
     metadataPatch.lifecycleStatusSourceUpdatedAt = lifecycle.sourceUpdatedAt;
@@ -122,7 +137,7 @@ async function applyLifecycle(params: {
     patch.execution = { ...card.execution, status: executionStatus, updatedAt: now };
   }
 
-  const stale = staleRunState(card, now);
+  const stale = staleRunState(card, now, registry);
   const existingStale = card.metadata?.stale;
   if (stale) {
     const changed =
@@ -159,10 +174,11 @@ async function finishOrphanedRun(params: {
   card: TaskfoldCard;
   runtime: TaskfoldReconcilerRuntime;
   now: number;
+  registry: TaskfoldStatusRegistry;
 }): Promise<boolean> {
-  const { store, card, runtime, now } = params;
+  const { store, card, runtime, now, registry } = params;
   const runId = cardRunId(card);
-  if (!runId || !shouldCloseOrphanedRun({ card, now })) {
+  if (!runId || !shouldCloseOrphanedRun({ card, now, registry })) {
     return false;
   }
   await store.finishExecutionForRun(runId, {
@@ -191,7 +207,21 @@ export async function reconcileTaskfoldCards(params: {
     staleLaunches: 0,
     skipped: 0,
   };
-  for (const card of activeCards(await params.store.list())) {
+  const registries = new Map<string, TaskfoldStatusRegistry>();
+  const allCards = await params.store.list();
+  for (const boardId of new Set(allCards.map(cardBoardId))) {
+    try {
+      registries.set(boardId, await params.store.statusRegistryFor(boardId));
+    } catch (error) {
+      // 某个项目的状态配置坏了：跳过它的卡，不影响其他项目。
+      params.onCardError?.(`board:${boardId}`, error);
+    }
+  }
+  for (const card of activeCards(
+    allCards.filter((entry) => registries.has(cardBoardId(entry))),
+    (entry) => registries.get(cardBoardId(entry))!,
+  )) {
+    const registry = registries.get(cardBoardId(card))!;
     outcome.checked += 1;
     try {
       if (await failStaleLaunch({ store: params.store, card, now })) {
@@ -200,13 +230,13 @@ export async function reconcileTaskfoldCards(params: {
         // pass rather than against the revision this one read.
         continue;
       }
-      if (await finishOrphanedRun({ ...params, card, now })) {
+      if (await finishOrphanedRun({ ...params, card, now, registry })) {
         outcome.finished += 1;
         // The card moved; its status catches up on the next pass against fresh state
         // rather than against the revision this one read.
         continue;
       }
-      if (await applyLifecycle({ ...params, card, now })) {
+      if (await applyLifecycle({ ...params, card, now, registry })) {
         outcome.updated += 1;
       }
       // A claim whose lease lapsed past the grace window belongs to a worker that is

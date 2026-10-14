@@ -29,9 +29,9 @@ export const DEFAULT_TASKFOLD_STATUSES: readonly TaskfoldStatusDefinition[] = Ob
 ]);
 
 /**
- * 改造前的九个固定状态及其类别。仅在 `statuses` 尚未配置、也未迁移的项目里作为过渡默认集，让
- * 引擎在迁移完成之前仍接受旧值（需求/22 第 3 步迁移后即不再使用）。`scheduled` / `ready` /
- * `blocked` 是系统内部状态，读取时会被映射成 todo / running 加卡片标记（见 status-legacy.ts）。
+ * 改造前的九个固定状态及其类别，只用于识别磁盘上的旧值与迁移（需求/22 第 3 步）。其中 `scheduled`、
+ * `ready`、`blocked` 是系统内部状态，现在改成卡片标记（见 card-phase.ts）：读到旧值时按旧含义解释，
+ * 写入时一律写成新表示。
  */
 export const LEGACY_TASKFOLD_STATUSES: readonly TaskfoldStatusDefinition[] = Object.freeze([
   { id: "triage", category: "unstarted", role: "intake" },
@@ -43,6 +43,36 @@ export const LEGACY_TASKFOLD_STATUSES: readonly TaskfoldStatusDefinition[] = Obj
   { id: "review", category: "started", role: "review" },
   { id: "blocked", category: "started" },
   { id: "done", category: "completed" },
+]);
+
+/** 已经退役、改成卡片标记的旧状态 id。 */
+export const RETIRED_TASKFOLD_STATUS_IDS = ["scheduled", "ready", "blocked"] as const;
+export type TaskfoldRetiredStatusId = (typeof RETIRED_TASKFOLD_STATUS_IDS)[number];
+
+export function isRetiredTaskfoldStatusId(value: unknown): value is TaskfoldRetiredStatusId {
+  return (RETIRED_TASKFOLD_STATUS_IDS as readonly unknown[]).includes(value);
+}
+
+/** 旧状态在退役前的类别：旧卡文件里的 `status: ready` 之类仍要能归类。 */
+const RETIRED_STATUS_CATEGORY: Readonly<Record<TaskfoldRetiredStatusId, TaskfoldStatusCategory>> = {
+  scheduled: "unstarted",
+  ready: "unstarted",
+  blocked: "started",
+};
+
+/**
+ * 没配置 `statuses` 的项目（尚未升到格式版本 4）生效的状态集：默认 5 个加上旧项目里常用的
+ * `triage` / `backlog`，这样升级前后卡片都能正常显示与操作。升到版本 4 时按项目实际在用的状态
+ * 写出自己的 `statuses`（迁移）。
+ */
+export const UNCONFIGURED_TASKFOLD_STATUSES: readonly TaskfoldStatusDefinition[] = Object.freeze([
+  { id: "triage", category: "unstarted", role: "intake" },
+  { id: "backlog", category: "unstarted" },
+  { id: "todo", category: "unstarted", default: true },
+  { id: "running", category: "started" },
+  { id: "review", category: "started", role: "review" },
+  { id: "done", category: "completed" },
+  { id: "cancelled", category: "cancelled" },
 ]);
 
 /** 状态配置不合法（`config.yml` 手改坏了，或保存的状态列表违反约束）。 */
@@ -173,7 +203,8 @@ export type TaskfoldStatusRegistry = {
 export function createStatusRegistry(definitions: readonly TaskfoldStatusDefinition[]): TaskfoldStatusRegistry {
   const list = Object.freeze([...definitions]);
   const byId = new Map(list.map((definition) => [definition.id, definition]));
-  const category = (id: string) => byId.get(id)?.category;
+  const category = (id: string): TaskfoldStatusCategory | undefined =>
+    byId.get(id)?.category ?? (isRetiredTaskfoldStatusId(id) ? RETIRED_STATUS_CATEGORY[id] : undefined);
   const unstarted = list.filter((definition) => definition.category === "unstarted");
   const defaultStatus = (
     unstarted.find((definition) => definition.default) ??
@@ -208,14 +239,21 @@ export function createStatusRegistry(definitions: readonly TaskfoldStatusDefinit
 }
 
 /**
- * 解析项目生效的注册表：配置了 `statuses` 就用它，没配置用过渡默认集（九个旧状态）。
- * 迁移到格式版本 4 之后（需求/22 第 3 步）"没配置"改为 {@link DEFAULT_TASKFOLD_STATUSES}。
+ * 状态输入是否可接受：项目状态集里的 id，或已退役的 ready / scheduled / blocked（旧脚本照常可用，
+ * 由 store 翻译成"状态 + 标记"）。
  */
+export function acceptsStatusInput(registry: TaskfoldStatusRegistry, value: string): boolean {
+  return registry.has(value) || isRetiredTaskfoldStatusId(value);
+}
+
+/** 解析项目生效的注册表：配置了 `statuses` 就用它，没配置用 {@link UNCONFIGURED_TASKFOLD_STATUSES}。 */
 export function resolveStatusRegistry(
   configured?: readonly TaskfoldStatusDefinition[] | undefined,
 ): TaskfoldStatusRegistry {
-  return createStatusRegistry(configured ?? LEGACY_TASKFOLD_STATUSES);
+  return configured ? createStatusRegistry(configured) : UNCONFIGURED_STATUS_REGISTRY;
 }
 
-/** 过渡默认集的注册表（单例，没有项目上下文的纯函数用它兜底）。 */
-export const LEGACY_STATUS_REGISTRY: TaskfoldStatusRegistry = createStatusRegistry(LEGACY_TASKFOLD_STATUSES);
+/** 没配置 `statuses` 时的注册表（单例；没有项目上下文的纯函数也用它兜底）。 */
+export const UNCONFIGURED_STATUS_REGISTRY: TaskfoldStatusRegistry = createStatusRegistry(
+  UNCONFIGURED_TASKFOLD_STATUSES,
+);

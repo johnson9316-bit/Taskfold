@@ -7,7 +7,9 @@ import type {
   TaskfoldProjectDocumentRead,
   TaskfoldProjectView,
   TaskfoldStatus,
+  TaskfoldStatusDefinition,
 } from "@taskfold/core/contract/index.js";
+import type { TaskfoldStatusMigrationReport } from "@taskfold/core/status-migration.js";
 import {
   taskfoldHost,
   type TaskfoldCardWriteResult,
@@ -15,8 +17,7 @@ import {
   type TaskfoldHostEvent,
 } from "./host.ts";
 import { i18n, type TaskfoldLocale } from "./i18n/index.ts";
-import { createCardImageClient, isPendingImageRef } from "./lib/card-images.ts";
-import { taskfoldEditorHtmlToMarkdown } from "./lib/markdown.ts";
+import { createCardImageClient, createDocumentImageClient, isPendingImageRef } from "./lib/card-images.ts";
 import {
   createTaskfoldProjectUiState,
   renderTaskfoldProjects,
@@ -77,6 +78,10 @@ class TaskfoldProjectHost extends LitElement {
   private readonly cardImages = createCardImageClient((method, params) =>
     taskfoldHost().request(method, params),
   );
+  /** 资料库文档里的图片：存在文档旁的 `<文档名>.assets/`。 */
+  private readonly documentImages = createDocumentImageClient((method, params) =>
+    taskfoldHost().request(method, params),
+  );
   private connectedToGateway = false;
   // 宿主能力开关在挂载时读一次；render() 不直接碰宿主（卸载后仍可能有一次待执行的渲染）。
   private executionEnabled = false;
@@ -87,6 +92,7 @@ class TaskfoldProjectHost extends LitElement {
     projectManagement: false,
     documents: false,
     openCardFile: false,
+    cardFlow: false,
   };
   private stopped = false;
   private refreshGeneration = 0;
@@ -312,6 +318,9 @@ class TaskfoldProjectHost extends LitElement {
     this.state.documentPreviewError = null;
     this.state.documentEditing = false;
     this.state.documentDraft = null;
+    this.state.statusDraft = null;
+    this.state.statusError = null;
+    this.state.statusMigration = null;
     if (options.syncRoute !== false) {
       this.syncRoute();
     }
@@ -647,7 +656,115 @@ class TaskfoldProjectHost extends LitElement {
     }, { closeModal: false });
   }
 
-  /** 复制：同项目新建一张卡，带走备注、优先级、负责人、标签、里程碑；状态回到 todo。 */
+  /** 标记阻塞（能力开关 `cardFlow`）：卡留在原状态，只打标记并记原因。 */
+  private blockCard(id: string, reason: string) {
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.block", { id, reason: reason.trim() || undefined });
+    }, { closeModal: false });
+  }
+
+  private unblockCard(id: string) {
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.unblock", { id });
+    }, { closeModal: false });
+  }
+
+  /** 加入派发队列：人工批准 agent 来领这张卡。 */
+  private promoteCard(id: string) {
+    void this.mutate(async () => {
+      await taskfoldHost().request("taskfold.cards.promote", { id });
+    }, { closeModal: false });
+  }
+
+  private statusBoardId(): string | undefined {
+    return this.state.project?.board.id;
+  }
+
+  /** 保存状态设置页里改好的整份状态集；成功后丢掉草稿。 */
+  private saveStatuses(statuses: TaskfoldStatusDefinition[]) {
+    const boardId = this.statusBoardId();
+    if (!boardId) {
+      return;
+    }
+    this.state.statusError = null;
+    void this.mutate(async () => {
+      try {
+        await taskfoldHost().request("taskfold.statuses.save", { boardId, statuses });
+      } catch (error) {
+        this.state.statusError = errorMessage(error);
+        throw error;
+      }
+      this.state.statusDraft = null;
+      this.state.statusMigration = null;
+    }, { closeModal: false });
+  }
+
+  /** 删除一个状态：用它的卡先移到 `moveCardsTo`（没有卡在用就不需要）；移卡与删除在后端一起做。 */
+  private deleteStatus(id: string, moveCardsTo?: string) {
+    const boardId = this.statusBoardId();
+    if (!boardId) {
+      return;
+    }
+    this.state.statusError = null;
+    void this.mutate(async () => {
+      try {
+        const cardsUsing = this.state.project?.cards.filter((card) => card.status === id).length ?? 0;
+        if (cardsUsing > 0 && !moveCardsTo) {
+          throw new Error(i18n.t("taskfoldProject.statusSettings.pickTarget"));
+        }
+        await taskfoldHost().request("taskfold.statuses.delete", {
+          boardId,
+          id,
+          ...(moveCardsTo ? { moveCardsTo } : {}),
+        });
+      } catch (error) {
+        this.state.statusError = errorMessage(error);
+        throw error;
+      }
+      this.state.statusDraft = null;
+      this.state.statusMigration = null;
+    });
+  }
+
+  /** 迁移预览（dry-run）：不写任何东西，只告诉用户会改什么。 */
+  private previewStatusMigration() {
+    const boardId = this.statusBoardId();
+    if (!boardId) {
+      return;
+    }
+    this.state.statusError = null;
+    void this.mutate(async () => {
+      try {
+        this.state.statusMigration = await taskfoldHost().request<TaskfoldStatusMigrationReport>(
+          "taskfold.statuses.migrate",
+          { boardId, dryRun: true },
+        );
+      } catch (error) {
+        this.state.statusError = errorMessage(error);
+        throw error;
+      }
+    }, { closeModal: false });
+  }
+
+  private migrateStatuses() {
+    const boardId = this.statusBoardId();
+    if (!boardId) {
+      return;
+    }
+    this.state.statusError = null;
+    void this.mutate(async () => {
+      try {
+        await taskfoldHost().request("taskfold.statuses.migrate", { boardId });
+      } catch (error) {
+        this.state.statusError = errorMessage(error);
+        throw error;
+      }
+      this.state.statusDraft = null;
+      this.state.statusMigration = null;
+    }, { closeModal: false });
+  }
+
+  /** 复制：同项目新建一张卡，带走备注、优先级、负责人、标签、里程碑；状态回到项目默认的未开始状态。 */
   private duplicateCard(id: string) {
     const project = this.state.project;
     const card = project?.cards.find((candidate) => candidate.id === id);
@@ -659,7 +776,7 @@ class TaskfoldProjectHost extends LitElement {
         boardId: project.board.id,
         title: i18n.t("taskfoldProject.duplicateTitle", { title: card.title }),
         notes: card.notes,
-        status: "todo",
+        // 副本一律从项目默认的未开始状态开始，不带原卡的状态与标记。
         priority: card.priority,
         agentId: card.agentId,
         labels: card.labels,
@@ -868,18 +985,6 @@ class TaskfoldProjectHost extends LitElement {
     }
     this.state.documentEditing = false;
     this.requestUpdate();
-  }
-
-  private formatDocument(
-    command: "bold" | "italic" | "formatBlock" | "insertUnorderedList",
-  ) {
-    const editor = this.querySelector<HTMLElement>(".taskfold-project__rich-editor");
-    if (!editor) {
-      return;
-    }
-    editor.focus();
-    document.execCommand(command, false, command === "formatBlock" ? "h2" : undefined);
-    this.state.documentDraft = taskfoldEditorHtmlToMarkdown(editor.innerHTML);
   }
 
   private cancelDocumentEdit() {
@@ -1413,6 +1518,7 @@ class TaskfoldProjectHost extends LitElement {
       projectManagementEnabled: this.capabilities.projectManagement,
       documentsEnabled: this.capabilities.documents,
       openCardFileEnabled: this.capabilities.openCardFile,
+      cardFlowEnabled: this.capabilities.cardFlow,
       requestUpdate: () => this.requestUpdate(),
       refresh: () => void this.refresh(),
       locale: i18n.getLocale(),
@@ -1437,6 +1543,13 @@ class TaskfoldProjectHost extends LitElement {
       updateCardPriority: (id, priority) => this.updateCardPriority(id, priority),
       updateCardLabels: (id, labels) => this.updateCardLabels(id, labels),
       addCardComment: (id, body) => this.addCardComment(id, body),
+      blockCard: (id, reason) => this.blockCard(id, reason),
+      unblockCard: (id) => this.unblockCard(id),
+      promoteCard: (id) => this.promoteCard(id),
+      saveStatuses: (statuses) => this.saveStatuses(statuses),
+      deleteStatus: (id, moveCardsTo) => this.deleteStatus(id, moveCardsTo),
+      previewStatusMigration: () => this.previewStatusMigration(),
+      migrateStatuses: () => this.migrateStatuses(),
       duplicateCard: (id) => this.duplicateCard(id),
       deleteCard: (id) => this.deleteCard(id),
       archiveCard: (id, archived) => this.archiveCard(id, archived),
@@ -1461,7 +1574,10 @@ class TaskfoldProjectHost extends LitElement {
       previewDocumentDraft: () => this.previewDocumentDraft(),
       cancelDocumentEdit: () => this.cancelDocumentEdit(),
       saveDocumentContent: () => this.saveDocumentContent(),
-      formatDocument: (command) => this.formatDocument(command),
+      documentImages: {
+        upload: (documentId, file) => this.documentImages.upload(documentId, file),
+        resolve: (documentId, ref) => this.documentImages.resolve(documentId, ref),
+      },
       saveMilestone: (data) => this.saveMilestone(data),
       completeMilestone: (id) => this.completeMilestone(id),
       archiveMilestone: (id, archived) => this.archiveMilestone(id, archived),

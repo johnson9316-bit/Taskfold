@@ -9,7 +9,9 @@ import type {
   TaskfoldMetadata,
   TaskfoldNotification,
   TaskfoldRunAttempt,
+  TaskfoldStatus,
 } from "./contract/index.js";
+import { cardPhase, isStartablePhase, phasePatch } from "./card-phase.js";
 import { isFutureDateTimestampMs, resolveGlobalSingleton, safeEqualSecret } from "./sdk-utils.js";
 import { taskfoldCardMatchesLifecycleLink } from "./session-link.js";
 import { invertTaskfoldCardMutation } from "./store-compensation.js";
@@ -58,8 +60,8 @@ import {
   normalizeBoundedString,
   normalizeOptionalString,
   normalizeProofInput,
-  normalizeStatus,
   normalizeStringList,
+  optionalStatusInput,
   removeUndefinedMetadataFields,
 } from "./store-normalizers.js";
 import { TaskfoldRevisionConflictError } from "./store-core.js";
@@ -187,6 +189,19 @@ function executionAssociationPatch(
 }
 
 export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
+
+  /**
+   * 拆解 / 规格化之后这张卡该落在哪个状态：停在 intake 状态（原 triage）或"想法类"未开始状态
+   * （如 backlog）的卡退到项目默认的未开始状态，其余原样。
+   */
+  private async specifiedStatusFor(card: TaskfoldCard): Promise<TaskfoldStatus> {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    const phase = cardPhase(card, registry);
+    if (phase === "triage" || (phase === "todo" && card.status !== registry.defaultStatus)) {
+      return registry.defaultStatus;
+    }
+    return card.status;
+  }
   async claimExecution(
     id: string,
     input: { ownerId?: unknown; expectedRevision?: unknown; ttlSeconds?: unknown },
@@ -489,16 +504,21 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         // 业务状态；那条路径下 openExecutionLaunch 之后卡片 status 仍是原状态，不会
         // 是 running。因此只在当前 status 已经是 running 时才把失败推成 blocked，
         // 其余状态原样保留，避免一次 Run 的失败冒充/覆盖 Card 自己的生命周期状态。
-        const nextStatus = existing.status === "running" ? "blocked" : existing.status;
+        const registry = await this.statusRegistryFor(cardBoardId(existing));
+        const failed =
+          cardPhase(existing, registry, failedAt) === "running"
+            ? phasePatch(existing, "blocked", registry, { reason, now: failedAt })
+            : undefined;
         await this.updateCard(
           id,
           {
-            status: nextStatus,
+            status: failed?.status ?? existing.status,
             sessionKey: null,
             runId: null,
             execution: null,
             metadata: {
               ...metadata,
+              ...(failed?.flags ?? {}),
               claim: undefined,
               attempts: closeRunningAttempts(metadata.attempts, failedAt, "blocked", reason),
               automation: { ...metadata.automation, launch },
@@ -694,19 +714,20 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       ) {
         throw new Error("card workspace authority changed before claim.");
       }
+      const guardedPhase = cardPhase(guarded, await this.statusRegistryFor(cardBoardId(guarded)), now);
       const existingClaim = guarded.metadata?.claim;
       const activeClaim =
         existingClaim &&
         (isFutureDateTimestampMs(existingClaim.expiresAt, { nowMs: now }) ||
           // Direct claims must honor the same running-worker heartbeat grace
           // as dispatcher recovery; otherwise they silently steal live tokens.
-          (guarded.status === "running" && !isTaskfoldClaimReclaimable(existingClaim, now)))
+          (guardedPhase === "running" && !isTaskfoldClaimReclaimable(existingClaim, now)))
           ? existingClaim
           : undefined;
-      if (cardParentIds(guarded).length > 0 && guarded.status !== "ready" && !activeClaim) {
+      if (cardParentIds(guarded).length > 0 && guardedPhase !== "ready" && !activeClaim) {
         throw new Error("card dependencies are not done.");
       }
-      if (guarded.status === "scheduled") {
+      if (guardedPhase === "scheduled") {
         throw new Error("card is scheduled for later.");
       }
       if (retryBudgetExhausted(guarded)) {
@@ -739,14 +760,17 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
   }
 
   private async markClaimedCardRunning(card: TaskfoldCard, ownerId: string): Promise<TaskfoldCard> {
+    const registry = await this.statusRegistryFor(cardBoardId(card));
+    // 只有待办 / 已派发的卡认领后进入进行中；triage、定时未到、阻塞的卡原样保留。
+    const running = isStartablePhase(cardPhase(card, registry))
+      ? phasePatch(card, "running", registry)
+      : undefined;
     return await this.updateCard(
       card.id,
       {
-        status:
-          card.status === "backlog" || card.status === "todo" || card.status === "ready"
-            ? "running"
-            : card.status,
+        status: running?.status ?? card.status,
         agentId: card.agentId ?? ownerId,
+        ...(running ? { metadata: { ...card.metadata, ...running.flags } } : {}),
       },
       { expectedRevision: card.revision },
     );
@@ -799,10 +823,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       if (!existing) {
         throw new Error(`card not found: ${id}`);
       }
-      const status =
-        input.status === undefined
-          ? existing.status
-          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      // 状态交给 updateCard 校验 / 翻译（已退役的 ready 等旧值也能用）。
+      const status = optionalStatusInput(input.status) ?? existing.status;
       const claim = existing.metadata?.claim;
       if (claim) {
         assertClaimIdentity(claim, input);
@@ -885,13 +907,15 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       existing.execution?.status === "running"
         ? { ...existing.execution, status: "done" as const, updatedAt: now }
         : existing.execution;
+    const donePatch = phasePatch(existing, "done", await this.statusRegistryFor(cardBoardId(existing)), { now });
     return await this.updateCard(
       id,
       {
-        status: "done",
+        status: donePatch.status,
         ...(execution ? { execution } : {}),
         metadata: {
           ...metadata,
+          ...donePatch.flags,
           claim: undefined,
           attempts: closeRunningAttempts(metadata.attempts, now, "succeeded"),
           failureCount: 0,
@@ -955,13 +979,18 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         existing.execution?.status === "running"
           ? { ...existing.execution, status: "blocked" as const, updatedAt: now }
           : existing.execution;
+      const blockedPatch = phasePatch(existing, "blocked", await this.statusRegistryFor(cardBoardId(existing)), {
+        reason,
+        now,
+      });
       return await this.updateCard(
         id,
         {
-          status: "blocked",
+          status: blockedPatch.status,
           ...(execution ? { execution } : {}),
           metadata: {
             ...metadata,
+            ...blockedPatch.flags,
             claim: undefined,
             attempts: closeRunningAttempts(metadata.attempts, now, "blocked", reason),
             failureCount: (metadata.failureCount ?? 0) + 1,
@@ -987,9 +1016,11 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       }
       assertCanMutateClaimedCard(existing, scope);
       const metadata = clearDiagnostics(existing.metadata, ["blocked_too_long"]);
+      // 解除阻塞回到"待办"：进行中的卡退回默认未开始状态，未开始的卡留在原状态，只收回标记。
+      const todo = phasePatch(existing, "todo", await this.statusRegistryFor(cardBoardId(existing)));
       return await this.updateCard(
         id,
-        { status: "todo", metadata: { ...metadata, stale: null } },
+        { status: todo.status, metadata: { ...metadata, ...todo.flags, stale: null } },
         { expectedRevision: existing.revision },
       );
     }));
@@ -1008,10 +1039,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       assertCanMutateClaimedCard(existing, scope === null ? undefined : scope);
       const agentId =
         input.agentId === undefined ? existing.agentId : normalizeOptionalString(input.agentId);
-      const status =
-        input.status === undefined
-          ? existing.status
-          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      const status = optionalStatusInput(input.status) ?? existing.status;
       const reason = normalizeBoundedString(input.reason, undefined, 1000, "reassign reason");
       const shouldResetFailures = input.resetFailures !== false;
       const baseMetadata = shouldResetFailures
@@ -1050,12 +1078,12 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
       const reason =
         normalizeBoundedString(input.reason, undefined, 1000, "reclaim reason") ??
         "Taskfold claim reclaimed.";
-      const targetStatus =
-        input.status === undefined
-          ? existing.status === "running"
-            ? "ready"
-            : existing.status
-          : normalizeStatus(input.status, existing.status, await this.statusRegistryFor(cardBoardId(existing)));
+      const registry = await this.statusRegistryFor(cardBoardId(existing));
+      const requeued =
+        input.status === undefined && cardPhase(existing, registry, now) === "running"
+          ? phasePatch(existing, "ready", registry, { now })
+          : undefined;
+      const targetStatus = requeued?.status ?? optionalStatusInput(input.status) ?? existing.status;
       const reclaimed = await this.updateCard(
         id,
         {
@@ -1063,6 +1091,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
           execution: existing.execution?.status === "running" ? null : existing.execution,
           metadata: {
             ...existing.metadata,
+            ...(requeued?.flags ?? {}),
             claim: undefined,
             attempts: closeRunningAttempts(existing.metadata?.attempts, now, "stopped", reason),
             comments: [
@@ -1098,17 +1127,16 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         throw new Error(`card not found: ${id}`);
       }
       assertCanMutateClaimedCard(existing, scope === null ? undefined : scope);
-      if (
-        existing.status !== "triage" &&
-        existing.status !== "backlog" &&
-        existing.status !== "todo"
-      ) {
-        throw new Error("only triage, backlog, or todo cards can be specified.");
-      }
       const statusRegistry = await this.statusRegistryFor(cardBoardId(existing));
-      const requestedStatus = normalizeStatus(input.status, "todo", statusRegistry);
-      if (requestedStatus !== "todo") {
-        throw new Error("specified cards must move to todo.");
+      const existingPhase = cardPhase(existing, statusRegistry);
+      if (existingPhase !== "triage" && existingPhase !== "todo") {
+        throw new Error("only cards that have not started (triage, backlog or todo) can be specified.");
+      }
+      // 规格化后的卡一律回到项目默认的未开始状态（默认集里就是 todo）。
+      const specifiedStatus = statusRegistry.defaultStatus;
+      const requestedStatus = optionalStatusInput(input.status) ?? specifiedStatus;
+      if (requestedStatus !== specifiedStatus) {
+        throw new Error(`specified cards must move to ${specifiedStatus}.`);
       }
       const now = Date.now();
       const summary = normalizeBoundedString(input.summary, undefined, 2000, "spec summary");
@@ -1133,8 +1161,8 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
         id,
         {
           ...cardPatch,
-          status: "todo",
-          metadata,
+          status: specifiedStatus,
+          metadata: { ...metadata, blocked: undefined, dispatchReady: undefined },
         },
         { enforceStatusHolds: true, expectedRevision: existing.revision },
       );
@@ -1228,10 +1256,7 @@ export class TaskfoldWorkflowStore extends TaskfoldPromoteStore {
               return await this.updateCard(
                 parent.id,
                 {
-                  status:
-                    latestParent.status === "triage" || latestParent.status === "backlog"
-                      ? "todo"
-                      : latestParent.status,
+                  status: await this.specifiedStatusFor(latestParent),
                   metadata: {
                     ...latestParent.metadata,
                     automation: normalizeAutomation(

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import { taskfoldLastActivityAt } from "@taskfold/core/store-card-helpers.js";
+import { phaseOf } from "./helpers/phase.js";
 import type {
   PersistedTaskfoldAttachment,
   PersistedTaskfoldBoard,
@@ -124,7 +125,7 @@ describe("Taskfold reconciler", () => {
     await reconcileTaskfoldCards({ store, runtime: createRuntime(), now });
     await reconcileTaskfoldCards({ store, runtime: createRuntime(), now });
 
-    expect((await store.get(card.id))?.status).toBe("blocked");
+    expect(phaseOf(await store.get(card.id))).toBe("blocked");
   });
 
   it("flags a quiet run stale without closing it, and clears the flag when it reports in", async () => {
@@ -237,7 +238,7 @@ describe("Taskfold reconciler", () => {
     // 失败推成 `blocked`（需求/8.4「Run 与 Card 状态分离」映射表：该行前提是
     // dispatcher 的 claim() 已把状态推成 running 的调度路径），所以这里保持
     // `ready` 不变，regla R 的清理（清 claim/关联、attempt 收成 blocked）照常发生。
-    expect(failed?.status).toBe("ready");
+    expect(phaseOf(failed)).toBe("ready");
     expect(failed?.sessionKey).toBeUndefined();
     expect(failed?.runId).toBeUndefined();
     expect(failed?.execution).toBeUndefined();
@@ -279,6 +280,6 @@ describe("Taskfold reconciler", () => {
     // Nothing was dispatched, so there is no run to close — only the stale claim to
     // reclaim. Reporting a closed run here would invent a failure that never ran.
     expect(outcome.finished).toBe(0);
-    expect((await store.get(claimed.card.id))?.status).toBe("ready");
+    expect(phaseOf(await store.get(claimed.card.id))).toBe("ready");
   });
 });

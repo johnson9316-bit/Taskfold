@@ -23,35 +23,46 @@ import type {
   TaskfoldProjectDocumentType,
   TaskfoldProjectView,
   TaskfoldStatus,
+  TaskfoldStatusDefinition,
 } from "@taskfold/core/contract/index.js";
+import type { TaskfoldStatusMigrationReport } from "@taskfold/core/status-migration.js";
 import "../../components/modal-dialog.ts";
 import "../../components/markdown-editor.ts";
+import { isTaskfoldDocumentImageRef } from "@taskfold/core/card-image-ref.js";
 import "./graph-canvas.ts";
 import { buildGraphModel, resolveGraphDrop, type GraphFilter, type GraphRelation } from "./graph-model.ts";
 import { t, type TaskfoldLocale } from "../../i18n/index.ts";
 import {
-  taskfoldEditorHtmlToMarkdown,
-  taskfoldMarkdownToEditorHtml,
   hydrateMarkdownImages,
   plainTextFromMarkdown,
   renderTaskfoldMarkdown,
 } from "../../lib/markdown.ts";
 import { buildCardTimeline, cardComments } from "../../lib/card-timeline.ts";
+import { cardPhase } from "@taskfold/core/card-phase.js";
+import {
+  TASKFOLD_STATUS_CATEGORIES,
+  TASKFOLD_STATUS_ROLES,
+  type TaskfoldStatusCategory,
+  type TaskfoldStatusRole,
+} from "@taskfold/core/contract/index.js";
+import { TASKFOLD_STATUS_ID_PATTERN } from "@taskfold/core/status-registry.js";
 import { fitToViewport } from "../../lib/fit-viewport.ts";
+import {
+  boardStatusColumns,
+  cardMark,
+  checkedStatusFor,
+  defaultStatusLabel,
+  displayStatusId,
+  isCompletedCard,
+  isFinishedCard,
+  statusLabel,
+  statusRegistryOf,
+  type TaskfoldCardMark,
+} from "../../lib/statuses.ts";
+import type { TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
 import { styleProperties } from "../../lib/style-properties.ts";
 import "../../styles/taskfold-project.css";
 
-const STATUSES: readonly TaskfoldStatus[] = [
-  "triage",
-  "backlog",
-  "todo",
-  "scheduled",
-  "ready",
-  "running",
-  "review",
-  "blocked",
-  "done",
-];
 const PRIORITIES: readonly TaskfoldPriority[] = ["low", "normal", "high", "urgent"];
 const BOARD_GROUPS: readonly TaskfoldBoardGroupBy[] = ["status", "milestone", "requirement", "assignee"];
 const BOARD_SORTS: readonly TaskfoldBoardSortBy[] = ["manual", "priority", "createdAt", "updatedAt"];
@@ -107,6 +118,8 @@ export type TaskfoldProjectModal =
   | { kind: "milestone"; milestone?: TaskfoldMilestone }
   | { kind: "document"; document?: TaskfoldProjectDocument }
   | { kind: "card-detail"; cardId: string }
+  /** 删除一个状态：用这个状态的卡要先选个去处。 */
+  | { kind: "status-delete"; statusId: string }
   | { kind: "execution-start"; cardId: string }
   | {
       kind: "move-project";
@@ -167,7 +180,7 @@ export type TaskfoldProjectUiState = {
   executionInspectionLoading: boolean;
   executionInspectionError: string | null;
   selectedProjectId: string | null;
-  screen: "overview" | "board" | "graph" | "settings" | "documents";
+  screen: "overview" | "board" | "graph" | "settings" | "statuses" | "documents";
   modal: TaskfoldProjectModal | null;
   draggedCardId: string | null;
   /** 拖拽经过、需要高亮的列。 */
@@ -182,6 +195,12 @@ export type TaskfoldProjectUiState = {
   columnMenuId: string | null;
   /** 顶栏「全部项目」下拉是否展开。 */
   projectMenuOpen: boolean;
+  /** 状态设置页的草稿（改名 / 改类别 / 排序…尚未保存）；null 表示没改过，直接显示项目的状态。 */
+  statusDraft: TaskfoldStatusDefinition[] | null;
+  /** 状态设置页提交 / 迁移失败的原因，显示在页内。 */
+  statusError: string | null;
+  /** 迁移预览（dry-run）的结果；null 表示还没预览。 */
+  statusMigration: TaskfoldStatusMigrationReport | null;
   graphMode: "mindmap" | "flow";
   graphZoom: number;
   graphFilter: GraphFilter;
@@ -229,6 +248,8 @@ export type TaskfoldProjectViewController = {
   documentsEnabled: boolean;
   /** 宿主能力开关 `capabilities.openCardFile`：「在编辑器中打开」原 md 文件。 */
   openCardFileEnabled: boolean;
+  /** 宿主能力开关 `capabilities.cardFlow`：标记 / 解除阻塞、加入派发队列。 */
+  cardFlowEnabled: boolean;
   locale: TaskfoldLocale;
   requestUpdate: () => void;
   refresh: () => void;
@@ -254,6 +275,15 @@ export type TaskfoldProjectViewController = {
   updateCardPriority: (id: string, priority: TaskfoldPriority) => void;
   updateCardLabels: (id: string, labels: string[]) => void;
   addCardComment: (id: string, body: string) => void;
+  /** 卡片流转（能力开关 `cardFlow`）：打阻塞标记 / 解除阻塞 / 加入派发队列。 */
+  blockCard: (id: string, reason: string) => void;
+  unblockCard: (id: string) => void;
+  promoteCard: (id: string) => void;
+  /** 状态设置：整体保存状态集、删除一个状态（卡先移走）、预览 / 执行迁移。 */
+  saveStatuses: (statuses: TaskfoldStatusDefinition[]) => void;
+  deleteStatus: (id: string, moveCardsTo?: string) => void;
+  previewStatusMigration: () => void;
+  migrateStatuses: () => void;
   duplicateCard: (id: string) => void;
   deleteCard: (id: string) => void;
   archiveCard: (id: string, archived: boolean) => void;
@@ -275,7 +305,11 @@ export type TaskfoldProjectViewController = {
   previewDocumentDraft: () => void;
   cancelDocumentEdit: () => void;
   saveDocumentContent: () => void;
-  formatDocument: (command: "bold" | "italic" | "formatBlock" | "insertUnorderedList") => void;
+  /** 资料库文档里的图片：`path` 文档存在文档旁的 `<文档名>.assets/`，引用是相对文档的路径。 */
+  documentImages: {
+    upload: (documentId: string, file: File) => Promise<string>;
+    resolve: (documentId: string, ref: string) => Promise<string | undefined>;
+  };
   saveMilestone: (data: Record<string, string>) => void;
   completeMilestone: (id: string) => void;
   archiveMilestone: (id: string, archived: boolean) => void;
@@ -344,6 +378,9 @@ export function createTaskfoldProjectUiState(): TaskfoldProjectUiState {
     cardMenuOpen: false,
     columnMenuId: null,
     projectMenuOpen: false,
+    statusDraft: null,
+    statusError: null,
+    statusMigration: null,
     graphMode: "mindmap",
     graphZoom: 1,
     graphFilter: { query: "", milestoneId: "", status: "", tag: "", relation: "all", focusCardId: "" },
@@ -412,6 +449,25 @@ function boardId(card: TaskfoldCard): string {
 
 function isArchivedCard(card: TaskfoldCard): boolean {
   return Boolean(card.metadata?.archivedAt);
+}
+
+/** 状态的 `color` 会写进内联样式：只收 #hex 与 CSS 命名色（与后端校验一致）。 */
+function isSafeCssColor(value: string): boolean {
+  return /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20})$/.test(value);
+}
+
+/** 卡片上的标记：阻塞、已派发、定时未到。它们不是状态，所以不会出现在列标题里，只能在卡上看到。 */
+function renderCardMark(card: TaskfoldCard, mark: TaskfoldCardMark, locale?: string) {
+  if (mark === "blocked") {
+    const reason = card.metadata?.blocked?.reason;
+    return html`<span class="taskfold-project__mark tf-mark-blocked" title=${reason ?? t("taskfoldProject.mark.blocked")}>${t("taskfoldProject.mark.blocked")}</span>`;
+  }
+  if (mark === "scheduled") {
+    const at = card.metadata?.automation?.scheduledAt;
+    const time = at ? new Date(at).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : "";
+    return html`<span class="taskfold-project__mark tf-mark-scheduled" title=${time}>${t("taskfoldProject.mark.scheduled", { time })}</span>`;
+  }
+  return html`<span class="taskfold-project__mark tf-mark-ready" title=${t("taskfoldProject.mark.readyHelp")}>${t("taskfoldProject.mark.ready")}</span>`;
 }
 
 function hasActiveCardExecution(card: TaskfoldCard): boolean {
@@ -553,10 +609,12 @@ export function reorderVisibleItemIds<T extends { id: string }>(
   return ids;
 }
 
-function renderStatusOptions(selected: TaskfoldStatus) {
-  return STATUSES.map(
+/** 项目的状态下拉；当前值不在状态集里（数据被手改过）时补一项，免得选择框悄悄换成别的值。 */
+function renderStatusOptions(selected: TaskfoldStatus, registry: TaskfoldStatusRegistry) {
+  const options = registry.ids.includes(selected) ? registry.ids : [...registry.ids, selected];
+  return options.map(
     (status) =>
-      html`<option value=${status} ?selected=${status === selected}>${t(`workboard.status.${status}`)}</option>`,
+      html`<option value=${status} ?selected=${status === selected}>${statusLabel(status, registry, t)}</option>`,
   );
 }
 
@@ -849,6 +907,8 @@ type TaskfoldBoardColumn = {
   milestone?: TaskfoldMilestone;
   requirement?: TaskfoldCard;
   manualOrder?: { milestoneId?: string; cards: TaskfoldCard[] };
+  /** 状态列的强调色（项目自定义状态的 `color`）。 */
+  accent?: string;
   onDrop: (cardId: string) => void;
   onCreate: () => void;
   /** 列底就地新建时附带的字段（状态 / 里程碑 / 需求 / 负责人）。 */
@@ -897,14 +957,17 @@ function renderCard(
   }
   const archived = isArchivedCard(card);
   const isProjectArchived = Boolean(project.board.archivedAt);
-  const done = card.status === "done";
+  const registry = statusRegistryOf(project);
+  const finished = isFinishedCard(card, registry);
+  const completed = isCompletedCard(card, registry);
+  const mark = cardMark(card, registry);
   const orderedCards = options.manualOrder?.cards ?? [];
   const cardIndex = orderedCards.findIndex((candidate) => candidate.id === card.id);
   const previousCard = orderedCards[cardIndex - 1];
   const nextCard = orderedCards[cardIndex + 1];
   return html`
     <article
-      class="taskfold-project__card ${archived ? "tf-is-archived" : ""} ${isRequirementCard(card) ? "tf-is-requirement" : ""} ${done ? "tf-is-done" : ""} ${state.draggedCardId === card.id ? "tf-is-dragging" : ""}"
+      class="taskfold-project__card ${archived ? "tf-is-archived" : ""} ${isRequirementCard(card) ? "tf-is-requirement" : ""} ${finished ? "tf-is-done" : ""} ${state.draggedCardId === card.id ? "tf-is-dragging" : ""}"
       draggable=${!archived && !isProjectArchived}
       @dragstart=${(event: DragEvent) => {
         state.draggedCardId = card.id;
@@ -941,12 +1004,12 @@ function renderCard(
         type="checkbox"
         aria-label=${t("taskfoldProject.markDone")}
         title=${t("taskfoldProject.markDone")}
-        .checked=${done}
+        .checked=${completed}
         ?disabled=${archived || isProjectArchived || !controller.connected}
         @change=${(event: Event) =>
           controller.updateCardStatus(
             card.id,
-            (event.currentTarget as HTMLInputElement).checked ? "done" : "todo",
+            checkedStatusFor(registry, (event.currentTarget as HTMLInputElement).checked),
           )}
       />
       <button
@@ -956,6 +1019,7 @@ function renderCard(
       >
         <span class="taskfold-project__priority tf-priority-${card.priority}"></span>
         <span class="taskfold-project__card-title">${card.title}</span>
+        ${mark ? renderCardMark(card, mark, controller.locale) : nothing}
         ${card.notes ? html`<span class="taskfold-project__card-notes" title=${plainTextFromMarkdown(card.notes)}>${plainTextFromMarkdown(card.notes)}</span>` : nothing}
         ${renderCardLabels(card.labels)}
         ${card.delivery
@@ -1137,7 +1201,8 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
   };
   return html`
     <section
-      class="taskfold-project__column ${milestone ? `tf-is-${milestone.state}` : "tf-is-unassigned"} ${state.dragOverColumnId === params.id ? "tf-is-drag-over" : ""}"
+      class="taskfold-project__column ${milestone ? `tf-is-${milestone.state}` : "tf-is-unassigned"} ${state.dragOverColumnId === params.id ? "tf-is-drag-over" : ""} ${params.accent ? "tf-has-accent" : ""}"
+      style=${params.accent && isSafeCssColor(params.accent) ? `--tf-column-accent: ${params.accent}` : nothing}
       @dragover=${(event: DragEvent) => {
         event.preventDefault();
         if (state.draggedCardId && state.dragOverColumnId !== params.id) {
@@ -1395,16 +1460,21 @@ function renderBoard(controller: TaskfoldProjectViewController) {
       });
     }
   } else {
+    const statusRegistry = statusRegistryOf(project);
     const byStatus = new Map<TaskfoldStatus, TaskfoldCard[]>();
     for (const card of cards) {
-      const current = byStatus.get(card.status) ?? [];
+      const status = displayStatusId(card, statusRegistry);
+      const current = byStatus.get(status) ?? [];
       current.push(card);
-      byStatus.set(card.status, current);
+      byStatus.set(status, current);
     }
-    for (const status of STATUSES) {
+    for (const column of boardStatusColumns(statusRegistry, cards)) {
+      const status = column.id;
       columns.push({
         id: status,
-        title: t(`workboard.status.${status}`),
+        title: statusLabel(status, statusRegistry, t),
+        subtitle: column.definition ? t(`taskfoldProject.statusCategory.${column.definition.category}`) : undefined,
+        accent: column.definition?.color,
         cards: sorted(byStatus.get(status) ?? []),
         onDrop: (id) => controller.updateCardStatus(id, status),
         onCreate: () => controller.openModal({ kind: "card", status }),
@@ -1536,7 +1606,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
   const model = buildGraphModel(project, state.graphMode, filter, {
     requirements: t("taskfoldProject.graphRequirements"),
     noMilestone: t("taskfoldProject.unassigned"),
-    status: (value) => t(`workboard.status.${value}`),
+    status: (value) => statusLabel(value, statusRegistryOf(project), t),
   });
   const selected = model.nodes.find((node) => node.id === state.graphSelectedId);
   const selectedCard = selected?.cardId
@@ -1599,7 +1669,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
         <select aria-label=${t("taskfoldProject.graphStatus")}
           @change=${(event: Event) => { filter.status = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
           <option value="" ?selected=${!filter.status}>${t("taskfoldProject.graphAllStatuses")}</option>
-          ${STATUSES.map((status) => html`<option value=${status} ?selected=${filter.status === status}>${t(`workboard.status.${status}`)}</option>`)}
+          ${statusRegistryOf(project).ids.map((status) => html`<option value=${status} ?selected=${filter.status === status}>${statusLabel(status, statusRegistryOf(project), t)}</option>`)}
         </select>
         <select aria-label=${t("taskfoldProject.graphTag")}
           @change=${(event: Event) => { filter.tag = (event.currentTarget as HTMLSelectElement).value; controller.requestUpdate(); }}>
@@ -1643,7 +1713,7 @@ function renderGraph(controller: TaskfoldProjectViewController) {
         </div>
         <aside class="taskfold-project__graph-inspector">
           <strong>${selected?.title ?? t("taskfoldProject.graphSelectNode")}</strong>
-          ${selectedCard ? html`<small>${t(`workboard.status.${selectedCard.status}`)} · ${selectedCard.priority} · ${selected?.childCount ?? 0}</small>` : nothing}
+          ${selectedCard ? html`<small>${statusLabel(selectedCard.status, statusRegistryOf(project), t)} · ${selectedCard.priority} · ${selected?.childCount ?? 0}</small>` : nothing}
           <div class="taskfold-project__graph-inspector-actions">
             ${selectedCard ? html`<button type="button" @click=${() => controller.openModal({ kind: "card-detail", cardId: selectedCard.id })}>${t("taskfoldProject.graphOpenCard")}</button>` : nothing}
             <button type="button" ?disabled=${!controller.connected || Boolean(project.board.archivedAt)} @click=${createAtSelection}>${t("taskfoldProject.newCard")}</button>
@@ -2068,63 +2138,24 @@ function renderDocumentPreview(controller: TaskfoldProjectViewController) {
                   ${state.documentPreviewError
                     ? html`<p class="taskfold-project__document-reader-message tf-is-error">${state.documentPreviewError}</p>`
                     : nothing}
-                  <div
-                    class="taskfold-project__document-editor-toolbar"
-                    role="toolbar"
-                    aria-label=${t("taskfoldProject.richTextToolbar")}
-                  >
-                    <button
-                      class="taskfold-project__editor-button"
-                      type="button"
-                      title=${t("taskfoldProject.formatBold")}
-                      aria-label=${t("taskfoldProject.formatBold")}
-                      @mousedown=${(event: MouseEvent) => event.preventDefault()}
-                      @click=${() => controller.formatDocument("bold")}
-                    ><strong>B</strong></button>
-                    <button
-                      class="taskfold-project__editor-button"
-                      type="button"
-                      title=${t("taskfoldProject.formatItalic")}
-                      aria-label=${t("taskfoldProject.formatItalic")}
-                      @mousedown=${(event: MouseEvent) => event.preventDefault()}
-                      @click=${() => controller.formatDocument("italic")}
-                    ><em>I</em></button>
-                    <button
-                      class="taskfold-project__editor-button"
-                      type="button"
-                      title=${t("taskfoldProject.formatHeading")}
-                      aria-label=${t("taskfoldProject.formatHeading")}
-                      @mousedown=${(event: MouseEvent) => event.preventDefault()}
-                      @click=${() => controller.formatDocument("formatBlock")}
-                    >H</button>
-                    <button
-                      class="taskfold-project__editor-button"
-                      type="button"
-                      title=${t("taskfoldProject.formatList")}
-                      aria-label=${t("taskfoldProject.formatList")}
-                      @mousedown=${(event: MouseEvent) => event.preventDefault()}
-                      @click=${() => controller.formatDocument("insertUnorderedList")}
-                    >${t("taskfoldProject.formatList")}</button>
-                  </div>
-                  <div
-                    class="taskfold-project__rich-editor"
-                    contenteditable="true"
-                    role="textbox"
-                    aria-multiline="true"
-                    aria-label=${t("taskfoldProject.documentContent")}
-                    .innerHTML=${taskfoldMarkdownToEditorHtml(content)}
-                    @input=${(event: InputEvent) => {
-                      state.documentDraft = taskfoldEditorHtmlToMarkdown(
-                        (event.currentTarget as HTMLElement).innerHTML,
-                      );
+                  <taskfold-markdown-editor
+                    .value=${content}
+                    .uploadImage=${document.type === "path"
+                      ? (file: File) => controller.documentImages.upload(document.id, file)
+                      : undefined}
+                    .resolveImage=${(ref: string) => controller.documentImages.resolve(document.id, ref)}
+                    .acceptRef=${isTaskfoldDocumentImageRef}
+                    @markdown-change=${(event: CustomEvent<string>) => {
+                      state.documentDraft = event.detail;
                     }}
+                    @editor-submit=${controller.saveDocumentContent}
                     @keydown=${(event: KeyboardEvent) => {
                       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "s") {
                         event.preventDefault();
                         controller.saveDocumentContent();
                       }
                     }}
-                  ></div>
+                  ></taskfold-markdown-editor>
                   <div class="taskfold-project__document-editor-actions">
                     <button class="tf-btn" type="button" @click=${controller.cancelDocumentEdit}>
                       ${t("common.cancel")}
@@ -2144,7 +2175,10 @@ function renderDocumentPreview(controller: TaskfoldProjectViewController) {
             : state.documentPreviewError
               ? html`<p class="taskfold-project__document-reader-message tf-is-error">${state.documentPreviewError}</p>`
             : preview
-              ? html`<article class="taskfold-markdown">${renderTaskfoldMarkdown(content)}</article>`
+              ? html`<article
+                  class="taskfold-markdown"
+                  ${hydrateMarkdownImages((ref) => controller.documentImages.resolve(document.id, ref))}
+                >${renderTaskfoldMarkdown(content, { documentImages: true })}</article>`
               : html`<p class="taskfold-project__document-reader-message">${t(
                   "taskfoldProject.noDocumentContent",
                 )}</p>`}
@@ -2152,11 +2186,69 @@ function renderDocumentPreview(controller: TaskfoldProjectViewController) {
   `;
 }
 
-function describeCardEvent(event: TaskfoldEvent): string {
+/**
+ * 详情右栏的卡片标记与流转：阻塞、已派发、定时未到是卡片上的标记，不是状态。有"流转"能力的宿主
+ * （OpenClaw）还能在这里标记 / 解除阻塞、把卡加入派发队列。
+ */
+function renderCardFlow(controller: TaskfoldProjectViewController, card: TaskfoldCard) {
+  const project = controller.state.project;
+  if (!project) {
+    return nothing;
+  }
+  const registry = statusRegistryOf(project);
+  const phase = cardPhase(card, registry);
+  const mark = cardMark(card, registry);
+  const flow = controller.cardFlowEnabled;
+  if (!mark && !flow) {
+    return nothing;
+  }
+  const locked = isArchivedCard(card) || Boolean(project.board.archivedAt) || !controller.connected || controller.state.busy;
+  const finished = registry.isTerminal(card.status);
+  const canPromote = phase === "todo" || phase === "triage";
+  return html`
+    <div class="taskfold-project__detail-field taskfold-project__flow">
+      <span>${t("taskfoldProject.flow.title")}</span>
+      ${mark ? renderCardMark(card, mark, controller.locale) : nothing}
+      ${phase === "blocked" && card.metadata?.blocked?.reason
+        ? html`<small>${card.metadata.blocked.reason}</small>`
+        : nothing}
+      ${flow && !locked
+        ? html`
+            ${phase === "blocked"
+              ? html`<button class="tf-btn" type="button" @click=${() => controller.unblockCard(card.id)}>${t("taskfoldProject.flow.unblock")}</button>`
+              : nothing}
+            ${canPromote
+              ? html`<button class="tf-btn" type="button" title=${t("taskfoldProject.flow.promoteHelp")}
+                  @click=${() => controller.promoteCard(card.id)}>${t("taskfoldProject.flow.promote")}</button>`
+              : nothing}
+            ${phase !== "blocked" && !finished
+              ? html`
+                  <details class="taskfold-project__flow-block">
+                    <summary>${t("taskfoldProject.flow.block")}</summary>
+                    <form
+                      @submit=${(event: SubmitEvent) => {
+                        event.preventDefault();
+                        controller.blockCard(card.id, readForm(event).reason ?? "");
+                      }}
+                    >
+                      <input name="reason" type="text" maxlength="400" placeholder=${t("taskfoldProject.flow.blockReason")}
+                        aria-label=${t("taskfoldProject.flow.blockReason")} />
+                      <button class="tf-btn" type="submit">${t("taskfoldProject.flow.blockConfirm")}</button>
+                    </form>
+                  </details>
+                `
+              : nothing}
+          `
+        : nothing}
+    </div>
+  `;
+}
+
+function describeCardEvent(event: TaskfoldEvent, registry: TaskfoldStatusRegistry): string {
   if (event.kind === "moved" && event.toStatus) {
     return t("taskfoldProject.eventMoved", {
-      from: event.fromStatus ? t(`workboard.status.${event.fromStatus}`) : "—",
-      to: t(`workboard.status.${event.toStatus}`),
+      from: event.fromStatus ? statusLabel(event.fromStatus, registry, t) : "—",
+      to: statusLabel(event.toStatus, registry, t),
     });
   }
   const key = `taskfoldProject.event.${event.kind}`;
@@ -2238,7 +2330,7 @@ function renderCardActivity(controller: TaskfoldProjectViewController, card: Tas
                     <time>${formatTime(entry.at)}</time>
                     ${entry.type === "comment"
                       ? html`<span>${t("taskfoldProject.eventComment")}：${entry.body}</span>`
-                      : html`<span>${describeCardEvent(entry.event)}</span>`}
+                      : html`<span>${describeCardEvent(entry.event, statusRegistryOf(state.project))}</span>`}
                   </li>
                 `,
               )}
@@ -2420,9 +2512,10 @@ function renderCardDetail(controller: TaskfoldProjectViewController, card: Taskf
                   (event.currentTarget as HTMLSelectElement).value as TaskfoldStatus,
                 )}
             >
-              ${renderStatusOptions(card.status)}
+              ${renderStatusOptions(card.status, statusRegistryOf(controller.state.project))}
             </select>
           </label>
+          ${renderCardFlow(controller, card)}
           <label>
             ${t("taskfoldProject.priority")}
             <select
@@ -3081,7 +3174,7 @@ function renderExecutionStartModal(
           ? html`<p class="taskfold-project__execution-error">${error}</p>`
           : preparation
             ? html`
-                ${card.status === "done"
+                ${isCompletedCard(card, statusRegistryOf(controller.state.project))
                   ? html`<p class="tf-callout">${t("taskfoldProject.executionDoneNotice")}</p>`
                   : nothing}
                 <p class="tf-callout">${t("taskfoldProject.executionWorktreeNotice")}</p>
@@ -3136,6 +3229,13 @@ function renderModal(controller: TaskfoldProjectViewController) {
           ${renderCardDetail(controller, card)}
         </openclaw-modal-dialog>`
       : nothing;
+  }
+  if (modal.kind === "status-delete") {
+    return html`
+      <openclaw-modal-dialog @click=${closeOnBackdrop} @modal-cancel=${controller.closeModal}>
+        ${renderStatusDeleteModal(controller, modal.statusId)}
+      </openclaw-modal-dialog>
+    `;
   }
   if (modal.kind === "execution-start") {
     return html`
@@ -3242,7 +3342,7 @@ function renderModal(controller: TaskfoldProjectViewController) {
               </select>
             </label>` : nothing}
           <div class="taskfold-project__modal-grid">
-            <label>${t("taskfoldProject.status")}<select name="status">${renderStatusOptions(modal.status ?? "todo")}</select></label>
+            <label>${t("taskfoldProject.status")}<select name="status">${renderStatusOptions(modal.status ?? statusRegistryOf(project).defaultStatus, statusRegistryOf(project))}</select></label>
             <label>${t("taskfoldProject.priority")}<select name="priority">${renderPriorityOptions("normal")}</select></label>
             <label>${t("taskfoldProject.assignee")}<input name="agentId" /></label>
           </div>
@@ -3336,11 +3436,233 @@ function renderModal(controller: TaskfoldProjectViewController) {
   `;
 }
 
+const NEW_STATUS_FORM_ID = "taskfold-new-status";
+
+/** 状态设置页（需求/22-状态模型）：类别固定，状态名、顺序、颜色、角色由项目自己定。 */
+function renderStatuses(controller: TaskfoldProjectViewController) {
+  const { state } = controller;
+  const project = state.project;
+  if (!project) {
+    return nothing;
+  }
+  const registry = statusRegistryOf(project);
+  const rows = state.statusDraft ?? registry.list.map((status) => ({ ...status }));
+  const dirty = state.statusDraft !== null;
+  const archived = Boolean(project.board.archivedAt);
+  const disabled = state.busy || !controller.connected || archived;
+  const usage = new Map<string, number>();
+  for (const card of project.cards) {
+    usage.set(card.status, (usage.get(card.status) ?? 0) + 1);
+  }
+  const change = (index: number, update: (row: TaskfoldStatusDefinition) => void) => {
+    const next = rows.map((row) => ({ ...row }));
+    update(next[index]!);
+    state.statusDraft = next;
+    state.statusError = null;
+    controller.requestUpdate();
+  };
+  /** 角色与默认状态在项目里只能各有一个：给这一行设置时从别处摘掉。 */
+  const exclusive = (next: TaskfoldStatusDefinition[], row: TaskfoldStatusDefinition) => {
+    for (const other of next) {
+      if (other.id === row.id) continue;
+      if (row.role && other.role === row.role) delete other.role;
+      if (row.default && other.default) delete other.default;
+    }
+  };
+  const move = (index: number, delta: number) => {
+    const next = rows.map((row) => ({ ...row }));
+    const [item] = next.splice(index, 1);
+    next.splice(index + delta, 0, item!);
+    state.statusDraft = next;
+    controller.requestUpdate();
+  };
+  const addStatus = (event: SubmitEvent) => {
+    event.preventDefault();
+    const form = readForm(event);
+    const id = (form.id ?? "").trim();
+    if (!TASKFOLD_STATUS_ID_PATTERN.test(id)) {
+      state.statusError = t("taskfoldProject.statusSettings.invalidId");
+    } else if (rows.some((row) => row.id === id)) {
+      state.statusError = t("taskfoldProject.statusSettings.duplicateId", { id });
+    } else {
+      const category = form.category as TaskfoldStatusCategory;
+      const created: TaskfoldStatusDefinition = {
+        id,
+        category,
+        ...(form.name?.trim() ? { name: form.name.trim() } : {}),
+      };
+      const lastOfCategory = rows.findLastIndex((row) => row.category === category);
+      const next = rows.map((row) => ({ ...row }));
+      next.splice(lastOfCategory + 1, 0, created);
+      state.statusDraft = next;
+      state.statusError = null;
+      (event.currentTarget as HTMLFormElement).reset();
+    }
+    controller.requestUpdate();
+  };
+  const preview = state.statusMigration;
+  return html`
+    <section class="taskfold-project__statuses">
+      <div class="taskfold-project__section-heading">
+        <div>
+          <h1>${t("taskfoldProject.statusSettings.title")}</h1>
+          <p>${t("taskfoldProject.statusSettings.intro")}</p>
+        </div>
+        <div class="taskfold-project__form-actions">
+          ${dirty
+            ? html`<button class="tf-btn" type="button" ?disabled=${state.busy}
+                @click=${() => { state.statusDraft = null; state.statusError = null; controller.requestUpdate(); }}
+              >${t("taskfoldProject.statusSettings.discard")}</button>`
+            : nothing}
+          <button class="tf-btn tf-btn--primary" type="button" ?disabled=${disabled || !dirty}
+            @click=${() => controller.saveStatuses(rows)}
+          >${t("taskfoldProject.statusSettings.save")}</button>
+        </div>
+      </div>
+      ${state.statusError ? html`<div class="tf-callout tf-callout--danger" role="alert">${state.statusError}</div>` : nothing}
+      ${!project.statusesConfigured
+        ? html`
+            <div class="tf-callout taskfold-project__status-migrate">
+              <strong>${t("taskfoldProject.statusSettings.unconfiguredTitle")}</strong>
+              <p>${t("taskfoldProject.statusSettings.unconfiguredBody")}</p>
+              ${preview
+                ? html`<p class="taskfold-project__status-preview">${preview.rewrites.length === 0
+                    ? t("taskfoldProject.statusSettings.previewNone", { total: String(preview.total) })
+                    : t("taskfoldProject.statusSettings.previewRewrites", { total: String(preview.total), count: String(preview.rewrites.length) })}</p>
+                  <ul>${preview.rewrites.map((rewrite) => html`<li>${project.cards.find((card) => card.id === rewrite.cardId)?.title ?? rewrite.cardId}: ${statusLabel(rewrite.from, registry, t)} → ${statusLabel(rewrite.to, registry, t)}</li>`)}</ul>`
+                : nothing}
+              <div class="taskfold-project__form-actions">
+                <button class="tf-btn" type="button" ?disabled=${disabled}
+                  @click=${controller.previewStatusMigration}>${t("taskfoldProject.statusSettings.preview")}</button>
+                <button class="tf-btn tf-btn--primary" type="button" ?disabled=${disabled}
+                  @click=${controller.migrateStatuses}>${t("taskfoldProject.statusSettings.migrate")}</button>
+              </div>
+            </div>
+          `
+        : nothing}
+      <ul class="taskfold-project__status-list">
+        ${rows.map((row, index) => {
+          const count = usage.get(row.id) ?? 0;
+          return html`
+            <li class="taskfold-project__status-row" data-status-id=${row.id}>
+              <input class="taskfold-project__status-color" type="color" aria-label=${t("taskfoldProject.statusSettings.color")}
+                .value=${row.color && /^#[0-9a-fA-F]{6}$/.test(row.color) ? row.color : "#8b8f99"}
+                ?disabled=${disabled}
+                @input=${(event: Event) => change(index, (target) => { target.color = (event.currentTarget as HTMLInputElement).value; })} />
+              <input class="taskfold-project__status-name" type="text" maxlength="40"
+                aria-label=${t("taskfoldProject.statusSettings.name")}
+                placeholder=${defaultStatusLabel(row.id, t)}
+                .value=${row.name ?? ""} ?disabled=${disabled}
+                @input=${(event: Event) => change(index, (target) => {
+                  const value = (event.currentTarget as HTMLInputElement).value.trim();
+                  if (value) target.name = value; else delete target.name;
+                })} />
+              <code class="taskfold-project__status-id" title=${t("taskfoldProject.statusSettings.idHelp")}>${row.id}</code>
+              <select aria-label=${t("taskfoldProject.statusSettings.category")} ?disabled=${disabled}
+                @change=${(event: Event) => change(index, (target) => {
+                  target.category = (event.currentTarget as HTMLSelectElement).value as TaskfoldStatusCategory;
+                  if (target.category !== "unstarted") delete target.default;
+                })}>
+                ${TASKFOLD_STATUS_CATEGORIES.map((category) => html`<option value=${category} ?selected=${row.category === category}>${t(`taskfoldProject.statusCategory.${category}`)}</option>`)}
+              </select>
+              <select aria-label=${t("taskfoldProject.statusSettings.role")} ?disabled=${disabled}
+                @change=${(event: Event) => {
+                  const value = (event.currentTarget as HTMLSelectElement).value as TaskfoldStatusRole | "";
+                  const next = rows.map((entry) => ({ ...entry }));
+                  if (value) next[index]!.role = value; else delete next[index]!.role;
+                  exclusive(next, next[index]!);
+                  state.statusDraft = next;
+                  controller.requestUpdate();
+                }}>
+                <option value="" ?selected=${!row.role}>${t("taskfoldProject.statusSettings.roleNone")}</option>
+                ${TASKFOLD_STATUS_ROLES.map((role) => html`<option value=${role} ?selected=${row.role === role}>${t(`taskfoldProject.statusSettings.role_${role}`)}</option>`)}
+              </select>
+              ${row.category === "unstarted"
+                ? html`<label class="taskfold-project__status-default" title=${t("taskfoldProject.statusSettings.defaultHelp")}>
+                    <input type="radio" name="taskfold-status-default" ?checked=${Boolean(row.default)}
+                      ?disabled=${disabled}
+                      @change=${() => {
+                        const next = rows.map((entry) => ({ ...entry }));
+                        next[index]!.default = true;
+                        exclusive(next, next[index]!);
+                        state.statusDraft = next;
+                        controller.requestUpdate();
+                      }} />
+                    ${t("taskfoldProject.statusSettings.default")}
+                  </label>`
+                : html`<span></span>`}
+              <span class="taskfold-project__status-count" title=${t("taskfoldProject.statusSettings.usedBy", { count: String(count) })}>${count}</span>
+              ${renderOrderControls({
+                canMoveUp: !disabled && index > 0,
+                canMoveDown: !disabled && index < rows.length - 1,
+                onMoveUp: () => move(index, -1),
+                onMoveDown: () => move(index, 1),
+              })}
+              <button class="taskfold-project__icon-button" type="button" ?disabled=${disabled || dirty}
+                title=${dirty ? t("taskfoldProject.statusSettings.saveFirst") : t("taskfoldProject.statusSettings.delete")}
+                aria-label=${t("taskfoldProject.statusSettings.delete")}
+                @click=${() => controller.openModal({ kind: "status-delete", statusId: row.id })}>&times;</button>
+            </li>
+          `;
+        })}
+      </ul>
+      <form id=${NEW_STATUS_FORM_ID} class="taskfold-project__status-add" @submit=${addStatus}>
+        <input name="id" type="text" required maxlength="40"
+          placeholder=${t("taskfoldProject.statusSettings.idPlaceholder")}
+          aria-label=${t("taskfoldProject.statusSettings.idPlaceholder")} ?disabled=${disabled} />
+        <input name="name" type="text" maxlength="40"
+          placeholder=${t("taskfoldProject.statusSettings.namePlaceholder")}
+          aria-label=${t("taskfoldProject.statusSettings.name")} ?disabled=${disabled} />
+        <select name="category" aria-label=${t("taskfoldProject.statusSettings.category")} ?disabled=${disabled}>
+          ${TASKFOLD_STATUS_CATEGORIES.map((category) => html`<option value=${category} ?selected=${category === "started"}>${t(`taskfoldProject.statusCategory.${category}`)}</option>`)}
+        </select>
+        <button class="tf-btn" type="submit" ?disabled=${disabled}>${t("taskfoldProject.statusSettings.add")}</button>
+      </form>
+      <p class="taskfold-project__status-note">${t("taskfoldProject.statusSettings.categoryNote")}</p>
+    </section>
+  `;
+}
+
+/** 删除状态：还有卡在用就要先选一个去处，卡移过去之后才删。 */
+function renderStatusDeleteModal(controller: TaskfoldProjectViewController, statusId: string) {
+  const project = controller.state.project;
+  const registry = statusRegistryOf(project);
+  const count = project?.cards.filter((card) => card.status === statusId).length ?? 0;
+  const targets = registry.ids.filter((id) => id !== statusId);
+  const label = statusLabel(statusId, registry, t);
+  return html`
+    <form
+      class="taskfold-project__modal-panel"
+      @submit=${(event: SubmitEvent) => {
+        event.preventDefault();
+        controller.deleteStatus(statusId, count > 0 ? (readForm(event).target ?? targets[0]) : undefined);
+      }}
+    >
+      <header><h2>${t("taskfoldProject.statusSettings.deleteTitle", { name: label })}</h2></header>
+      <p>${count > 0
+        ? t("taskfoldProject.statusSettings.deleteBodyUsed", { count: String(count), name: label })
+        : t("taskfoldProject.statusSettings.deleteBodyUnused", { name: label })}</p>
+      ${count > 0
+        ? html`<label>${t("taskfoldProject.statusSettings.moveTo")}
+            <select name="target">
+              ${targets.map((id) => html`<option value=${id} ?selected=${id === registry.defaultStatus}>${statusLabel(id, registry, t)}</option>`)}
+            </select>
+          </label>`
+        : nothing}
+      <div class="taskfold-project__form-actions">
+        <button class="tf-btn" type="button" @click=${controller.closeModal}>${t("common.cancel")}</button>
+        <button class="tf-btn tf-btn--danger" type="submit" ?disabled=${controller.state.busy}>${t("taskfoldProject.statusSettings.delete")}</button>
+      </div>
+    </form>
+  `;
+}
+
 function renderProjectTabs(controller: TaskfoldProjectViewController): TemplateResult {
   const { state } = controller;
   const tabs: Array<[TaskfoldProjectUiState["screen"], string]> = [
     ["board", "taskfoldProject.board"],
     ["graph", "taskfoldProject.graph"],
+    ["statuses", "taskfoldProject.statuses"],
     ...(controller.projectManagementEnabled
       ? ([["settings", "taskfoldProject.settings"]] as Array<[TaskfoldProjectUiState["screen"], string]>)
       : []),
@@ -3377,7 +3699,9 @@ export function renderTaskfoldProjects(controller: TaskfoldProjectViewController
             ? renderGraph(controller)
             : state.screen === "settings"
               ? renderSettings(controller)
-              : renderDocuments(controller);
+              : state.screen === "statuses"
+                ? renderStatuses(controller)
+                : renderDocuments(controller);
   return html`
     <section class="taskfold-project">
       <div class="taskfold-project__topbar">

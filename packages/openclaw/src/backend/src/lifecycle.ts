@@ -28,8 +28,9 @@ import type {
   TaskfoldCard,
   TaskfoldExecutionStatus,
   TaskfoldStaleState,
-  TaskfoldStatus,
 } from "@taskfold/core/contract/index.js";
+import { cardPhase, isStartablePhase, type TaskfoldCardPhase } from "@taskfold/core/card-phase.js";
+import { UNCONFIGURED_STATUS_REGISTRY, type TaskfoldStatusRegistry } from "@taskfold/core/status-registry.js";
 import { cardSessionKey, taskfoldLastActivityAt } from "@taskfold/core/store-card-helpers.js";
 import { RUNNING_HEARTBEAT_STALE_MS } from "@taskfold/core/store-constants.js";
 
@@ -66,7 +67,8 @@ export type TaskfoldLifecycleState = TaskfoldRunEvidence;
 
 export type TaskfoldLifecycle = {
   state: TaskfoldLifecycleState;
-  targetStatus?: TaskfoldStatus;
+  /** 卡片应该处在的阶段（running / review / blocked）；由 reconciler 翻译成项目里的状态与标记。 */
+  targetPhase?: TaskfoldCardPhase;
   /**
    * When the evidence behind this verdict was last refreshed. Used to reject a
    * verdict that is older than the card's current status provenance.
@@ -75,9 +77,9 @@ export type TaskfoldLifecycle = {
 };
 
 /** Whether the card claims work is in flight at all. */
-function claimsRunning(card: TaskfoldCard): boolean {
+function claimsRunning(card: TaskfoldCard, registry: TaskfoldStatusRegistry): boolean {
   return (
-    card.status === "running" ||
+    cardPhase(card, registry) === "running" ||
     card.execution?.status === "running" ||
     Boolean(card.metadata?.attempts?.some((attempt) => attempt.status === "running")) ||
     Boolean(card.metadata?.claim)
@@ -90,9 +92,10 @@ const TERMINAL_EXECUTION_STATUSES = new Set<TaskfoldExecutionStatus>(["done", "r
 export function taskfoldRunEvidence(params: {
   card: TaskfoldCard;
   now: number;
+  registry?: TaskfoldStatusRegistry;
 }): TaskfoldRunEvidence {
-  const { card, now } = params;
-  if (!claimsRunning(card) || !cardSessionKey(card)) {
+  const { card, now, registry = UNCONFIGURED_STATUS_REGISTRY } = params;
+  if (!claimsRunning(card, registry) || !cardSessionKey(card)) {
     return "unlinked";
   }
   if (card.metadata?.automation?.launch?.phase === "prepared") {
@@ -120,8 +123,9 @@ export function taskfoldRunEvidence(params: {
 export function staleRunState(
   card: TaskfoldCard,
   now: number,
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
 ): TaskfoldStaleState | undefined {
-  if (taskfoldRunEvidence({ card, now }) !== "stale") {
+  if (taskfoldRunEvidence({ card, now, registry }) !== "stale") {
     return undefined;
   }
   return {
@@ -134,9 +138,10 @@ export function staleRunState(
 export function getTaskfoldLifecycle(params: {
   card: TaskfoldCard;
   now: number;
+  registry?: TaskfoldStatusRegistry;
 }): TaskfoldLifecycle {
-  const { card, now } = params;
-  const state = taskfoldRunEvidence({ card, now });
+  const { card, now, registry } = params;
+  const state = taskfoldRunEvidence({ card, now, ...(registry ? { registry } : {}) });
   if (state === "unlinked" || state === "launching") {
     return { state };
   }
@@ -147,18 +152,18 @@ export function getTaskfoldLifecycle(params: {
       return {
         state,
         ...(card.execution?.status === "done" || card.execution?.status === "review"
-          ? { targetStatus: "review" as const }
-          : { targetStatus: "blocked" as const }),
+          ? { targetPhase: "review" as const }
+          : { targetPhase: "blocked" as const }),
         sourceUpdatedAt,
       };
     case "live":
-      return { state, targetStatus: "running", sourceUpdatedAt };
+      return { state, targetPhase: "running", sourceUpdatedAt };
     case "stale":
       // Still nominally running: the card should read "running" while it is flagged
       // stale, so a human sees a stuck run rather than a moved one.
-      return { state, targetStatus: "running", sourceUpdatedAt };
+      return { state, targetPhase: "running", sourceUpdatedAt };
     case "abandoned":
-      return { state, targetStatus: "blocked", sourceUpdatedAt };
+      return { state, targetPhase: "blocked", sourceUpdatedAt };
   }
 }
 
@@ -186,27 +191,34 @@ export function executionStatusForLifecycle(
  * Whether a run should be closed out because nothing is left alive to report its
  * outcome. Only an abandoned run qualifies; everything else is left alone.
  */
-export function shouldCloseOrphanedRun(params: { card: TaskfoldCard; now: number }): boolean {
+export function shouldCloseOrphanedRun(params: {
+  card: TaskfoldCard;
+  now: number;
+  registry?: TaskfoldStatusRegistry;
+}): boolean {
   return taskfoldRunEvidence(params) === "abandoned";
 }
 
 /**
- * Lifecycle may only drive a card forward out of a pre-work or in-flight status.
+ * Lifecycle may only drive a card forward out of a pre-work or in-flight phase.
  * It must never move a card a human parked somewhere deliberate (done, archived,
  * triage) or walk a finished card backwards.
  */
 export function shouldSyncCardStatus(
   card: TaskfoldCard,
-  targetStatus: TaskfoldStatus | undefined,
+  targetPhase: TaskfoldCardPhase | undefined,
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
+  now: number = Date.now(),
 ): boolean {
-  if (!targetStatus || card.status === targetStatus) {
+  const phase = cardPhase(card, registry, now);
+  if (!targetPhase || phase === targetPhase) {
     return false;
   }
-  if (targetStatus === "running") {
-    return card.status === "backlog" || card.status === "todo" || card.status === "ready";
+  if (targetPhase === "running") {
+    return isStartablePhase(phase);
   }
-  if (targetStatus === "blocked" || targetStatus === "review") {
-    return card.status === "running" || card.status === "todo" || card.status === "ready";
+  if (targetPhase === "blocked" || targetPhase === "review") {
+    return phase === "running" || isStartablePhase(phase);
   }
   return false;
 }

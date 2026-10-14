@@ -86,7 +86,7 @@ import type {
 import { taskfoldCardImageExtensionForMime, taskfoldCardImageMimeType } from "./file-store-card-images.js";
 import { isAbsoluteWorkspacePath } from "./workspace-path.js";
 import {
-  LEGACY_STATUS_REGISTRY,
+  UNCONFIGURED_STATUS_REGISTRY,
   TASKFOLD_STATUS_ID_PATTERN,
   type TaskfoldStatusRegistry,
 } from "./status-registry.js";
@@ -484,6 +484,11 @@ export function normalizeExternalUrl(
   return parsed.toString();
 }
 
+/** 补丁里的状态 id 原样取出（交给 updateCard 按项目状态集校验 / 翻译旧值）；空值返回 undefined。 */
+export function optionalStatusInput(value: unknown): TaskfoldStatus | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 /**
  * 状态 id 必须属于该项目的状态集（`registry`，默认是过渡默认集）。`fallback` 在没有给值时使用，
  * 不做校验：调用方传的是卡片现有状态或项目的默认状态。
@@ -491,7 +496,7 @@ export function normalizeExternalUrl(
 export function normalizeStatus(
   value: unknown,
   fallback: TaskfoldStatus,
-  registry: TaskfoldStatusRegistry = LEGACY_STATUS_REGISTRY,
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
 ): TaskfoldStatus {
   if (typeof value !== "string" || !value.trim()) {
     return fallback;
@@ -1398,6 +1403,12 @@ export function normalizeMetadata(
       : null;
   const hasArchivedAt = Object.hasOwn(record, "archivedAt");
   const hasStale = Object.hasOwn(record, "stale");
+  const hasBlocked = Object.hasOwn(record, "blocked");
+  const hasDispatchReady = Object.hasOwn(record, "dispatchReady");
+  const blocked =
+    record.blocked && typeof record.blocked === "object" && !Array.isArray(record.blocked)
+      ? (record.blocked as Record<string, unknown>)
+      : null;
   const hasLifecycleStatusSourceUpdatedAt = Object.hasOwn(record, "lifecycleStatusSourceUpdatedAt");
   const links = Array.isArray(record.links)
     ? record.links.map(normalizeLink).filter((link): link is TaskfoldLink => link !== null)
@@ -1504,6 +1515,18 @@ export function normalizeMetadata(
       typeof record.failureCount === "number" && Number.isFinite(record.failureCount)
         ? Math.max(0, Math.trunc(record.failureCount))
         : fallback.failureCount,
+    // 键存在即表示要改：值为空（undefined / null / false）清除标记。
+    blocked: hasBlocked
+      ? blocked
+        ? {
+            at: normalizeTimestamp(blocked.at, Date.now()),
+            ...(normalizeBoundedString(blocked.reason, undefined, 400, "blocked reason")
+              ? { reason: normalizeBoundedString(blocked.reason, undefined, 400, "blocked reason")! }
+              : {}),
+          }
+        : undefined
+      : fallback.blocked,
+    dispatchReady: hasDispatchReady ? (record.dispatchReady === true ? true : undefined) : fallback.dispatchReady,
   };
   return trimMetadataToBudget(normalized, options);
 }
@@ -1622,6 +1645,8 @@ export function removeUndefinedMetadataFields(metadata: TaskfoldMetadata): Taskf
     "stale",
     "lifecycleStatusSourceUpdatedAt",
     "failureCount",
+    "blocked",
+    "dispatchReady",
   ] as const) {
     const value = next[key];
     if (

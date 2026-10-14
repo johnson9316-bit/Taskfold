@@ -502,6 +502,10 @@ export function createTaskfoldProjectRoutedStores(options: {
       markDirty(root);
       return saved;
     },
+    async backup(boardId, label) {
+      const root = openRoot(await dataDirForBoardId(boardId), false);
+      return root ? await root.stores.statusConfig.backup?.(boardId, label) : undefined;
+    },
   };
 
   // 注册表与订阅：写之前确保插件目录在（0700，与原 SQLite 目录同权限）。

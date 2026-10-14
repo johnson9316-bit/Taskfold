@@ -22,7 +22,9 @@ import {
   isRequirementCard,
   removeUndefinedCardFields,
 } from "./store-card-helpers.js";
+import { cardPhase } from "./card-phase.js";
 import { POSITION_STEP } from "./store-constants.js";
+import type { TaskfoldStatusRegistry } from "./status-registry.js";
 import type {
   TaskfoldBoardInput,
   TaskfoldCardPatch,
@@ -193,10 +195,10 @@ function normalizeDocumentBody(
   };
 }
 
-function boardRunningCards(cards: TaskfoldCard[]): TaskfoldCard[] {
+function boardRunningCards(cards: TaskfoldCard[], registry: TaskfoldStatusRegistry): TaskfoldCard[] {
   return cards.filter(
     (card) =>
-      card.status === "running" ||
+      cardPhase(card, registry) === "running" ||
       card.execution?.status === "running" ||
       card.metadata?.attempts?.some((attempt) => attempt.status === "running"),
   );
@@ -349,7 +351,13 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
       const board = await this.ensureProjectDirect(boardId);
       const milestones = await this.listMilestonesDirect(boardId);
       const cards = await this.list({ boardId });
-      return { board, milestones, cards };
+      return {
+        board,
+        milestones,
+        cards,
+        statuses: await this.listStatuses(boardId),
+        statusesConfigured: await this.hasStatusConfig(boardId),
+      };
     });
   }
 
@@ -406,10 +414,13 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
         await this.boardStore.delete(board.id);
         throw error;
       }
+      await this.initializeProjectStatuses(board.id);
       return {
         board,
         milestones: milestone ? [milestone] : [],
         cards: [],
+        statuses: await this.listStatuses(board.id),
+        statusesConfigured: await this.hasStatusConfig(board.id),
       };
     });
   }
@@ -478,7 +489,10 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
       await this.boardStore.register(boardId, { version: 1, board });
       return {
         board,
-        runningCards: archived === false ? [] : boardRunningCards(await this.list({ boardId })),
+        runningCards:
+          archived === false
+            ? []
+            : boardRunningCards(await this.list({ boardId }), await this.statusRegistryFor(boardId)),
       };
     });
   }
@@ -610,9 +624,13 @@ export class TaskfoldProjectStore extends TaskfoldNotificationStore {
       if (milestone.state !== "active") {
         throw new Error("only active milestones can be completed.");
       }
+      const milestoneRegistry = await this.statusRegistryFor(milestone.boardId);
+      // 已完成与已取消都算"办完了"，不挡着里程碑完成。
       const unfinished = (await this.list({ boardId: milestone.boardId })).filter(
         (card) =>
-          card.milestoneId === milestone.id && !card.metadata?.archivedAt && card.status !== "done",
+          card.milestoneId === milestone.id &&
+          !card.metadata?.archivedAt &&
+          !milestoneRegistry.isTerminal(card.status),
       );
       if (unfinished.length > 0) {
         throw new Error(

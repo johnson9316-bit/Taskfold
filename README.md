@@ -11,6 +11,11 @@ Simplified Chinese.
 
 - Projects with milestone columns, including a permanent **Unassigned** column.
 - Cards whose board placement is separate from their execution status.
+- Project-defined statuses inside four fixed categories (not started, in progress,
+  completed, cancelled). A new project starts with To do, In progress, In review, Done
+  and Cancelled; add, rename, reorder or recolour them under **Statuses** (or with
+  `taskfold statuses`). Blocked, queued-for-dispatch and scheduled are marks on a card,
+  not statuses. Projects created before this model migrate with `taskfold migrate`.
 - Card delivery records for development, validation, release, and source
   references. A completed card never implies that validation or release happened.
 - A project document library that securely renders explicitly registered

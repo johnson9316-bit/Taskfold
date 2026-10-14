@@ -18,12 +18,16 @@ afterEach(() => {
   }
 });
 
-function mount(markdown: string, resolve?: (ref: string) => Promise<string | undefined>) {
+function mount(
+  markdown: string,
+  resolve?: (ref: string) => Promise<string | undefined>,
+  options: { documentImages?: boolean } = {},
+) {
   const container = document.createElement("article");
   document.body.append(container);
   containers.push(container);
   render(
-    html`<div class="taskfold-markdown" ${hydrateMarkdownImages(resolve)}>${renderTaskfoldMarkdown(markdown)}</div>`,
+    html`<div class="taskfold-markdown" ${hydrateMarkdownImages(resolve)}>${renderTaskfoldMarkdown(markdown, options)}</div>`,
     container,
   );
   return container;
@@ -69,6 +73,41 @@ describe("renderTaskfoldMarkdown：图片净化", () => {
     const container = mount("<script>alert(1)</script><iframe src='https://x'></iframe><button>b</button>文字");
     expect(container.querySelector("script, iframe, button")).toBeNull();
     expect(container.textContent).toContain("文字");
+  });
+});
+
+describe("renderTaskfoldMarkdown：资料库文档图片（documentImages）", () => {
+  it("默认（卡片 notes）不认相对文档的图片路径", () => {
+    expect(mount("![x](images/a.png)").querySelector("img")).toBeNull();
+  });
+
+  it("开启后放行相对路径（含编码的中文目录），引用挪到 data-tf-ref，不留 src", () => {
+    const container = mount("![a](images/a.png) ![b](%E9%9C%80%E6%B1%82.assets/img-1-000000.png)", undefined, {
+      documentImages: true,
+    });
+    const images = [...container.querySelectorAll("img")];
+    expect(images.map((image) => image.getAttribute("data-tf-ref"))).toEqual([
+      "images/a.png",
+      "%E9%9C%80%E6%B1%82.assets/img-1-000000.png",
+    ]);
+    expect(images.every((image) => !image.hasAttribute("src"))).toBe(true);
+  });
+
+  it.each([
+    ["外链", "![x](https://evil.example/a.png)"],
+    ["协议地址", "![x](data:image/png;base64,AAAA)"],
+    ["绝对路径", "![x](/etc/a.png)"],
+    ["协议相对", "![x](//evil.example/a.png)"],
+    ["svg", "![x](a.svg)"],
+    ["编码的反斜杠", "![x](a%5C..%5Cb.png)"],
+    ["带查询串", "![x](a.png?token=1)"],
+  ])("开启后仍拒绝：%s", (_name, markdown) => {
+    expect(mount(markdown, undefined, { documentImages: true }).querySelector("img")).toBeNull();
+  });
+
+  it("开启只影响这一次渲染：之后默认渲染又不认", () => {
+    mount("![x](images/a.png)", undefined, { documentImages: true });
+    expect(mount("![x](images/a.png)").querySelector("img")).toBeNull();
   });
 });
 

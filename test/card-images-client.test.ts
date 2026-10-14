@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { createCardImageClient, isPendingImageRef } from "@taskfold/ui/lib/card-images.js";
+import { createCardImageClient, createDocumentImageClient, isPendingImageRef } from "@taskfold/ui/lib/card-images.js";
 
 const A = "0d2f6c1e-9a4b-4c3d-8e5f-1a2b3c4d5e6f";
 const B = "1e3a7d2f-0b5c-4d4e-9f60-2b3c4d5e6f70";
@@ -144,6 +144,42 @@ describe("复制卡片", () => {
     const client = createCardImageClient(request);
 
     expect(await client.copyImages(A, B, "纯文字")).toBe("纯文字");
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe("文档图片客户端", () => {
+  it("upload 走 documents.assets.add，返回宿主给的相对引用", async () => {
+    const request = vi.fn(async () => ({ ref: "%E9%9C%80%E6%B1%82.assets/img-1-000000.png" }));
+    const client = createDocumentImageClient(request);
+
+    expect(await client.upload("doc-1", file())).toBe("%E9%9C%80%E6%B1%82.assets/img-1-000000.png");
+    expect(request).toHaveBeenCalledWith("taskfold.projects.documents.assets.add", {
+      id: "doc-1",
+      fileName: "shot.png",
+      mimeType: "image/png",
+      contentBase64: "AQID",
+    });
+  });
+
+  it("resolve：按文档 + 引用取图并缓存；不同文档同名引用分开缓存", async () => {
+    const request = vi.fn(async () => ({ mimeType: "image/png", contentBase64: "AQID" }));
+    const client = createDocumentImageClient(request);
+
+    expect(await client.resolve("doc-1", "images/a.png")).toBe("data:image/png;base64,AQID");
+    await client.resolve("doc-1", "images/a.png");
+    await client.resolve("doc-2", "images/a.png");
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledWith("taskfold.projects.documents.assets.get", { id: "doc-1", ref: "images/a.png" });
+  });
+
+  it("resolve：不合法的引用（外链、绝对路径）不请求宿主", async () => {
+    const request = vi.fn();
+    const client = createDocumentImageClient(request);
+
+    expect(await client.resolve("doc-1", "https://evil.example/a.png")).toBeUndefined();
+    expect(await client.resolve("doc-1", "/etc/a.png")).toBeUndefined();
     expect(request).not.toHaveBeenCalled();
   });
 });

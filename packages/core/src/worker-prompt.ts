@@ -5,6 +5,7 @@
 // attempt is what makes "which prompt produced this run" answerable after the
 // fact — otherwise a prompt change silently rewrites the meaning of old runs.
 import type { TaskfoldCard, TaskfoldRunAttempt } from "./contract/index.js";
+import { UNCONFIGURED_STATUS_REGISTRY, type TaskfoldStatusRegistry } from "./status-registry.js";
 import {
   capText,
   cardBoardId,
@@ -76,6 +77,7 @@ export function buildWorkerContext(
   card: TaskfoldCard,
   cards: readonly TaskfoldCard[] = [],
   now = Date.now(),
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
 ): string {
   const lines = [
     `# Taskfold card ${card.id}`,
@@ -158,7 +160,7 @@ export function buildWorkerContext(
   const cardsById = new Map(cards.map((entry) => [entry.id, entry]));
   const parentResults = cardParentIds(card)
     .map((parentId) => cardsById.get(parentId))
-    .filter((parent): parent is TaskfoldCard => parent !== undefined && parent.status === "done")
+    .filter((parent): parent is TaskfoldCard => parent !== undefined && registry.isCompleted(parent.status))
     .slice(-6);
   if (parentResults.length) {
     lines.push("", "## Parent results");
@@ -176,7 +178,7 @@ export function buildWorkerContext(
               entry.id !== card.id &&
               cardBoardId(entry) === cardBoardId(card) &&
               entry.agentId === card.agentId &&
-              entry.status === "done",
+              registry.isCompleted(entry.status),
           )
           .toSorted((a, b) => b.updatedAt - a.updatedAt)
           .slice(0, 5)
@@ -210,7 +212,7 @@ export function buildWorkerContext(
       lines.push(`Summary: ${capText(automation.summary, 400)}`);
     }
   }
-  const diagnostics = computeCardDiagnostics(card, now);
+  const diagnostics = computeCardDiagnostics(card, now, registry);
   if (diagnostics.length) {
     lines.push("", "## Active diagnostics");
     for (const entry of diagnostics) {

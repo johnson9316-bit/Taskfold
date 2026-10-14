@@ -204,6 +204,54 @@ describe("projects", () => {
     await expect(registry.byCardId(card.id)).rejects.toThrow();
   });
 
+  it("statuses.list / save / migrate；projects.get 带着状态定义；新状态能当卡片状态", async () => {
+    const repo = initRepo();
+    const { methods } = setup([{ name: "alpha", path: repo }]);
+    const project = await firstProject(methods);
+
+    const listed = (await methods.call("taskfold.statuses.list", { boardId: project.id })) as any;
+    expect(listed.statuses.map((status: { id: string }) => status.id)).toContain("todo");
+
+    const saved = (await methods.call("taskfold.statuses.save", {
+      boardId: project.id,
+      statuses: [
+        { id: "todo", category: "unstarted", default: true },
+        { id: "doing", name: "开发中", category: "started" },
+        { id: "done", category: "completed" },
+      ],
+    })) as any;
+    expect(saved.statuses.map((status: { id: string }) => status.id)).toEqual(["todo", "doing", "done"]);
+    expect(fs.readFileSync(path.join(repo, ".taskfold", "config.yml"), "utf8")).toMatch(/^format_version: 4$/m);
+
+    const view = (await methods.call("taskfold.projects.get", { id: project.id })) as any;
+    expect(view.project.statuses.map((status: { id: string }) => status.id)).toEqual(["todo", "doing", "done"]);
+
+    const card = await createCard(methods, project.id);
+    const moved = (await methods.call("taskfold.cards.move", { id: card.id, status: "doing" })) as any;
+    expect(moved.card.status).toBe("doing");
+    await expect(methods.call("taskfold.cards.move", { id: card.id, status: "running" })).rejects.toThrow(
+      "status must be one of: todo, doing, done.",
+    );
+
+    const migrated = (await methods.call("taskfold.statuses.migrate", { boardId: project.id, dryRun: true })) as any;
+    expect(migrated).toMatchObject({ dryRun: true, changed: false });
+
+    // 删除还有卡在用的状态：必须给去处，卡先移走再删。
+    await expect(methods.call("taskfold.statuses.delete", { boardId: project.id, id: "doing" })).rejects.toThrow(
+      /used by 1 card/,
+    );
+    const removed = (await methods.call("taskfold.statuses.delete", {
+      boardId: project.id,
+      id: "doing",
+      moveCardsTo: "todo",
+    })) as any;
+    expect(removed.moved).toBe(1);
+    expect(removed.statuses.map((status: { id: string }) => status.id)).toEqual(["todo", "done"]);
+    const after = (await methods.call("taskfold.projects.get", { id: project.id })) as any;
+    expect(after.project.cards.find((entry: { id: string }) => entry.id === card.id).status).toBe("todo");
+    expect(after.project.statusesConfigured).toBe(true);
+  });
+
   it("cards.images.add / get store a pasted image under .taskfold/attachments/<card>/ without touching the card", async () => {
     const repo = initRepo();
     const { methods } = setup([{ name: "alpha", path: repo }]);
@@ -233,6 +281,47 @@ describe("projects", () => {
 
     await methods.call("taskfold.cards.delete", { id: card.id });
     expect(fs.existsSync(path.join(repo, ".taskfold", "attachments", card.id))).toBe(false);
+  });
+
+  it("documents.assets.add / get store a pasted image beside a Markdown file document, inside the project only", async () => {
+    const repo = initRepo();
+    const { methods } = setup([{ name: "alpha", path: repo }]);
+    const project = await firstProject(methods);
+    fs.mkdirSync(path.join(repo, "docs"));
+    fs.writeFileSync(path.join(repo, "docs", "spec.md"), "# spec\n");
+    fs.writeFileSync(path.join(repo, "docs", "plain.txt"), "x");
+    const { document } = (await methods.call("taskfold.projects.documents.create", {
+      boardId: project.id,
+      key: "spec",
+      section: "project",
+      title: "Spec",
+      type: "path",
+      target: path.join(repo, "docs", "spec.md"),
+    })) as { document: { id: string } };
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+
+    const added = (await methods.call("taskfold.projects.documents.assets.add", {
+      id: document.id,
+      fileName: "p.png",
+      mimeType: "image/png",
+      contentBase64: png.toString("base64"),
+    })) as { ref: string; name: string };
+
+    expect(added.ref).toBe(`spec.assets/${added.name}`);
+    expect(fs.readFileSync(path.join(repo, "docs", "spec.assets", added.name)).equals(png)).toBe(true);
+    const got = (await methods.call("taskfold.projects.documents.assets.get", { id: document.id, ref: added.ref })) as {
+      mimeType: string;
+      contentBase64: string;
+    };
+    expect(got.mimeType).toBe("image/png");
+    expect(got.contentBase64).toBe(png.toString("base64"));
+    // 逃出项目根的相对路径被拒。
+    await expect(
+      methods.call("taskfold.projects.documents.assets.get", { id: document.id, ref: "../../../outside.png" }),
+    ).rejects.toThrow();
+    await expect(
+      methods.call("taskfold.projects.documents.assets.get", { id: document.id, ref: "https://evil.example/a.png" }),
+    ).rejects.toThrow(/invalid document image reference/);
   });
 
   it("board view settings are kept in workspace state and survive a new registry", async () => {

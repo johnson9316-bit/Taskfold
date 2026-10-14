@@ -3,6 +3,7 @@
 // 退出码按下表取非零值。错误码与退出码都是对外契约，改动要同步 README 与 instructions。
 import { TaskfoldFormatTooNewError } from "@taskfold/core/file-store-format.js";
 import { TaskfoldLockCompromisedError, TaskfoldLockTimeoutError } from "@taskfold/core/file-store-locks.js";
+import { TaskfoldStatusConfigError } from "@taskfold/core/status-registry.js";
 import { TaskfoldRevisionConflictError } from "@taskfold/core/store-core.js";
 
 /** 错误码 → 退出码。 */
@@ -89,6 +90,9 @@ export function toCliError(error: unknown): TaskfoldCliError {
   }
   if (error instanceof TaskfoldFormatTooNewError) {
     return new TaskfoldCliError("FORMAT_TOO_NEW", error.message);
+  }
+  if (error instanceof TaskfoldStatusConfigError) {
+    return new TaskfoldCliError("REJECTED", error.message);
   }
   if (error instanceof Error) {
     if (/^card not found: /.test(error.message)) {

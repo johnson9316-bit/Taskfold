@@ -14,7 +14,8 @@ import {
   type TaskfoldStatus,
 } from "./contract/index.js";
 import { safeEqualSecret, truncateUtf16Safe } from "./sdk-utils.js";
-import { LEGACY_STATUS_REGISTRY } from "./status-registry.js";
+import { cardPhase } from "./card-phase.js";
+import { UNCONFIGURED_STATUS_REGISTRY, type TaskfoldStatusRegistry } from "./status-registry.js";
 import {
   BLOCKED_TOO_LONG_MS,
   TASKFOLD_PROMPT_VERSION,
@@ -39,7 +40,7 @@ import {
 export function compareCards(
   left: TaskfoldCard,
   right: TaskfoldCard,
-  statusRank: (status: TaskfoldStatus) => number = LEGACY_STATUS_REGISTRY.rank,
+  statusRank: (status: TaskfoldStatus) => number = UNCONFIGURED_STATUS_REGISTRY.rank,
 ): number {
   if (left.status !== right.status) {
     return statusRank(left.status) - statusRank(right.status);
@@ -174,12 +175,15 @@ export function lifecycleStatusSourceUpdatedAtFromPatch(metadata: unknown): numb
   return sourceUpdatedAt;
 }
 
-function latestStatusTransitionAt(card: TaskfoldCard): number | undefined {
+function latestStatusTransitionAt(
+  card: TaskfoldCard,
+  registry: TaskfoldStatusRegistry,
+): number | undefined {
   for (let index = (card.events?.length ?? 0) - 1; index >= 0; index -= 1) {
     const event = card.events?.[index];
     if (
       (event?.kind === "moved" || event?.kind === "created") &&
-      ((event.kind === "created" && card.status !== "todo") ||
+      ((event.kind === "created" && !registry.isUnstarted(card.status)) ||
         (event.kind === "moved" && event.fromStatus !== event.toStatus)) &&
       event.toStatus === card.status &&
       typeof event.at === "number" &&
@@ -194,12 +198,13 @@ function latestStatusTransitionAt(card: TaskfoldCard): number | undefined {
 export function shouldSkipPersistedLifecycleStatusUpdate(
   existing: TaskfoldCard,
   sourceUpdatedAt: number,
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
 ): boolean {
   const lifecycleStatusSourceUpdatedAt = existing.metadata?.lifecycleStatusSourceUpdatedAt;
   if (lifecycleStatusSourceUpdatedAt !== undefined) {
     return sourceUpdatedAt < lifecycleStatusSourceUpdatedAt;
   }
-  const statusTransitionAt = latestStatusTransitionAt(existing);
+  const statusTransitionAt = latestStatusTransitionAt(existing, registry);
   return statusTransitionAt !== undefined && sourceUpdatedAt < statusTransitionAt;
 }
 
@@ -219,6 +224,13 @@ export function updateEvent(
       fromStatus: existing.status,
       toStatus: next.status,
     };
+  }
+  // 阻塞 / 派发标记变化（原来是 blocked / ready 状态的进出）。
+  if (Boolean(existing.metadata?.blocked) !== Boolean(next.metadata?.blocked)) {
+    return { kind: next.metadata?.blocked ? "blocked" : "unblocked" };
+  }
+  if (Boolean(existing.metadata?.dispatchReady) !== Boolean(next.metadata?.dispatchReady)) {
+    return { kind: next.metadata?.dispatchReady ? "queued" : "unqueued" };
   }
   if (cardSessionKey(existing) !== cardSessionKey(next)) {
     return {
@@ -435,11 +447,16 @@ export function taskfoldLastActivityAt(card: TaskfoldCard): number {
   );
 }
 
-export function computeCardDiagnostics(card: TaskfoldCard, now: number): TaskfoldDiagnostic[] {
+export function computeCardDiagnostics(
+  card: TaskfoldCard,
+  now: number,
+  registry: TaskfoldStatusRegistry = UNCONFIGURED_STATUS_REGISTRY,
+): TaskfoldDiagnostic[] {
+  const phase = cardPhase(card, registry, now);
   if (card.metadata?.archivedAt) {
     // Archived cards intentionally skip automation. Keep nonterminal cards
     // visible as a transient diagnostic without rewriting archived metadata.
-    if (card.status === "done") {
+    if (registry.isTerminal(card.status)) {
       return [];
     }
     return [
@@ -459,7 +476,7 @@ export function computeCardDiagnostics(card: TaskfoldCard, now: number): Taskfol
   const claim = card.metadata?.claim;
   const lastHeartbeatAt = taskfoldLastActivityAt(card);
   if (
-    (card.status === "todo" || card.status === "backlog" || card.status === "ready") &&
+    (phase === "todo" || phase === "ready") &&
     card.agentId &&
     now - card.updatedAt > READY_STRANDED_MS
   ) {
@@ -476,7 +493,7 @@ export function computeCardDiagnostics(card: TaskfoldCard, now: number): Taskfol
       ),
     );
   }
-  if (card.status === "running" && now - lastHeartbeatAt > RUNNING_HEARTBEAT_STALE_MS) {
+  if (phase === "running" && now - lastHeartbeatAt > RUNNING_HEARTBEAT_STALE_MS) {
     diagnostics.push(
       diagnostic(
         {
@@ -493,7 +510,7 @@ export function computeCardDiagnostics(card: TaskfoldCard, now: number): Taskfol
       ),
     );
   }
-  if (card.status === "blocked" && now - card.updatedAt > BLOCKED_TOO_LONG_MS) {
+  if (phase === "blocked" && now - (card.metadata?.blocked?.at ?? card.updatedAt) > BLOCKED_TOO_LONG_MS) {
     diagnostics.push(
       diagnostic(
         {
@@ -522,7 +539,7 @@ export function computeCardDiagnostics(card: TaskfoldCard, now: number): Taskfol
     );
   }
   if (
-    card.status === "done" &&
+    registry.isCompleted(card.status) &&
     !(
       card.metadata?.proof?.length ||
       card.metadata?.artifacts?.length ||
@@ -542,7 +559,7 @@ export function computeCardDiagnostics(card: TaskfoldCard, now: number): Taskfol
       ),
     );
   }
-  if (card.sessionKey && !card.execution && card.status === "running") {
+  if (card.sessionKey && !card.execution && phase === "running") {
     diagnostics.push(
       diagnostic(
         {
@@ -605,25 +622,17 @@ export function latestRunningAttempt(card: TaskfoldCard): TaskfoldRunAttempt | u
   return card.metadata?.attempts?.findLast((attempt) => attempt.status === "running");
 }
 
-export function isDependencyPromotableStatus(status: TaskfoldStatus): boolean {
-  return (
-    status === "backlog" ||
-    status === "triage" ||
-    status === "todo" ||
-    status === "scheduled" ||
-    status === "ready"
-  );
-}
-
 export function isActiveDependencyTarget(
   card: TaskfoldCard,
+  registry: TaskfoldStatusRegistry,
   options: { allowStatusOnly?: boolean } = {},
 ): boolean {
+  const phase = cardPhase(card, registry);
   return (
     Boolean(card.metadata?.claim) ||
     card.execution?.status === "running" ||
     Boolean(latestRunningAttempt(card)) ||
-    (!options.allowStatusOnly && (card.status === "running" || card.status === "review"))
+    (!options.allowStatusOnly && (phase === "running" || phase === "review"))
   );
 }
 

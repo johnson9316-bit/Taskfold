@@ -1,4 +1,4 @@
-import { TASKFOLD_STATUSES, type TaskfoldCard } from "@taskfold/core/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
 import type { AnyAgentTool } from "openclaw/plugin-sdk/plugin-entry";
 import type { AgentToolResult } from "openclaw/plugin-sdk/tool-results";
 import { Type } from "typebox";
@@ -34,10 +34,13 @@ export function createTaskfoldMoveTool(params: {
     parameters: Type.Object(
       {
         id: cardIdField(),
-        status: Type.Union(
-          TASKFOLD_STATUSES.map((status) => Type.Literal(status)),
-          { description: "Target Taskfold status." },
-        ),
+        status: Type.String({
+          minLength: 1,
+          description:
+            "Target status id in the card's project (default statuses: todo, running, review, done, cancelled; " +
+            "projects can define their own). The old ready (queue the card for dispatch) and blocked (mark it " +
+            "blocked) are still accepted.",
+        }),
         [ClaimTokenFieldName]: claimTokenField("Claim token for claimed cards."),
       },
       { additionalProperties: false },

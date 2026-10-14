@@ -37,6 +37,10 @@ You can also run **Taskfold: Open Board** from the Command Palette.
   repository root. A folder whose cards sit on several boards is shown as one project per board.
 - **No `.taskfold/` yet**: the board shows an empty state. Run `taskfold init` in the repository;
   the board picks it up automatically.
+- **Statuses**: the **Statuses** tab edits the project's statuses (name, category, colour, order,
+  which status new cards start in). They are stored in the repository's `.taskfold/config.yml`, so the
+  CLI and OpenClaw see the same ones. Saving upgrades the project to data format 4; older Taskfold
+  versions then open it read-only.
 - **Editing**: drag cards between columns, change status or milestone, and use **Edit card** in
   the card details to change the title, priority and body. **Open in editor** opens the card's
   Markdown file in a normal VS Code editor.

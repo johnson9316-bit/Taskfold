@@ -180,6 +180,7 @@ export function createOpenClawTaskfoldHost(host: ControlUiHost, route?: Taskfold
       projectManagement: true,
       documents: true,
       openCardFile: false,
+      cardFlow: true,
     },
   };
 }

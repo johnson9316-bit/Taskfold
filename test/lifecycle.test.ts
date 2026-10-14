@@ -109,9 +109,9 @@ describe("Taskfold lifecycle", () => {
           }),
           now: NOW,
         });
-      expect(withStatus("done")).toMatchObject({ state: "finished", targetStatus: "review" });
-      expect(withStatus("review")).toMatchObject({ state: "finished", targetStatus: "review" });
-      expect(withStatus("blocked")).toMatchObject({ state: "finished", targetStatus: "blocked" });
+      expect(withStatus("done")).toMatchObject({ state: "finished", targetPhase: "review" });
+      expect(withStatus("review")).toMatchObject({ state: "finished", targetPhase: "review" });
+      expect(withStatus("blocked")).toMatchObject({ state: "finished", targetPhase: "blocked" });
       // The execution status itself is the outcome and must not be rewritten.
       expect(executionStatusForLifecycle(withStatus("done"))).toBeUndefined();
     });
@@ -138,7 +138,7 @@ describe("Taskfold lifecycle", () => {
       expect(shouldCloseOrphanedRun({ card: launching, now: NOW })).toBe(false);
       const lifecycle = getTaskfoldLifecycle({ card: launching, now: NOW });
       expect(lifecycle).toMatchObject({ state: "launching" });
-      expect(lifecycle.targetStatus).toBeUndefined();
+      expect(lifecycle.targetPhase).toBeUndefined();
       expect(executionStatusForLifecycle(lifecycle)).toBeUndefined();
     });
 
@@ -171,7 +171,7 @@ describe("Taskfold lifecycle", () => {
     it("keeps a live run running and reports its evidence timestamp", () => {
       expect(getTaskfoldLifecycle({ card: quietFor(1), now: NOW })).toMatchObject({
         state: "live",
-        targetStatus: "running",
+        targetPhase: "running",
         sourceUpdatedAt: NOW - MINUTE,
       });
     });
@@ -179,7 +179,7 @@ describe("Taskfold lifecycle", () => {
     it("keeps a stale run reading as running so a stuck card looks stuck", () => {
       expect(getTaskfoldLifecycle({ card: quietFor(25), now: NOW })).toMatchObject({
         state: "stale",
-        targetStatus: "running",
+        targetPhase: "running",
       });
       expect(staleRunState(quietFor(25), NOW)).toMatchObject({
         lastSessionUpdatedAt: NOW - 25 * MINUTE,
@@ -190,7 +190,7 @@ describe("Taskfold lifecycle", () => {
     it("blocks an abandoned run and marks it for closing", () => {
       expect(getTaskfoldLifecycle({ card: quietFor(31), now: NOW })).toMatchObject({
         state: "abandoned",
-        targetStatus: "blocked",
+        targetPhase: "blocked",
       });
       expect(shouldCloseOrphanedRun({ card: quietFor(31), now: NOW })).toBe(true);
     });

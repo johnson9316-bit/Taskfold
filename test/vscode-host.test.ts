@@ -73,6 +73,7 @@ describe("webview host (browser/vscode-host.ts)", () => {
       projectManagement: false,
       documents: true,
       openCardFile: true,
+      cardFlow: false,
     });
   });
 });

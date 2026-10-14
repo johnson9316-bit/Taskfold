@@ -54,7 +54,7 @@ import { createTaskfoldFileSubscriptionStore } from "./file-store-subscriptions.
 import { createTaskfoldFileAttachmentStore } from "./file-store-attachments.js";
 import { createTaskfoldFileBoardStore } from "./file-store-boards.js";
 import { createTaskfoldFileCardImageStore } from "./file-store-card-images.js";
-import { createTaskfoldFileStatusConfigStore } from "./file-store-statuses.js";
+import { createTaskfoldFileStatusConfigStore, upgradeFormatForStatusModelWrites } from "./file-store-statuses.js";
 
 export type { TaskfoldCardCodec, TaskfoldMilestoneCodec } from "./file-store-codec.js";
 export {
@@ -131,14 +131,20 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     canWrite,
   });
 
-  const cards = rejectWritesUnlessFormatWritable(assertWritable, createTaskfoldFileCardStore({
-    cardsDir: layout.cardsDir,
-    archiveCardsDir: layout.archiveCardsDir,
-    attachmentsDir: layout.attachmentsDir,
-    codec: cardCodec,
-    locksDir: layout.locksDir,
-    runtimeCardsDir: layout.runtimeCardsDir,
-  }));
+  const cards = rejectWritesUnlessFormatWritable(
+    assertWritable,
+    upgradeFormatForStatusModelWrites(
+      { configPath: layout.configPath, locksDir: layout.locksDir },
+      createTaskfoldFileCardStore({
+        cardsDir: layout.cardsDir,
+        archiveCardsDir: layout.archiveCardsDir,
+        attachmentsDir: layout.attachmentsDir,
+        codec: cardCodec,
+        locksDir: layout.locksDir,
+        runtimeCardsDir: layout.runtimeCardsDir,
+      }),
+    ),
+  );
   // 项目注册表与通知订阅在宿主的插件目录里，不归 `.taskfold/` 的格式版本管。
   const boards =
     layout.projectsJsonPath === undefined
@@ -176,8 +182,10 @@ export function createTaskfoldFileStores(options: TaskfoldFileStoresOptions) {
     locksDir: layout.locksDir,
   });
   const statusConfig: TaskfoldStatusConfigPort = {
+    scope: "project",
     read: async () => statusConfigStore.read(),
     write: async (_boardId, definitions) => await statusConfigStore.write(definitions),
+    backup: async (_boardId, label) => await statusConfigStore.backup(label),
   };
 
   // `changeEpoch` is a value, not a function: evaluated once, right here, at factory

@@ -1,8 +1,6 @@
-import {
-  TASKFOLD_STATUSES,
-  type TaskfoldCard,
-  type TaskfoldStatus,
-} from "@taskfold/core/contract/index.js";
+import type { TaskfoldCard } from "@taskfold/core/contract/index.js";
+import { acceptsStatusInput } from "@taskfold/core/status-registry.js";
+import { cardBoardId } from "@taskfold/core/store-card-helpers.js";
 // Taskfold plugin module implements cli behavior.
 import type { Command } from "commander";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
@@ -59,10 +57,6 @@ function splitLabels(value: string | undefined): string[] | undefined {
     ?.split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
-}
-
-function isTaskfoldStatus(value: string): value is TaskfoldStatus {
-  return (TASKFOLD_STATUSES as readonly string[]).includes(value);
 }
 
 function formatCardLine(card: TaskfoldCard): string {
@@ -413,19 +407,61 @@ export function registerTaskfoldCli(params: {
     .requiredOption("--status <status>", "Target status")
     .option("--json", "Print JSON", false)
     .action(async (id: string, options: JsonOptions & { status: string }) => {
-      if (!isTaskfoldStatus(options.status)) {
-        throw new Error(`--status must be one of: ${TASKFOLD_STATUSES.join(", ")}.`);
-      }
       const cards = await params.store.list();
       const { card, error } = resolveTaskfoldCardByIdOrPrefix(cards, id);
       if (!card) {
         throw new Error(error);
+      }
+      const registry = await params.store.statusRegistryFor(cardBoardId(card));
+      if (!acceptsStatusInput(registry, options.status)) {
+        throw new Error(`--status must be one of: ${registry.ids.join(", ")}.`);
       }
       const updated = await params.store.move(card.id, options.status, undefined);
       if (options.json) {
         writeJson({ card: redactClaimToken(updated) });
       } else {
         writeLine(formatCardLine(updated));
+      }
+    });
+
+  taskfold
+    .command("statuses")
+    .description("List a project's statuses (fixed categories, project-defined names)")
+    .option("--board <id>", "Board id (default project when omitted)")
+    .option("--json", "Print JSON", false)
+    .action(async (options: JsonOptions & { board?: string }) => {
+      const statuses = await params.store.listStatuses(options.board);
+      if (options.json) {
+        writeJson({ statuses });
+        return;
+      }
+      for (const status of statuses) {
+        const flags = [status.role ? `role=${status.role}` : "", status.default ? "default" : ""].filter(Boolean);
+        writeLine(`${status.id.padEnd(14)} ${status.category.padEnd(10)} ${status.name ?? ""} ${flags.join(" ")}`.trimEnd());
+      }
+    });
+
+  taskfold
+    .command("migrate")
+    .description("Migrate a project to the status model (writes its statuses, rewrites legacy ready/scheduled/blocked cards)")
+    .option("--board <id>", "Board id (default project when omitted)")
+    .option("--dry-run", "Only print what would change", false)
+    .option("--json", "Print JSON", false)
+    .action(async (options: JsonOptions & { board?: string; dryRun?: boolean }) => {
+      const report = await params.store.migrateStatusModel(options.board, { dryRun: options.dryRun === true });
+      if (options.json) {
+        writeJson(report);
+        return;
+      }
+      writeLine(`${report.boardId}: ${report.total} cards, ${report.rewrites.length} to rewrite${report.dryRun ? " (dry run)" : ""}`);
+      for (const rewrite of report.rewrites) {
+        writeLine(`  ${rewrite.cardId.slice(0, 8)} ${rewrite.from} -> ${rewrite.to}`);
+      }
+      if (report.backupDir) {
+        writeLine(`Backup: ${report.backupDir}`);
+      }
+      if (!report.dryRun && !report.changed) {
+        writeLine("Already migrated; nothing to change.");
       }
     });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createStatusRegistry,
   DEFAULT_TASKFOLD_STATUSES,
-  LEGACY_STATUS_REGISTRY,
+  UNCONFIGURED_STATUS_REGISTRY,
   LEGACY_TASKFOLD_STATUSES,
   resolveStatusRegistry,
   TaskfoldStatusConfigError,
@@ -41,8 +41,8 @@ describe("状态注册表", () => {
       "blocked",
       "done",
     ]);
-    expect(LEGACY_STATUS_REGISTRY.defaultStatus).toBe("todo");
-    expect(resolveStatusRegistry().ids).toEqual(LEGACY_STATUS_REGISTRY.ids);
+    expect(UNCONFIGURED_STATUS_REGISTRY.defaultStatus).toBe("todo");
+    expect(resolveStatusRegistry().ids).toEqual(UNCONFIGURED_STATUS_REGISTRY.ids);
   });
 
   it("按类别与 role 查询", () => {
@@ -106,7 +106,10 @@ describe("状态注册表", () => {
     expect(() => normalizeStatus("running", "todo", registry)).toThrow(
       "status must be one of: todo, doing, review, done.",
     );
-    // 不传注册表时仍接受九个旧状态
-    expect(normalizeStatus("blocked", "todo")).toBe("blocked");
+    // 不传注册表用"未配置"默认集；已退役的 blocked 不再是状态（旧值由 updateCard 翻译成标记）。
+    expect(normalizeStatus("backlog", "todo")).toBe("backlog");
+    expect(() => normalizeStatus("blocked", "todo")).toThrow(
+      "status must be one of: triage, backlog, todo, running, review, done, cancelled.",
+    );
   });
 });

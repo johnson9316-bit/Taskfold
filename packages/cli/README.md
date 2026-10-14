@@ -55,6 +55,8 @@ and `.gitignore`; the rest is created on demand.
 | `taskfold delete <id>` | deletes a card (and its images) |
 | `taskfold attach <id> <file...> [--append-notes]` | copies image files into `.taskfold/attachments/<card uuid>/`; prints the Markdown to reference them |
 | `taskfold boards` | reads boards and counts |
+| `taskfold statuses [list \| add \| edit \| move \| remove]` | shows or changes the project's statuses (`.taskfold/config.yml`) |
+| `taskfold migrate [--dry-run]` | moves a project to the status model (writes its statuses, rewrites legacy `ready` / `scheduled` / `blocked` cards; backs up first) |
 | `taskfold instructions` | prints the detailed guide for AI agents |
 | `taskfold guidelines [file...]` | writes the Taskfold block into AGENTS.md / CLAUDE.md |
 
@@ -70,6 +72,24 @@ Every command's `--help` lists its flags, what it reads and writes, and examples
   given. `create` without `--board` uses the only board that already has cards, or
   `default` in an empty repository; if cards sit on several boards it fails with
   `AMBIGUOUS` and asks for `--board`.
+
+## Statuses
+
+Statuses belong to the project and live in `.taskfold/config.yml` (`statuses:`). Every
+status sits in one of four fixed categories — `unstarted`, `started`, `completed`,
+`cancelled` — and only the category (plus two optional roles, `review` and `intake`) matters
+to Taskfold; names, order and colours are yours. A project that has not saved its own list uses
+the built-in five: `todo`, `running` (shown as "In progress"), `review`, `done`, `cancelled`.
+
+- `taskfold statuses` lists them; `add`, `edit`, `move` and `remove` change them
+  (`remove --move-cards-to <id>` moves the cards that use a status before deleting it).
+- **Blocked, queued for dispatch and scheduled are marks on a card, not statuses.** They show up
+  as `phase` in `--json` and as `(blocked)` / `(ready)` / `(scheduled)` in text output.
+  `--status ready|blocked|scheduled` still works as input and as a `list` filter.
+- Saving statuses (or the first write that uses a mark or a new status) upgrades the project to
+  `format_version: 4`; older Taskfold versions then open it read-only. `taskfold migrate` does
+  the whole move in one go and backs up `cards/`, `milestones/` and `config.yml` to
+  `.taskfold/.runtime/backup-<time>/` first. It is safe to rerun.
 
 ## Editing rules
 
@@ -92,11 +112,13 @@ Every command's `--help` lists its flags, what it reads and writes, and examples
 
 | kind | command | payload |
 | --- | --- | --- |
-| `card` | show, create, update | `card`: id, shortId, displayId, title, status, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
+| `card` | show, create, update | `card`: id, shortId, displayId, title, status, phase, priority, labels, agentId, boardId, milestoneId, archived, revision, createdAt, updatedAt, notes |
 | `card-list` | list | `boardId` (null = all), `cards` (same fields, without notes) |
 | `card-deleted` | delete | `id` |
 | `card-images` | attach | `cardId`, `images` (file, name, ref, markdown, mimeType, byteSize), `card` (updated card with `--append-notes`, else `null`) |
 | `board-list` | boards | `defaultBoardId` (null if ambiguous), `boards`: id, total, active, archived, byStatus |
+| `status-list` | statuses (and its subcommands) | `configured`, `statuses`: id, name?, category, color?, role?, default?; `moved` (remove only) |
+| `migration` | migrate | `dryRun`, `changed`, `statuses`, `total`, `usage`, `rewrites` (cardId, from, to), `backupDir`, `conflicts` |
 | `init` | init | `dataDir`, `created`, `formatVersion` |
 | `guidelines` | guidelines | `version`, `files`: path, action |
 | `instructions` | instructions | `version`, `text` |

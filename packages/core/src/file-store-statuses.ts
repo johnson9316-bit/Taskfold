@@ -16,15 +16,22 @@
 // {@link TaskfoldStatusConfigError}，不猜。首次写入把项目升到格式版本 4：旧版 core 不认自定义
 // 状态，必须在列表出现之前就被挡进只读模式（与卡片图片升到版本 3 同一做法）。
 import fs from "node:fs";
+import path from "node:path";
 import type { TaskfoldStatusDefinition } from "./contract/index.js";
+import type { PersistedTaskfoldCard, TaskfoldKeyedStore } from "./persistence-types.js";
 import { readFileIfExists, writeFileAtomic } from "./file-store-atomic.js";
 import {
   assertTaskfoldFormatWritable,
   TASKFOLD_STATUS_MODEL_FORMAT_VERSION,
+  taskfoldFormatVersionAtLeast,
   upgradeTaskfoldFormatVersion,
 } from "./file-store-format.js";
 import { withTaskfoldGlobalLock } from "./file-store-locks.js";
-import { TaskfoldStatusConfigError, validateStatusDefinitions } from "./status-registry.js";
+import {
+  LEGACY_TASKFOLD_STATUSES,
+  TaskfoldStatusConfigError,
+  validateStatusDefinitions,
+} from "./status-registry.js";
 
 const STATUSES_KEY = /^statuses:/;
 /** 顶层键：不缩进、不是列表项、不是注释、不是空行。 */
@@ -134,13 +141,19 @@ export type TaskfoldStatusConfigStore = {
   read(): TaskfoldStatusDefinition[] | undefined;
   /** 整体替换并落盘；首次写入会把项目升到格式版本 4。 */
   write(definitions: readonly TaskfoldStatusDefinition[]): Promise<TaskfoldStatusDefinition[]>;
+  /** 迁移前备份；返回备份目录。 */
+  backup(label: string): Promise<string>;
 };
+
+/** 备份时带上的子目录 / 文件（相对数据根）：改动的是卡片，运行态一并带上以便原样还原。 */
+const BACKUP_ENTRIES = ["cards", "milestones", "config.yml", path.join(".runtime", "cards")] as const;
 
 export function createTaskfoldFileStatusConfigStore(options: {
   configPath: string;
   locksDir: string;
 }): TaskfoldStatusConfigStore {
   const { configPath, locksDir } = options;
+  const dataDir = path.dirname(configPath);
   // 按 mtime+size 缓存：状态列表每次校验卡片都要用，不能每次都读盘解析。
   let cache: { stamp: string; value: TaskfoldStatusDefinition[] | undefined } | undefined;
 
@@ -177,5 +190,74 @@ export function createTaskfoldFileStatusConfigStore(options: {
       cache = undefined;
       return validated;
     },
+
+    async backup(label) {
+      const safeLabel = label.replace(/[^A-Za-z0-9._-]/g, "-");
+      const base = path.join(dataDir, ".runtime", `backup-${safeLabel}`);
+      let target = base;
+      for (let attempt = 2; fs.existsSync(target); attempt += 1) {
+        target = `${base}-${attempt}`;
+      }
+      fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+      for (const entry of BACKUP_ENTRIES) {
+        const from = path.join(dataDir, entry);
+        if (fs.existsSync(from)) {
+          fs.cpSync(from, path.join(target, entry), { recursive: true, preserveTimestamps: true });
+        }
+      }
+      return target;
+    },
+  };
+}
+
+const LEGACY_STATUS_IDS: ReadonlySet<string> = new Set(LEGACY_TASKFOLD_STATUSES.map((status) => status.id));
+
+/**
+ * 这张卡的内容旧版 core 读得懂吗？状态不在旧的九个值里（比如 `cancelled`、自定义状态），或带着
+ * 阻塞 / 派发标记，旧版 core 要么看不见这张卡、要么写回时悄悄丢掉标记。
+ */
+function needsStatusModelFormat(value: PersistedTaskfoldCard): boolean {
+  const card = value?.card;
+  return Boolean(
+    card && (!LEGACY_STATUS_IDS.has(card.status) || card.metadata?.blocked || card.metadata?.dispatchReady),
+  );
+}
+
+/**
+ * 包一层卡片存储：第一次写入需要新状态模型的内容之前，惰性把项目升到格式版本 4（与卡片图片升到
+ * 版本 3 同一做法）——在此之前其他客户端的旧版 core 照常读写，之后它们进入只读模式。
+ */
+export function upgradeFormatForStatusModelWrites(
+  options: { configPath: string; locksDir: string },
+  store: TaskfoldKeyedStore<PersistedTaskfoldCard>,
+): TaskfoldKeyedStore<PersistedTaskfoldCard> {
+  const { configPath, locksDir } = options;
+  const ensure = async (value: PersistedTaskfoldCard) => {
+    if (!needsStatusModelFormat(value) || taskfoldFormatVersionAtLeast(configPath, TASKFOLD_STATUS_MODEL_FORMAT_VERSION)) {
+      return;
+    }
+    assertTaskfoldFormatWritable(configPath);
+    await withTaskfoldGlobalLock(locksDir, (guard) => {
+      upgradeTaskfoldFormatVersion(configPath, guard.assertHeld, TASKFOLD_STATUS_MODEL_FORMAT_VERSION);
+    });
+  };
+  return {
+    ...store,
+    register: async (key, value) => {
+      await ensure(value);
+      await store.register(key, value);
+    },
+    compareAndSwap: async (key, expectedRevision, value, onReject) => {
+      await ensure(value);
+      return await store.compareAndSwap(key, expectedRevision, value, onReject);
+    },
+    ...(store.registerIfAbsent
+      ? {
+          registerIfAbsent: async (key: string, value: PersistedTaskfoldCard) => {
+            await ensure(value);
+            return await store.registerIfAbsent!(key, value);
+          },
+        }
+      : {}),
   };
 }
