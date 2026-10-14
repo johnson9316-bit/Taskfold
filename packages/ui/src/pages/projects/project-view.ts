@@ -5,6 +5,7 @@ import type {
   TaskfoldBoardGroupBy,
   TaskfoldBoardSortBy,
   TaskfoldBoardSortDirection,
+  TaskfoldBoardViewLayout,
   TaskfoldBoardViewSettings,
   TaskfoldBoardSummary,
   TaskfoldCard,
@@ -64,6 +65,7 @@ import { styleProperties } from "../../lib/style-properties.ts";
 import "../../styles/taskfold-project.css";
 
 const PRIORITIES: readonly TaskfoldPriority[] = ["low", "normal", "high", "urgent"];
+const BOARD_LAYOUTS: readonly TaskfoldBoardViewLayout[] = ["board", "list"];
 const BOARD_GROUPS: readonly TaskfoldBoardGroupBy[] = ["status", "milestone", "requirement", "assignee"];
 const BOARD_SORTS: readonly TaskfoldBoardSortBy[] = ["manual", "priority", "createdAt", "updatedAt"];
 const BOARD_SORT_DIRECTIONS: readonly TaskfoldBoardSortDirection[] = ["asc", "desc"];
@@ -1351,6 +1353,92 @@ function renderColumn(controller: TaskfoldProjectViewController, params: Taskfol
   `;
 }
 
+/** 列表视图：与看板同一份卡片（同一个 `project.cards`），换成表格渲染；排序与看板控件共用。 */
+function renderCardList(controller: TaskfoldProjectViewController, cards: readonly TaskfoldCard[]) {
+  const project = controller.state.project;
+  if (!project) {
+    return nothing;
+  }
+  const registry = statusRegistryOf(project);
+  const milestones = new Map(project.milestones.map((milestone) => [milestone.id, milestone]));
+  return html`
+    <section class="taskfold-project__list" aria-label=${t("taskfoldProject.list")}>
+      ${cards.length === 0
+        ? html`<p class="taskfold-project__empty-column">${t("taskfoldProject.emptyColumn")}</p>`
+        : html`
+            <table>
+              <thead>
+                <tr>
+                  <th class="taskfold-project__list-check" scope="col">
+                    <span class="taskfold-project__sr-only">${t("taskfoldProject.markDone")}</span>
+                  </th>
+                  <th scope="col">${t("taskfoldProject.cardNumber")}</th>
+                  <th scope="col">${t("taskfoldProject.columnTitle")}</th>
+                  <th scope="col">${t("taskfoldProject.status")}</th>
+                  <th scope="col">${t("taskfoldProject.priority")}</th>
+                  <th scope="col">${t("taskfoldProject.milestone")}</th>
+                  <th scope="col">${t("taskfoldProject.assignee")}</th>
+                  <th scope="col">${t("taskfoldProject.updatedAt")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cards.map((card) => renderCardListRow(controller, card, registry, milestones))}
+              </tbody>
+            </table>
+          `}
+    </section>
+  `;
+}
+
+function renderCardListRow(
+  controller: TaskfoldProjectViewController,
+  card: TaskfoldCard,
+  registry: TaskfoldStatusRegistry,
+  milestones: ReadonlyMap<string, TaskfoldMilestone>,
+) {
+  const archived = isArchivedCard(card);
+  const isProjectArchived = Boolean(controller.state.project?.board.archivedAt);
+  const finished = isFinishedCard(card, registry);
+  const completed = isCompletedCard(card, registry);
+  const mark = cardMark(card, registry);
+  const milestone = card.milestoneId ? milestones.get(card.milestoneId) : undefined;
+  return html`
+    <tr class="taskfold-project__list-row ${finished ? "tf-is-done" : ""}">
+      <td class="taskfold-project__list-check">
+        <input
+          class="taskfold-project__card-check"
+          type="checkbox"
+          aria-label=${t("taskfoldProject.markDone")}
+          title=${t("taskfoldProject.markDone")}
+          .checked=${completed}
+          ?disabled=${archived || isProjectArchived || !controller.connected}
+          @change=${(event: Event) =>
+            controller.updateCardStatus(
+              card.id,
+              checkedStatusFor(registry, (event.currentTarget as HTMLInputElement).checked),
+            )}
+        />
+      </td>
+      <td class="taskfold-project__list-number">${card.displayId ?? "—"}</td>
+      <td class="taskfold-project__list-title">
+        <button
+          type="button"
+          @click=${() => controller.openModal({ kind: "card-detail", cardId: card.id })}
+        >${card.title}</button>
+        ${mark ? renderCardMark(card, mark, controller.locale) : nothing}
+      </td>
+      <td>${statusLabel(displayStatusId(card, registry), registry, t)}</td>
+      <td class="taskfold-project__list-priority">
+        <span class="taskfold-project__priority tf-priority-${card.priority}"></span>
+        ${t(`taskfoldProject.priorityValue.${card.priority}`)}
+      </td>
+      <td>${milestone ? milestone.title : t("taskfoldProject.unassigned")}</td>
+      <td>${card.agentId || "—"}</td>
+      <td>${new Date(card.updatedAt).toLocaleString(controller.locale)}</td>
+    </tr>
+  `;
+}
+
 function renderBoard(controller: TaskfoldProjectViewController) {
   const { state } = controller;
   const project = state.project;
@@ -1358,6 +1446,8 @@ function renderBoard(controller: TaskfoldProjectViewController) {
     return nothing;
   }
   const view = boardView(project.board);
+  // 列表视图缺省关：旧数据没有 layout 字段，缺省语义就是 "board"。
+  const layout = view.layout ?? "board";
   const cards = project.cards.filter((card) => !isArchivedCard(card));
   const columns: TaskfoldBoardColumn[] = [];
   const sorted = (items: readonly TaskfoldCard[]) => sortBoardCards(items, view);
@@ -1490,24 +1580,40 @@ function renderBoard(controller: TaskfoldProjectViewController) {
           <p>${project.board.currentObjective || project.board.description || project.board.id}</p>
         </div>
         <div class="taskfold-project__board-controls">
-          <div class="taskfold-project__segmented" role="group" aria-label=${t("taskfoldProject.groupBy")}>
-            ${BOARD_GROUPS.map(
-              (groupBy) => html`
+          <div class="taskfold-project__segmented" role="group" aria-label=${t("taskfoldProject.viewMode")}>
+            ${BOARD_LAYOUTS.map(
+              (mode) => html`
                 <button
                   type="button"
-                  class=${groupBy === view.groupBy ? "tf-is-active" : ""}
-                  aria-pressed=${groupBy === view.groupBy ? "true" : "false"}
-                  @click=${() =>
-                    groupBy !== view.groupBy &&
-                    controller.updateBoardView({
-                      groupBy,
-                      sortBy: groupBy === "milestone" ? view.sortBy : view.sortBy === "manual" ? "priority" : view.sortBy,
-                      sortDirection: view.sortDirection,
-                    })}
-                >${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</button>
+                  class=${mode === layout ? "tf-is-active" : ""}
+                  aria-pressed=${mode === layout ? "true" : "false"}
+                  @click=${() => mode !== layout && controller.updateBoardView({ ...view, layout: mode })}
+                >${t(mode === "board" ? "taskfoldProject.board" : "taskfoldProject.list")}</button>
               `,
             )}
           </div>
+          ${layout === "board"
+            ? html`
+                <div class="taskfold-project__segmented" role="group" aria-label=${t("taskfoldProject.groupBy")}>
+                  ${BOARD_GROUPS.map(
+                    (groupBy) => html`
+                      <button
+                        type="button"
+                        class=${groupBy === view.groupBy ? "tf-is-active" : ""}
+                        aria-pressed=${groupBy === view.groupBy ? "true" : "false"}
+                        @click=${() =>
+                          groupBy !== view.groupBy &&
+                          controller.updateBoardView({
+                            groupBy,
+                            sortBy: groupBy === "milestone" ? view.sortBy : view.sortBy === "manual" ? "priority" : view.sortBy,
+                            sortDirection: view.sortDirection,
+                          })}
+                      >${t(`taskfoldProject.groupBy${groupBy[0].toUpperCase()}${groupBy.slice(1)}`)}</button>
+                    `,
+                  )}
+                </div>
+              `
+            : nothing}
           <label>
             ${t("taskfoldProject.sortBy")}
             <select
@@ -1549,7 +1655,7 @@ function renderBoard(controller: TaskfoldProjectViewController) {
                 `
               : nothing
             : html`
-                ${view.groupBy === "milestone"
+                ${layout === "board" && view.groupBy === "milestone"
                   ? html`
                       <button
                         class="tf-btn"
@@ -1588,12 +1694,16 @@ function renderBoard(controller: TaskfoldProjectViewController) {
       ${project.board.archivedAt
         ? html`<div class="tf-callout">${t("taskfoldProject.projectArchived")}</div>`
         : nothing}
-      <div class="taskfold-project__kanban" aria-label=${t("taskfoldProject.board")} ${ref(fitToViewport)}>
-        ${columns.map((column) => renderColumn(controller, column))}
-        ${view.groupBy === "milestone" && !project.board.archivedAt
-          ? renderAddMilestoneColumn(controller)
-          : nothing}
-      </div>
+      ${layout === "list"
+        ? renderCardList(controller, sorted(cards))
+        : html`
+            <div class="taskfold-project__kanban" aria-label=${t("taskfoldProject.board")} ${ref(fitToViewport)}>
+              ${columns.map((column) => renderColumn(controller, column))}
+              ${view.groupBy === "milestone" && !project.board.archivedAt
+                ? renderAddMilestoneColumn(controller)
+                : nothing}
+            </div>
+          `}
     </section>
   `;
 }

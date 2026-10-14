@@ -84,6 +84,8 @@ export const TASKFOLD_CARD_KINDS = ["task", "requirement"] as const;
 export const TASKFOLD_BOARD_GROUP_BY = ["status", "milestone", "requirement", "assignee"] as const;
 export const TASKFOLD_BOARD_SORT_BY = ["manual", "priority", "createdAt", "updatedAt"] as const;
 export const TASKFOLD_BOARD_SORT_DIRECTIONS = ["asc", "desc"] as const;
+/** 看板页的呈现方式：分列看板或卡片列表。同一份 cards 的两种渲染，不是两份数据。 */
+export const TASKFOLD_BOARD_VIEW_LAYOUTS = ["board", "list"] as const;
 export const TASKFOLD_PROOF_STATUSES = ["passed", "failed", "skipped", "unknown"] as const;
 export const TASKFOLD_TEMPLATE_IDS = ["bugfix", "docs", "release", "pr_review", "plugin"] as const;
 export const TASKFOLD_DIAGNOSTIC_KINDS = [
@@ -167,6 +169,7 @@ export type TaskfoldCardKind = (typeof TASKFOLD_CARD_KINDS)[number];
 export type TaskfoldBoardGroupBy = (typeof TASKFOLD_BOARD_GROUP_BY)[number];
 export type TaskfoldBoardSortBy = (typeof TASKFOLD_BOARD_SORT_BY)[number];
 export type TaskfoldBoardSortDirection = (typeof TASKFOLD_BOARD_SORT_DIRECTIONS)[number];
+export type TaskfoldBoardViewLayout = (typeof TASKFOLD_BOARD_VIEW_LAYOUTS)[number];
 export type TaskfoldProofStatus = (typeof TASKFOLD_PROOF_STATUSES)[number];
 export type TaskfoldTemplateId = (typeof TASKFOLD_TEMPLATE_IDS)[number];
 export type TaskfoldDiagnosticKind = (typeof TASKFOLD_DIAGNOSTIC_KINDS)[number];
@@ -576,6 +579,13 @@ export type TaskfoldCard = {
   id: string;
   title: string;
   kind?: TaskfoldCardKind;
+  /**
+   * 展示编号（小写 `card-42`，与文件名段一致；CLI 的 `displayId` 同形）。
+   * **只读派生字段**：由文件存储在读取时从文件名/frontmatter 解析后附加，不进
+   * `TaskfoldCard` 的持久化序列化（见 markdown-card-format.ts 的显式字段白名单），
+   * 写入方传回它也不会被写回磁盘。占位 JSON 编解码器与手工构造的卡可能没有它。
+   */
+  displayId?: string;
   notes?: string;
   status: TaskfoldStatus;
   priority: TaskfoldPriority;
@@ -619,6 +629,8 @@ export type TaskfoldBoardViewSettings = {
   groupBy: TaskfoldBoardGroupBy;
   sortBy: TaskfoldBoardSortBy;
   sortDirection: TaskfoldBoardSortDirection;
+  /** 看板页呈现方式；缺省视为 `"board"`（旧数据没有这个字段）。 */
+  layout?: TaskfoldBoardViewLayout;
 };
 
 export type TaskfoldListResult = {

@@ -5,6 +5,7 @@ import {
   TASKFOLD_BOARD_GROUP_BY,
   TASKFOLD_BOARD_SORT_BY,
   TASKFOLD_BOARD_SORT_DIRECTIONS,
+  TASKFOLD_BOARD_VIEW_LAYOUTS,
   TASKFOLD_CARD_KINDS,
   TASKFOLD_DIAGNOSTIC_KINDS,
   TASKFOLD_DIAGNOSTIC_SEVERITIES,
@@ -27,6 +28,7 @@ import {
   type TaskfoldBoardMetadata,
   type TaskfoldBoardSortBy,
   type TaskfoldBoardSortDirection,
+  type TaskfoldBoardViewLayout,
   type TaskfoldBoardViewSettings,
   type TaskfoldCardKind,
   type TaskfoldClaim,
@@ -226,7 +228,13 @@ export function normalizeBoardView(
     (TASKFOLD_BOARD_SORT_DIRECTIONS as readonly string[]).includes(record.sortDirection)
       ? (record.sortDirection as TaskfoldBoardSortDirection)
       : fallback?.sortDirection ?? "asc";
-  return { groupBy, sortBy, sortDirection };
+  // layout 是后加的可选字段：非法/缺失一律回退（缺省 undefined，语义上就是 "board"）。
+  const layout =
+    typeof record.layout === "string" &&
+    (TASKFOLD_BOARD_VIEW_LAYOUTS as readonly string[]).includes(record.layout)
+      ? (record.layout as TaskfoldBoardViewLayout)
+      : fallback?.layout;
+  return { groupBy, sortBy, sortDirection, ...(layout ? { layout } : {}) };
 }
 
 function normalizeOrchestration(

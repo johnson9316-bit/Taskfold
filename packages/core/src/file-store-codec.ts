@@ -6,6 +6,7 @@
 // file-store-milestones.ts 需要的窄接口（只认 TaskfoldCard/TaskfoldMilestone）的那一层。
 import type { TaskfoldCard, TaskfoldMilestone } from "./contract/index.js";
 import {
+  formatCardDisplayIdText,
   parseCardFrontmatterId,
   parseMarkdownCard,
   serializeMarkdownCard,
@@ -132,7 +133,12 @@ export function createMarkdownCardCodec(): TaskfoldCardCodec {
       return serializeMarkdownCard(doc);
     },
     parse(content) {
-      return parseMarkdownCard(content).card;
+      const doc = parseMarkdownCard(content);
+      // 展示编号（`card-N`）在 md 里由 frontmatter id / 文件名承载，不属于 TaskfoldCard 的
+      // 业务字段；读取时拆出来附加到卡上（写入路径不回购它——serializeMarkdownCard 的
+      // 字段白名单里没有它是故意的）。UI 列表视图靠它显示编号列，CLI 另有从文件名解析的
+      // 同名输出，两者形态一致（小写 card-N）。
+      return { ...doc.card, displayId: formatCardDisplayIdText(doc.displayId) };
     },
   };
 }

@@ -125,6 +125,29 @@ describe("createTaskfoldFileStores: cards CAS (R1/R2/R3)", () => {
     await stores.cards.delete("CARD-1");
     await expect(stores.cards.lookup("CARD-1")).resolves.toBeUndefined();
   });
+
+  it("读取的卡片带展示编号 displayId（card-N），但把它写回时不会落盘", async () => {
+    const { dataDir, pluginDir } = tempRoots();
+    const stores = createTaskfoldFileStores({ dataDir, pluginDir });
+    await stores.cards.register("CARD-1", baseCard());
+
+    const lookedUp = await stores.cards.lookup("CARD-1");
+    expect(lookedUp?.card.displayId).toBe("card-1");
+
+    // 磁盘上的 md 不落这个派生字段（serializeMarkdownCard 的字段白名单）。
+    const cardsDir = path.join(dataDir, "cards");
+    const readCardFile = () => fs.readFileSync(path.join(cardsDir, fs.readdirSync(cardsDir)[0]!), "utf8");
+    expect(readCardFile()).not.toContain("displayId");
+
+    // 把带 displayId 的卡原样写回（UI 常见路径）：md 与运行态都不应出现它。
+    await stores.cards.compareAndSwap!("CARD-1", 1, {
+      version: 1,
+      card: { ...lookedUp!.card, title: "改过的标题", revision: 2 },
+    });
+    expect(readCardFile()).not.toContain("displayId");
+    expect(readCardFile()).toContain("改过的标题");
+    expect((await stores.cards.lookup("CARD-1"))?.card.displayId).toBe("card-1");
+  });
 });
 
 describe("createTaskfoldFileStores: 整卡写原子性（R5）", () => {

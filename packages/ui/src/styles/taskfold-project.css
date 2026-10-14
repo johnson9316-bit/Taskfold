@@ -601,6 +601,24 @@
   position: relative;
 }
 
+/* 卡片文字要能选中复制。默认选不中有两层原因：
+   ① Chromium 对 [draggable] 元素按 UA 规则计算 user-select: none（卡片是拖拽源）；
+   ② 宿主 Control UI 的全局 `button { user-select: none }` 命中卡内主体按钮。
+   显式放开后：双击选词、Shift+拖选可用；普通拖拽仍触发卡片移动（Chromium 里
+   draggable 祖先会优先启动 HTML5 拖拽，两种手势无法只靠 CSS 共存）。 */
+.taskfold-project__card,
+.taskfold-project__card * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 列表视图同理：行内文字与标题按钮要能选中复制（宿主全局 button 规则会禁选）。 */
+.taskfold-project__list,
+.taskfold-project__list * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .taskfold-project__card.tf-is-dragging {
   opacity: 0.45;
 }
@@ -707,6 +725,97 @@
 .taskfold-project__label.tf-label-3 { --tf-label: var(--warn); }
 .taskfold-project__label.tf-label-4 { --tf-label: var(--danger); }
 .taskfold-project__label.tf-label-5 { --tf-label: #9a7be0; }
+
+/* 列表视图：与看板同一份卡片的表格渲染（编号/标题/状态/优先级/里程碑/负责人/更新时间）。 */
+.taskfold-project__list {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.taskfold-project__list table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.taskfold-project__list th {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 7px 8px;
+  position: sticky;
+  text-align: left;
+  top: 0;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.taskfold-project__list td {
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.taskfold-project__list-row:hover td {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.taskfold-project__list-row.tf-is-done td {
+  color: var(--muted);
+}
+
+.taskfold-project__list-row.tf-is-done .taskfold-project__list-title button {
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: line-through;
+}
+
+.taskfold-project__list td.taskfold-project__list-check,
+.taskfold-project__list th.taskfold-project__list-check {
+  padding-right: 0;
+  width: 28px;
+}
+
+.taskfold-project__list-number {
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  white-space: nowrap;
+}
+
+.taskfold-project__list-title button {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  padding: 0;
+  text-align: left;
+}
+
+.taskfold-project__list-title button:hover {
+  color: var(--accent);
+}
+
+.taskfold-project__list-priority {
+  white-space: nowrap;
+}
+
+.taskfold-project__list .taskfold-project__priority {
+  display: inline-block;
+  margin: 0 6px 0 0;
+  vertical-align: middle;
+}
+
+.taskfold-project__list > .taskfold-project__empty-column {
+  padding: 12px;
+}
 
 .taskfold-project__quick-add {
   background: transparent;

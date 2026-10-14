@@ -668,6 +668,12 @@ export function formatCardFrontmatterId(displayId: CardDisplayId): string {
   return `${displayId.prefix.toUpperCase()}-${displayId.numericId}`;
 }
 
+/** 展示 ID 的文本形态：小写 prefix + 数字，如 "card-42"（与文件名段一致）。
+ * `TaskfoldCard.displayId` 与 CLI 的 `displayId` 字段用的都是这个形态。 */
+export function formatCardDisplayIdText(displayId: CardDisplayId): string {
+  return `${displayId.prefix.toLowerCase()}-${displayId.numericId}`;
+}
+
 const FRONTMATTER_ID_PATTERN = /^([A-Za-z]+)-([0-9]+)$/;
 
 export function parseCardFrontmatterId(id: string): CardDisplayId | undefined {

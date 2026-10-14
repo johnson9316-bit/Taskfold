@@ -241,6 +241,19 @@ function normalized(value: unknown): unknown {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
+/**
+ * 读回比对用的卡片：剥掉读取时才派生的字段。`displayId`（`card-N`）由 codec 从
+ * frontmatter id 解析后附加，不在任何存储里（源 SQLite 卡、落盘 md 都没有它），
+ * 归属“存储写出去的东西读回来还是原样”的检查时应与源卡逐字段对齐。
+ */
+function cardForReadBack(card: TaskfoldCard | undefined): unknown {
+  if (card === undefined) {
+    return undefined;
+  }
+  const { displayId: _displayId, ...rest } = card;
+  return rest;
+}
+
 function floorToMinute(epochMs: number): number {
   return Math.floor(epochMs / 60_000) * 60_000;
 }
@@ -360,7 +373,7 @@ async function writeAndVerifyRoot(
   const mismatches: string[] = [];
   for (const card of plan.cards) {
     const stored = await reread.cards.lookup(card.id);
-    if (!isDeepStrictEqual(normalized(stored?.card), normalized(card))) {
+    if (!isDeepStrictEqual(normalized(cardForReadBack(stored?.card)), normalized(card))) {
       mismatches.push(`card ${card.id}`);
     }
   }

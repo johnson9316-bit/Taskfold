@@ -2590,7 +2590,7 @@ var init_file_store_card_runtime = __esm({
 function isValidTaskfoldBoardId(value) {
   return typeof value === "string" && TASKFOLD_BOARD_ID_PATTERN.test(value);
 }
-var TASKFOLD_STATUS_CATEGORIES, TASKFOLD_STATUS_ROLES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
+var TASKFOLD_STATUS_CATEGORIES, TASKFOLD_STATUS_ROLES, TASKFOLD_PRIORITIES, TASKFOLD_EXECUTION_MODES, TASKFOLD_EXECUTION_STATUSES, TASKFOLD_EVENT_KINDS, TASKFOLD_ATTEMPT_STATUSES, TASKFOLD_LINK_TYPES, TASKFOLD_CARD_KINDS, TASKFOLD_BOARD_GROUP_BY, TASKFOLD_BOARD_SORT_BY, TASKFOLD_BOARD_SORT_DIRECTIONS, TASKFOLD_BOARD_VIEW_LAYOUTS, TASKFOLD_PROOF_STATUSES, TASKFOLD_TEMPLATE_IDS, TASKFOLD_DIAGNOSTIC_KINDS, TASKFOLD_DIAGNOSTIC_SEVERITIES, TASKFOLD_NOTIFICATION_KINDS, TASKFOLD_MILESTONE_STATES, TASKFOLD_PROJECT_DOCUMENT_SECTIONS, TASKFOLD_PROJECT_DOCUMENT_TYPES, TASKFOLD_DELIVERY_IMPLEMENTATION_STATES, TASKFOLD_DELIVERY_VERIFICATION_STATES, TASKFOLD_DELIVERY_RELEASE_STATES, TASKFOLD_BOARD_ID_PATTERN;
 var init_contract = __esm({
   "../core/src/contract/index.ts"() {
     "use strict";
@@ -2656,6 +2656,7 @@ var init_contract = __esm({
     TASKFOLD_BOARD_GROUP_BY = ["status", "milestone", "requirement", "assignee"];
     TASKFOLD_BOARD_SORT_BY = ["manual", "priority", "createdAt", "updatedAt"];
     TASKFOLD_BOARD_SORT_DIRECTIONS = ["asc", "desc"];
+    TASKFOLD_BOARD_VIEW_LAYOUTS = ["board", "list"];
     TASKFOLD_PROOF_STATUSES = ["passed", "failed", "skipped", "unknown"];
     TASKFOLD_TEMPLATE_IDS = ["bugfix", "docs", "release", "pr_review", "plugin"];
     TASKFOLD_DIAGNOSTIC_KINDS = [
@@ -3037,6 +3038,9 @@ function escapeTaskfoldBodyText(text) {
 }
 function formatCardFrontmatterId(displayId) {
   return `${displayId.prefix.toUpperCase()}-${displayId.numericId}`;
+}
+function formatCardDisplayIdText(displayId) {
+  return `${displayId.prefix.toLowerCase()}-${displayId.numericId}`;
 }
 function parseCardFrontmatterId(id) {
   const match = FRONTMATTER_ID_PATTERN.exec(id.trim());
@@ -3608,7 +3612,8 @@ function createMarkdownCardCodec() {
       return serializeMarkdownCard(doc);
     },
     parse(content) {
-      return parseMarkdownCard(content).card;
+      const doc = parseMarkdownCard(content);
+      return { ...doc.card, displayId: formatCardDisplayIdText(doc.displayId) };
     }
   };
 }
@@ -5284,7 +5289,8 @@ function normalizeBoardView(value, fallback) {
     throw new Error("manual sorting is available only when grouping by milestone.");
   }
   const sortDirection = typeof record.sortDirection === "string" && TASKFOLD_BOARD_SORT_DIRECTIONS.includes(record.sortDirection) ? record.sortDirection : fallback?.sortDirection ?? "asc";
-  return { groupBy, sortBy, sortDirection };
+  const layout = typeof record.layout === "string" && TASKFOLD_BOARD_VIEW_LAYOUTS.includes(record.layout) ? record.layout : fallback?.layout;
+  return { groupBy, sortBy, sortDirection, ...layout ? { layout } : {} };
 }
 function normalizeOrchestration(value, fallback) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -8142,6 +8148,13 @@ function copySqliteFiles(sqlitePath, destDir, baseName) {
 function normalized(value) {
   return value === void 0 ? void 0 : JSON.parse(JSON.stringify(value));
 }
+function cardForReadBack(card) {
+  if (card === void 0) {
+    return void 0;
+  }
+  const { displayId: _displayId, ...rest } = card;
+  return rest;
+}
 function floorToMinute(epochMs) {
   return Math.floor(epochMs / 6e4) * 6e4;
 }
@@ -8224,7 +8237,7 @@ async function writeAndVerifyRoot(plan, stagingDir) {
   const mismatches = [];
   for (const card of plan.cards) {
     const stored = await reread.cards.lookup(card.id);
-    if (!isDeepStrictEqual3(normalized(stored?.card), normalized(card))) {
+    if (!isDeepStrictEqual3(normalized(cardForReadBack(stored?.card)), normalized(card))) {
       mismatches.push(`card ${card.id}`);
     }
   }

@@ -7,8 +7,8 @@
 //   临时目录、全部校验通过再改名；最后写 projects.json 与迁移标记。
 // - 绑了仓库的项目写进主 checkout 的 `.taskfold/`，没绑的写进 `<pluginDir>/projects/<id>/`，数据
 //   一条不丢；零数据项目不建目录。
-// - 迁移后卡片逐字段一致（含毫秒 createdAt、revision、claim/execution 运行态），各看板卡片顺序与
-//   SQLite 后端逐张一致。
+// - 迁移后卡片逐字段一致（含毫秒 createdAt、revision、claim/execution 运行态，不含文件后端
+//   读取时派生的 displayId），各看板卡片顺序与 SQLite 后端逐张一致。
 // - 目标已存在就拒绝执行；中途失败清掉本次建的所有东西，原状不动。
 // - 不读也不写 flowboard/gsdboard/workboard 三份历史库（用例里把它们设成不可读，迁移照样成功）。
 import { createHash } from "node:crypto";
@@ -258,13 +258,17 @@ describe("migrate-sqlite --apply", () => {
     );
 
     // 逐字段一致：SQLite 后端与文件后端各开一个 TaskfoldStore，读到的东西相同。
+    // displayId（`card-N`）只在文件后端读取时从 frontmatter id 派生，SQLite 后端没有它，
+    // 比对时从文件侧剥掉。
+    const withoutDisplayId = (cards: TaskfoldCard[]) =>
+      cards.map(({ displayId: _displayId, ...card }) => card);
     const before = TaskfoldStore.fromStores(createTaskfoldSqliteStores({ dbPath: backupDb }));
     const after = TaskfoldStore.fromStores(createTaskfoldProjectRoutedStores({ pluginDir }));
     for (const boardId of ["proj", "default", "probe", "empty"]) {
       const expected = await before.list({ boardId });
       const actual = await after.list({ boardId });
       expect(actual.map((c) => c.id)).toEqual(expected.map((c) => c.id));
-      expect(actual).toEqual(expected);
+      expect(withoutDisplayId(actual)).toEqual(expected);
       const milestonesBefore = (await before.listMilestones(boardId)).milestones;
       const milestonesAfter = (await after.listMilestones(boardId)).milestones;
       expect(milestonesAfter.map((m) => m.id)).toEqual(milestonesBefore.map((m) => m.id));

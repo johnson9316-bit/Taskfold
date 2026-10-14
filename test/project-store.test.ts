@@ -297,6 +297,37 @@ describe("Taskfold M2 project store", () => {
     });
   });
 
+  it("persists the list layout and ignores unknown layout values", async () => {
+    const { store } = createStore();
+    await store.createProject({ id: "alpha", name: "Alpha" });
+    await store.createProject({ id: "beta", name: "Beta" });
+
+    const board = await store.updateProject({
+      id: "alpha",
+      boardView: { groupBy: "status", sortBy: "priority", sortDirection: "asc", layout: "list" },
+    });
+    expect(board.boardView).toEqual({
+      groupBy: "status",
+      sortBy: "priority",
+      sortDirection: "asc",
+      layout: "list",
+    });
+
+    // 未知 layout 不报错：已有设置时保留上一值（与其他字段的 fallback 语义一致）。
+    const kept = await store.updateProject({
+      id: "alpha",
+      boardView: { groupBy: "status", sortBy: "priority", sortDirection: "asc", layout: "grid" },
+    });
+    expect(kept.boardView?.layout).toBe("list");
+
+    // 首次写入就是非法值：按缺失处理，不落字段（缺省即 "board"）。
+    const first = await store.updateProject({
+      id: "beta",
+      boardView: { groupBy: "status", sortBy: "priority", sortDirection: "asc", layout: "grid" },
+    });
+    expect(first.boardView).toEqual({ groupBy: "status", sortBy: "priority", sortDirection: "asc" });
+  });
+
   it("protects placement fields and archived project entry points", async () => {
     const { store } = createStore();
     const project = await store.createProject({
