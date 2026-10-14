@@ -16,8 +16,7 @@ Taskfold run / Card
         -> Claude Code / Codex / OpenCode
 ```
 
-`.planning/` 仍是 GSD 产物真相；Taskfold SQLite 是 Card、run、事件、审计与人工交接真相；
-OpenClaw ACP session 只作为外部引用。Taskfold 不复制 transcript。
+任务数据（Card、run、事件、审计与人工交接）以项目仓库的 `.taskfold/` 文件为真相（[[16-文件存储改造]]）；OpenClaw ACP session 只作为外部引用。Taskfold 不复制 transcript。
 
 ## 能力分工
 
@@ -25,7 +24,7 @@ OpenClaw ACP session 只作为外部引用。Taskfold 不复制 transcript。
 | --- | --- | --- | --- |
 | **ACP Runtime + `@openclaw/acpx`** | 默认开发执行实现 | M4 | Taskfold 直接调用公开 API；写入型 run 必须使用隔离 worktree；同 repo 起步时仅一个 active mutable run。 |
 | `coding-agent` Skill | 可选的 agent-side 开发协作 Skill | M7+ | 可供 OpenClaw agent 在对话中使用，但不作为 Taskfold Card 的生产执行控制 API。 |
-| `taskflow` Skill | 可选执行端编排器 | M7+ | 不替代 Taskfold 队列、`awaiting_human`、GSD 映射、审计账本或并发槽。 |
+| `taskflow` Skill | 可选执行端编排器 | M7+ | 不替代 Taskfold 队列、`awaiting_human`、审计账本或并发槽。 |
 | `diagram-maker` Skill | 规划产物生成动作 | M7+ | 人选择输出路径并确认；图是附件，不是状态真相。 |
 
 ## ACP Profile
@@ -70,4 +69,4 @@ execution_profiles:
 - 记录 OpenClaw、`@openclaw/acpx`、harness、model 与启动参数；升级后先在测试项目重跑 ACP Spike。
 - Git worktree 创建、基线提交、清理失败和外部状态未知都必须阻止破坏性动作。
 
-相关文档：[[8.7-待开发一波]]、[[4-执行调度与AI]]、[[7-数据与接口]]、[[8-路线图与验收]]。
+相关文档：[[8.7-待开发一波]]、[[4-执行调度与AI]]、[[8-路线图与验收]]。

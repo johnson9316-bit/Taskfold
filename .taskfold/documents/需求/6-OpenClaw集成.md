@@ -14,7 +14,7 @@
 
 不复制整个 OpenClaw 控制台。必须固定上游 commit，保留 MIT 版权和许可证，并在仓库中记录来源与本地修改。
 
-M1 不拆出 `core / adapters / web` 独立架构，不提供 `taskfold serve`，不以 localhost HTTP/SSE 替换 Workboard 的宿主依赖。功能和规范以复制的 Workboard 快照为准；产品差异化先从 M2 的多项目、项目设置和项目资料开始，GSD 扩展留至 M4。
+M1 不拆出 `core / adapters / web` 独立架构，不提供 `taskfold serve`，不以 localhost HTTP/SSE 替换 Workboard 的宿主依赖。功能和规范以复制的 Workboard 快照为准；产品差异化先从 M2 的多项目、项目设置和项目资料开始，执行能力留至 M4。
 
 ## 安装与分发
 
@@ -51,4 +51,4 @@ M1 仓库必须提供：
 
 ## 后续边界
 
-M2 在这个插件中增加多项目、项目设置和项目资料；需求见 [[8.2-需求]]，实施计划见 [[8.2-看板通用功能plan]]。M4 才增加 GSD `.planning/` 投影、工作项映射和官方 ACP Runtime 执行调度。OpenClaw 仍是唯一宿主；任何新增能力必须继续遵循插件 API 和 Workboard 的既有约定。
+M2 在这个插件中增加多项目、项目设置和项目资料；需求见 [[8.2-需求]]，实施计划见 [[8.2-看板通用功能plan]]。M4 才增加工作项映射和官方 ACP Runtime 执行调度。OpenClaw 仍是唯一宿主；任何新增能力必须继续遵循插件 API 和 Workboard 的既有约定。

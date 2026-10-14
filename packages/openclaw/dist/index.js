@@ -16181,7 +16181,6 @@ var EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES = /* @__PURE__ */ new Set([
   "tpm",
   "vendor"
 ]);
-var PLANNING_DOCUMENT_DIRECTORIES = /* @__PURE__ */ new Set(["codebase", "intel", "notes", "research", "seeds"]);
 var EXTRA_DOCUMENT_PATHS = [
   ".github/copilot-instructions.md",
   ".claude/skills/deploy-test/SKILL.md",
@@ -16206,14 +16205,8 @@ function sourceForDocument(relativePath) {
 }
 function sectionForDocument(relativePath) {
   const normalized2 = relativePath.toLocaleLowerCase();
-  if (normalized2.startsWith(".planning/codebase/")) {
-    return "codebase";
-  }
-  if (normalized2.startsWith(".planning/intel/") || /(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized2)) {
+  if (/(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized2)) {
     return "environment";
-  }
-  if (normalized2.startsWith(".planning/notes/") || normalized2.startsWith(".planning/research/")) {
-    return "knowledge";
   }
   return "project";
 }
@@ -16334,12 +16327,6 @@ function isTaskfoldProjectDocumentDiscoveryPath(workspaceRoot, target) {
   if (segments.length === 2 && TOP_LEVEL_AI_INSTRUCTION_NAMES.has(segments[1].toLocaleLowerCase()) && !segments[0].startsWith(".") && !EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES.has(segments[0])) {
     return true;
   }
-  if (segments.length === 2 && segments[0] === ".planning") {
-    return true;
-  }
-  if (segments.length === 3 && segments[0] === ".planning" && PLANNING_DOCUMENT_DIRECTORIES.has(segments[1])) {
-    return true;
-  }
   return EXTRA_DOCUMENT_PATHS.includes(relativePath);
 }
 async function discoverTaskfoldProjectDocuments(workspacePath) {
@@ -16349,13 +16336,6 @@ async function discoverTaskfoldProjectDocuments(workspacePath) {
   const params = { root, results, targets };
   await addDirectoryMarkdownFiles({ ...params, relativeDirectory: "" });
   await addTopLevelModuleAiInstructions(params);
-  await addDirectoryMarkdownFiles({ ...params, relativeDirectory: ".planning" });
-  for (const directory of PLANNING_DOCUMENT_DIRECTORIES) {
-    await addDirectoryMarkdownFiles({
-      ...params,
-      relativeDirectory: path21.join(".planning", directory)
-    });
-  }
   for (const relativePath of EXTRA_DOCUMENT_PATHS) {
     await addCandidate({ ...params, relativePath });
   }

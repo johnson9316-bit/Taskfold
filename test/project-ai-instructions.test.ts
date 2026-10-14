@@ -40,14 +40,6 @@ function createWorkspace(): string {
   roots.push(root);
   fs.mkdirSync(path.join(root, "web"));
   fs.mkdirSync(path.join(root, "docs"));
-  fs.mkdirSync(path.join(root, ".planning", "codebase", "nested"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "intel"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "notes"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "research"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "seeds"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "phases"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "milestones"), { recursive: true });
-  fs.mkdirSync(path.join(root, ".planning", "archive"), { recursive: true });
   fs.mkdirSync(path.join(root, ".github"), { recursive: true });
   fs.mkdirSync(path.join(root, ".trae"), { recursive: true });
   fs.mkdirSync(path.join(root, "_bmad-output"), { recursive: true });
@@ -62,16 +54,6 @@ function createWorkspace(): string {
   fs.writeFileSync(path.join(root, "web", "AGENTS.md"), "# Web agents\n");
   fs.writeFileSync(path.join(root, "docs", "CLAUDE.md"), "# Docs Claude\n");
   fs.writeFileSync(path.join(root, "docs", "overview.md"), "# Overview\n");
-  fs.writeFileSync(path.join(root, ".planning", "overview.md"), "# Planning overview\n");
-  fs.writeFileSync(path.join(root, ".planning", "codebase", "ARCHITECTURE.md"), "# Architecture\n");
-  fs.writeFileSync(path.join(root, ".planning", "codebase", "nested", "ignored.md"), "# Ignore\n");
-  fs.writeFileSync(path.join(root, ".planning", "intel", "environment.md"), "# Environment\n");
-  fs.writeFileSync(path.join(root, ".planning", "notes", "decision.md"), "# Decision\n");
-  fs.writeFileSync(path.join(root, ".planning", "research", "comparison.md"), "# Comparison\n");
-  fs.writeFileSync(path.join(root, ".planning", "seeds", "ideas.md"), "# Ideas\n");
-  fs.writeFileSync(path.join(root, ".planning", "phases", "phase-1.md"), "# Ignore\n");
-  fs.writeFileSync(path.join(root, ".planning", "milestones", "m1.md"), "# Ignore\n");
-  fs.writeFileSync(path.join(root, ".planning", "archive", "old.md"), "# Ignore\n");
   fs.writeFileSync(path.join(root, ".trae", "ignored.md"), "# Ignore\n");
   fs.writeFileSync(path.join(root, "_bmad-output", "ignored.md"), "# Ignore\n");
   fs.writeFileSync(path.join(root, "node_modules", "ignored", "AGENTS.md"), "# Ignore\n");
@@ -104,19 +86,6 @@ describe("Taskfold project document discovery", () => {
     expect(projectDocuments).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ target: path.join(workspace, "README.md") }),
-        expect.objectContaining({ target: path.join(workspace, ".planning", "overview.md") }),
-        expect.objectContaining({
-          target: path.join(workspace, ".planning", "codebase", "ARCHITECTURE.md"),
-          section: "codebase",
-        }),
-        expect.objectContaining({
-          target: path.join(workspace, ".planning", "notes", "decision.md"),
-          section: "knowledge",
-        }),
-        expect.objectContaining({
-          target: path.join(workspace, ".planning", "intel", "environment.md"),
-          section: "environment",
-        }),
       ]),
     );
     expect(aiDocuments).toEqual(
@@ -136,10 +105,6 @@ describe("Taskfold project document discovery", () => {
     ).toBe(true);
     for (const excluded of [
       "docs/overview.md",
-      ".planning/codebase/nested/ignored.md",
-      ".planning/phases/phase-1.md",
-      ".planning/milestones/m1.md",
-      ".planning/archive/old.md",
       ".trae/ignored.md",
       "_bmad-output/ignored.md",
       "node_modules/AGENTS.md",
@@ -212,18 +177,18 @@ describe("Taskfold project document discovery", () => {
         updatedAt: 1,
       },
     });
-    await documents.register("automatic-planning", {
+    await documents.register("automatic-readme", {
       version: 1,
       document: {
-        id: "automatic-planning",
+        id: "automatic-readme",
         boardId: "alpha",
-        key: "file.legacy-planning",
-        section: "knowledge",
+        key: "file.legacy-readme",
+        section: "project",
         source: "project",
         type: "path",
-        title: "User planning title",
-        summary: "User planning summary.",
-        target: path.join(workspace, ".planning", "notes", "decision.md"),
+        title: "User maintained title",
+        summary: "User maintained summary.",
+        target: path.join(workspace, "README.md"),
         position: 3072,
         hiddenAt: 99,
         createdAt: 1,
@@ -251,9 +216,9 @@ describe("Taskfold project document discovery", () => {
 
     expect(listed.documents.find((document) => document.id === "automatic-docs")).toBeUndefined();
     expect(listed.documents.find((document) => document.id === "automatic-requirements")).toBeUndefined();
-    expect(listed.documents.find((document) => document.id === "automatic-planning")).toMatchObject({
-      title: "User planning title",
-      summary: "User planning summary.",
+    expect(listed.documents.find((document) => document.id === "automatic-readme")).toMatchObject({
+      title: "User maintained title",
+      summary: "User maintained summary.",
       position: 3072,
       hiddenAt: 99,
     });

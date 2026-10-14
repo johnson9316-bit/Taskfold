@@ -2,9 +2,9 @@
 
 > 跨主题请从 [[README]] 进入；发现矛盾时以 [[1-规划评审]] 为准。
 
-AI 能力分为两类：**AI 辅助管理**（澄清、拆解、排序、播报）与**AI 执行开发调度**（v0.8 新增，模块⑥）。前者是辅助功能；后者将 GSD 的 Execute 阶段变成可排队、可观察、可接管的流程，是 taskfold 的核心差异化。
+AI 能力分为两类：**AI 辅助管理**（澄清、拆解、排序、播报）与**AI 执行开发调度**（v0.8 新增，模块⑥）。前者是辅助功能；后者把开发执行变成可排队、可观察、可接管的流程，是 taskfold 的核心差异化。
 
-> **2026-07-30 架构修正：taskfold 是 OpenClaw 插件。** M1-M3 不开发执行调度；M4 起在插件中增加 ACP Runner、工作项、run 账本、GSD 映射和人机交接状态。执行契约见 [[8.7-待开发一波]] 与 [[14-OpenClaw技能策略]]。
+> **2026-07-30 架构修正：taskfold 是 OpenClaw 插件。** M1-M3 不开发执行调度；M4 起在插件中增加 ACP Runner、工作项、run 账本和人机交接状态。执行契约见 [[8.7-待开发一波]] 与 [[14-OpenClaw技能策略]]。
 
 ### Agent Tools（**以 MCP 为主契约**）
 
@@ -18,7 +18,7 @@ AI 能力分为两类：**AI 辅助管理**（澄清、拆解、排序、播报�
 
 | 工具 | 用途 |
 |------|------|
-| `taskfold_search` | 按条件检索工作项（状态/phase/当前重点/标签/全文） |
+| `taskfold_search` | 按条件检索工作项（状态/当前重点/标签/全文） |
 | `taskfold_get` | 读单个工作项（含 MD 正文与 AC） |
 | `taskfold_create` | 建工作项 |
 | `taskfold_update` | 改字段 / 移状态（走流程校验） |
@@ -79,10 +79,10 @@ AI 能力分为两类：**AI 辅助管理**（澄清、拆解、排序、播报�
 
 | taskfold 做 | taskfold 不做 |
 |-----------|-------------|
-| 决定**哪个工作项该开工**（按 GSD 阶段 + 依赖 + WIP） | ❌ 自己写代码、自己改文件 |
-| 组装会话的**上下文包**（workspace、phase、要读的产物、skills、MCP） | ❌ 自带 LLM 调用层、自己跑 agent loop |
+| 决定**哪个工作项该开工**（按依赖 + 优先级 + WIP） | ❌ 自己写代码、自己改文件 |
+| 组装会话的**上下文包**（workspace、要读的产物、skills、MCP） | ❌ 自带 LLM 调用层、自己跑 agent loop |
 | 启动 / 排队 / 观察 / 中止会话 | ❌ 替用户做架构决策与验收判断 |
-| **落账**：会话 ↔ 工作项 ↔ GSD phase 的三元映射 + 全过程留档 | ❌ 复制一份会话历史（宿主已有，[[4-执行调度与AI]]） |
+| **落账**：会话 ↔ 工作项 ↔ run 的映射 + 全过程留档 | ❌ 复制一份会话历史（宿主已有，[[4-执行调度与AI]]） |
 | 把「需要人」的时刻**推到人面前** | ❌ 卡住了自己硬猜着继续 |
 
 **人保留的四个决策点**（不可让渡，任何自动化都不越过）：
@@ -92,17 +92,17 @@ AI 能力分为两类：**AI 辅助管理**（澄清、拆解、排序、播报�
  人          人           机器            人         人
 ```
 
-对应到 GSD 循环（[[3-需求与工作管理]]）：
+对应到开发流程的五个环节：
 
-| GSD 阶段 | 谁主导 | taskfold 的角色 |
+| 环节 | 谁主导 | taskfold 的角色 |
 |---------|-------|--------------|
-| Discuss | **人**（agent 辅助提问） | 提供上下文、记录决策入 `XX-CONTEXT.md` |
-| Plan | 机器起草 → **人过目** | 起会话；`plan-checker` 未过则不放行 Execute |
-| **Execute** | **机器**（可无人值守） | ★ 主战场：按 wave 排队、并行度控制、实时观察 |
-| Verify | 机器跑 → **人验收** | 把 `XX-VERIFICATION.md` / `XX-UAT.md` 推成待办卡 |
-| Ship | **人** | 归档、更新 `STATE.md`、度量落账 |
+| 讨论 | **人**（agent 辅助提问） | 提供上下文、记录决策 |
+| 计划 | 机器起草 → **人过目** | 起会话；计划校验未过则不放行执行 |
+| **执行** | **机器**（可无人值守） | ★ 主战场：排队、并发控制、实时观察 |
+| 验证 | 机器跑 → **人验收** | 把验证结论推成待办卡 |
+| 交付 | **人** | 归档、度量落账 |
 
-⇒ **只有 Execute 是可以放手的**。其余四个阶段 taskfold 只做「把材料准备好、把人叫来」。
+⇒ **只有执行环节是可以放手的**；其余环节 taskfold 只做「把材料准备好、把人叫来」。
 
 #### 已定方案：官方 OpenClaw ACP Runtime
 
@@ -145,7 +145,7 @@ Card、run、审批、审计、worktree lease、Git 安全和并发约束。CLI 
 
 **历史结论仍成立的一部分**：Taskfold 不该自己写 CLI 会话管理器；PT​​Y、流式解析、session
 resume、MCP 注入、skills 挂载、历史落库应尽量复用 OpenClaw。当前正式实现改由 ACP Runtime
-完成，Taskfold 只做账本、排队、GSD 状态机和人机交接点。
+完成，Taskfold 只做账本、排队、流程状态机和人机交接点。
 
 **你的两条指示在这里冲突了，必须拍板**（→ [[11-交接与待决]] 决策 B）：
 
@@ -191,7 +191,7 @@ work_item (status=ready)
     ▼
 run（一次会话）  status: queued → running → awaiting_human → done / failed / aborted
     │
-    ├─ 组装上下文包：workspace 路径 + GSD phase + 要读的 .planning/ 产物
+    ├─ 组装上下文包：workspace 路径 + 要读的项目文档
     │                + 该项目的 skills + 该项目的 MCP（[[4-执行调度与AI]]）
     ├─ 交给 Taskfold ACP Runner：创建/恢复 ACP session，启动 turn 并持久化 handle
     ├─ 流式事件 → 写 run_events → WebSocket 推到看板卡片上
@@ -206,19 +206,19 @@ run（一次会话）  status: queued → running → awaiting_human → done / 
 |------|------|
 | agent 显式提问 | 「两种实现方式，选哪个」 |
 | 权限被拒 / 需要审批 | 要改 CI 配置、要装依赖 |
-| Verify 失败 | `XX-VERIFICATION.md` 判定不符，等人决定返工范围 |
+| Verify 失败 | 验证结论不符，等人决定返工范围 |
 | 超时 / 无进展 | 单会话超 N 分钟无 tool 事件 |
 | 预算超限 | token / 时长超阈值 |
-| plan-checker 未通过 | 计划质量不过关，不放行 Execute |
+| plan-checker 未通过 | 计划质量不过关，不放行执行 |
 
 > **红线：`awaiting_human` 永不自动跨过。** 宁可停在那儿等一天，也不猜着往下做——这是「用户保留关键决策」的落地方式。
 
-**并行度控制**：GSD 的 wave 模型（[[3-需求与工作管理]]）给出逻辑并行边界，但不能替代文件系统隔离。M2 默认每 repo 只允许一个 active run，并且必须在独立 worktree 中执行；不得让 agent 直接改用户当前工作区。M3 才评估同 repo 多 worktree 并行与合并策略。
+**并行度控制**：逻辑并行边界不能替代文件系统隔离。M2 默认每 repo 只允许一个 active run，并且必须在独立 worktree 中执行；不得让 agent 直接改用户当前工作区。M3 才评估同 repo 多 worktree 并行与合并策略。
 
-> ⚠️ **同一 repo 并发写会互相踩**。GSD 的 wave 假设了并行 executor，但那是靠 fresh context 隔离**上下文**，没隔离**文件系统**。taskfold 必须做出选择（→ [[11-交接与待决]] 决策 C）：
+> ⚠️ **同一 repo 并发写会互相踩**。并行 agent 之间靠 fresh context 隔离的是**上下文**，没有隔离**文件系统**。taskfold 必须做出选择（→ [[11-交接与待决]] 决策 C）：
 > - **C1 串行化同 repo**：简单可靠，牺牲并行度
 > - **C2 git worktree 隔离**：每个 run 一个 worktree，跑完合并。成本中等，收益是真并行
-> - **C3 信任 wave 划分**：假定同 wave 的 plan 不碰同一批文件（gsd-core 的 planner 本就按依赖分组）
+> - **C3 信任任务划分**：假定并行任务不碰同一批文件
 >
 > 倾向 **C1 起步 + C2 作为 M3 增强**。C3 太依赖 planner 的正确性，一次冲突就毁掉一整轮执行的可信度。
 
@@ -227,9 +227,8 @@ run（一次会话）  status: queued → running → awaiting_human → done / 
 | 数据 | 存哪 | 理由 |
 |------|------|------|
 | 会话原始 transcript | **OpenClaw**（`~/.openclaw/agents/<id>/…sqlite` + `sessions/`）与 **Claude Code**（project transcripts） | 已经有两份了，再存第三份是纯负债 |
-| `runs` 表：run_id ↔ session_id ↔ work_item ↔ phase ↔ 起止时间 ↔ 结果 ↔ 成本 | **taskfold SQLite** | 宿主不知道「工作项」这个概念，这是 taskfold 独有实体（[[7-数据与接口]]） |
-| `run_events`：里程碑事件（阶段切换、tool 使用摘要、awaiting_human 原因、错误） | **taskfold SQLite** | 度量（[[7-数据与接口]]）与看板实时展示需要；**只存摘要不存全文** |
-| 会话产出的 GSD 产物 | **文件**（`.planning/`） | 铁律不变（[[7-数据与接口]]） |
+| `runs` 表：run_id ↔ session_id ↔ work_item ↔ 起止时间 ↔ 结果 ↔ 成本 | **taskfold SQLite** | 宿主不知道「工作项」这个概念，这是 taskfold 独有实体（[[16-文件存储改造]]） |
+| `run_events`：里程碑事件（阶段切换、tool 使用摘要、awaiting_human 原因、错误） | **taskfold SQLite** | 度量与看板实时展示需要；**只存摘要不存全文** |
 | 复盘档 | **文件**（[[4-执行调度与AI]]） | 要能 Git 版本化、要能被 agent 读 |
 
 > **「全过程需保存」= 保存指针 + 摘要 + 产物，不是保存全文副本。** 全文在宿主那儿，taskfold 存 `session_id` 就能随时调出（也能 `claude --resume` 直接进去）。真正需要自己存的是**跨会话、跨项目才能算出来的东西**：谁在什么时候因为什么卡住了、返工了几次、花了多少。
@@ -264,14 +263,13 @@ OpenClaw 侧已提供机制，但有两个坑必须实测：
 
 | 检查 | 输出 |
 |------|------|
-| `.planning/` 与看板索引是否一致 | 不一致 → 建议 `taskfold reindex` |
 | 有无 `awaiting_human` 挂了超过 N 小时 | 汇总提醒（这是最有价值的一项） |
-| 有无 phase 停在某阶段超阈值 | 阻塞预警（[[7-数据与接口]] 阶段停留分布） |
+| 有无工作项停在某状态超阈值 | 阻塞预警 |
 | 有无 Verify 失败未处理 | 返工待决 |
-| 有无 plan 已通过校验但没排上 Execute | 建议开工（**建议，不自动开**） |
+| 有无工作项已就绪但未排上执行 | 建议开工（**建议，不自动开**） |
 | 上一日 run 的失败与成本汇总 | 日报（[[4-执行调度与AI]] 进展播报） |
 
-**升级路径**（可选，默认关）：某类低风险项可配置为「巡检直接开工」，例如 `type=chore` 且有现成 plan 且 wave 内无依赖。**默认全关**，与 [[3-需求与工作管理]] 检查器同一原则。
+**升级路径**（可选，默认关）：某类低风险项可配置为「巡检直接开工」，例如 `type=chore` 且无依赖阻塞。**默认全关**，与准入检查器同一原则。
 
 > 巡检的失败模式是**变成噪音**。对策：报告卡合并成一张、无事发生时不建卡、同一问题不重复提醒（记 `last_notified_at`）。
 
@@ -280,26 +278,21 @@ OpenClaw 侧已提供机制，但有两个坑必须实测：
 「全过程需保存，便于复盘」的具体落法：
 
 ```
-<项目仓库>/.planning/phases/XX-phase-name/
-└── runs/                          ← taskfold 新增，但放在 GSD 布局内
-    └── <run_id>/
-        ├── META.json              # session_id / 起止 / 模型 / 成本 / 结果
-        ├── TIMELINE.md            # 里程碑时间线（人可读）
-        └── HANDOFF.md             # awaiting_human 的问答记录与人的决定 ★
+<TASKFOLD_HOME>/runs/<project>/<run_id>/
+├── META.json              # session_id / 起止 / 模型 / 成本 / 结果
+├── TIMELINE.md            # 里程碑时间线（人可读）
+└── HANDOFF.md             # awaiting_human 的问答记录与人的决定 ★
 ```
 
-> ⚠️ 这里与 [[7-数据与接口]] 铁律「不往 `.planning/` 写自有字段」有张力。**分辨方式：不改上游既有文件的格式，只在 phase 目录下加一个上游没有的 `runs/` 子目录。** 上游 gsd-core 不认识它，但也不会被它破坏；用户 Git 里能看到、能 diff、能跟着 phase 一起归档。
-> 若后续发现 gsd-core 的归档逻辑会清理未知目录，退路是移到 `<TASKFOLD_HOME>/runs/<project>/<phase>/`，代价是失去「跟着代码一起版本化」。**待实测（[[6-OpenClaw集成]]）。**
-
-**`HANDOFF.md` 是复盘里最值钱的文件**——它记录的是「机器在哪儿卡住、人怎么决定的」。这正是 [[7-数据与接口]]「Verify 返工率」「人机操作比」两个指标的原始素材，也是将来沉淀成 skills / CONTEXT 模板的来源。
+**`HANDOFF.md` 是复盘里最值钱的文件**——它记录的是「机器在哪儿卡住、人怎么决定的」。这正是「返工率」「人工介入率」两个指标的原始素材，也是将来沉淀成 skills / CONTEXT 模板的来源。
 
 复盘视图（M4）：
 
 | 视图 | 回答 |
 |------|------|
-| Run 时间线 | 这个 phase 一共跑了几次会话、每次多久、卡在哪 |
-| 返工链 | Verify → Execute 的回环，每次返工的原因 |
+| Run 时间线 | 这个工作项一共跑了几次会话、每次多久、卡在哪 |
+| 返工链 | 验证 → 执行的回环，每次返工的原因 |
 | 人工介入点汇总 | 人一共被叫了几次、为什么、平均等了多久 |
-| 成本 | 每 phase / 每 work_item 的 token 与时长 |
+| 成本 | 每工作项的 token 与时长 |
 
 ---

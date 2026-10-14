@@ -31,7 +31,6 @@ const EXCLUDED_TOP_LEVEL_AI_INSTRUCTION_DIRECTORIES = new Set([
   "tpm",
   "vendor",
 ]);
-const PLANNING_DOCUMENT_DIRECTORIES = new Set(["codebase", "intel", "notes", "research", "seeds"]);
 const EXTRA_DOCUMENT_PATHS = [
   ".github/copilot-instructions.md",
   ".claude/skills/deploy-test/SKILL.md",
@@ -66,17 +65,8 @@ function sourceForDocument(relativePath: string): TaskfoldProjectDocumentSource 
 
 function sectionForDocument(relativePath: string): TaskfoldProjectDocumentSection {
   const normalized = relativePath.toLocaleLowerCase();
-  if (normalized.startsWith(".planning/codebase/")) {
-    return "codebase";
-  }
-  if (
-    normalized.startsWith(".planning/intel/") ||
-    /(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized)
-  ) {
+  if (/(?:^|\/)(?:deploy|deployment|environment|operations|ops|runbook)(?:\/|$)/.test(normalized)) {
     return "environment";
-  }
-  if (normalized.startsWith(".planning/notes/") || normalized.startsWith(".planning/research/")) {
-    return "knowledge";
   }
   return "project";
 }
@@ -246,16 +236,6 @@ export function isTaskfoldProjectDocumentDiscoveryPath(
   ) {
     return true;
   }
-  if (segments.length === 2 && segments[0] === ".planning") {
-    return true;
-  }
-  if (
-    segments.length === 3 &&
-    segments[0] === ".planning" &&
-    PLANNING_DOCUMENT_DIRECTORIES.has(segments[1]!)
-  ) {
-    return true;
-  }
   return EXTRA_DOCUMENT_PATHS.includes(relativePath as (typeof EXTRA_DOCUMENT_PATHS)[number]);
 }
 
@@ -269,13 +249,6 @@ export async function discoverTaskfoldProjectDocuments(
 
   await addDirectoryMarkdownFiles({ ...params, relativeDirectory: "" });
   await addTopLevelModuleAiInstructions(params);
-  await addDirectoryMarkdownFiles({ ...params, relativeDirectory: ".planning" });
-  for (const directory of PLANNING_DOCUMENT_DIRECTORIES) {
-    await addDirectoryMarkdownFiles({
-      ...params,
-      relativeDirectory: path.join(".planning", directory),
-    });
-  }
   for (const relativePath of EXTRA_DOCUMENT_PATHS) {
     await addCandidate({ ...params, relativePath });
   }
