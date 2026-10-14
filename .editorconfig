@@ -1,0 +1,15 @@
+# https://editorconfig.org
+# 仓库没有 lint / format 脚本，这里是编辑器层面的最低成本风格锚点。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 行尾双空格表示硬换行，不清理。
+trim_trailing_whitespace = false
