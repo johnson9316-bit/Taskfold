@@ -1,0 +1,14 @@
+{
+  "id": "8638127e-e991-48f3-b595-e749a6d1a5ca",
+  "boardId": "flowboard",
+  "key": "kb.uiux-fix",
+  "section": "knowledge",
+  "source": "project",
+  "type": "path",
+  "title": "面板 UI/UX 修复交接",
+  "position": 12000,
+  "createdAt": 1791975083993,
+  "updatedAt": 1791975083993,
+  "summary": "剩余 62 条与拍板题 P-1~P-13、VS Code 实测方法与已踩坑；入口 card-57。",
+  "target": "./.taskfold/documents/需求/21-面板UIUX修复交接.md"
+}

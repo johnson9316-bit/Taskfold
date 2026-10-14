@@ -1,0 +1,14 @@
+{
+  "id": "5926450a-a9f1-4e1c-a284-f143a6e53c27",
+  "boardId": "flowboard",
+  "key": "spec.subrequirements",
+  "section": "project",
+  "source": "project",
+  "type": "path",
+  "title": "子需求与子看板",
+  "position": 13000,
+  "createdAt": 1791974320654,
+  "updatedAt": 1791974320654,
+  "summary": "评审已通过（2026-10-14）：子需求放开至 8 层（防环）+ 看板列内树 + 子看板=多命名视图；五步分解 P1~P5。",
+  "target": "./.taskfold/documents/需求/24-子需求与子看板.md"
+}
