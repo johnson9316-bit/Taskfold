@@ -41,7 +41,7 @@ function tiedCard(id: string): TaskfoldCard {
     createdAt: CREATED,
     updatedAt: CREATED,
     revision: 1,
-    metadata: { automation: { boardId: "procloud" } },
+    metadata: { automation: { boardId: "demo" } },
   };
 }
 
@@ -58,8 +58,8 @@ describe("compareCards：status/position/createdAt 全相同时按 id 字节序"
       await sqlite.cards.register(id, { version: 1, card: tiedCard(id) });
       await files.cards.register(id, { version: 1, card: tiedCard(id) });
     }
-    const sqliteOrder = (await TaskfoldStore.fromStores(sqlite).list({ boardId: "procloud" })).map((c) => c.id);
-    const fileOrder = (await TaskfoldStore.fromStores(files).list({ boardId: "procloud" })).map((c) => c.id);
+    const sqliteOrder = (await TaskfoldStore.fromStores(sqlite).list({ boardId: "demo" })).map((c) => c.id);
+    const fileOrder = (await TaskfoldStore.fromStores(files).list({ boardId: "demo" })).map((c) => c.id);
     sqlite.close();
     expect(sqliteOrder).toEqual(["c-a", "c-b", "cb"]);
     expect(fileOrder).toEqual(sqliteOrder);

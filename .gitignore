@@ -43,3 +43,6 @@ packages/openclaw/README.md
 packages/openclaw/LICENSE
 packages/openclaw/THIRD-PARTY-NOTICES
 packages/openclaw/UPSTREAM.md
+
+# AGENTS.md 的本机环境事实部分（AGENTS.local.md）不随仓库公开。
+AGENTS.local.md

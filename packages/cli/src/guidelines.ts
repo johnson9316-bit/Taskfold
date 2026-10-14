@@ -23,8 +23,9 @@ export function renderGuidelinesBlock(version: string = TASKFOLD_CLI_VERSION): s
     "",
     "This repository tracks its tasks with Taskfold; the cards live under `.taskfold/`.",
     "",
-    "- **Never create, edit, move or delete files under `.taskfold/` directly** (including the",
-    "  `.md` card files). Always read and write cards through the `taskfold` CLI.",
+    "- **Writes go through the `taskfold` CLI**, which takes cross-process locks and checks",
+    "  revisions. AI agents must use it; humans may hand-edit the Markdown, but keep the",
+    "  `TASKFOLD` marker blocks intact and don't edit while a board or an agent is writing.",
     "- Run `taskfold instructions` for the full usage before you first work with cards, or",
     "  whenever you are unsure how a command behaves.",
     '- Quick reference: `taskfold list`, `taskfold show <id>`, `taskfold create "<title>"`,',
@@ -127,9 +128,11 @@ export function renderInstructions(): string {
   return `# Taskfold CLI instructions (v${TASKFOLD_CLI_VERSION})
 
 Taskfold keeps task cards as Markdown files under \`.taskfold/\` at the root of the
-repository's main checkout. **Read and write cards only through the \`taskfold\` CLI.**
-Never create, edit, move or delete files under \`.taskfold/\` by hand: the CLI takes
-cross-process locks and checks revisions, and hand edits bypass both.
+repository's main checkout. **AI agents: read and write cards only through the \`taskfold\` CLI.**
+It takes cross-process locks and checks card revisions; direct file writes bypass both and
+can silently overwrite a concurrent write. Hand edits are supported — the store detects
+them and bumps the card's revision — but keep the \`TASKFOLD\` marker block intact and
+never edit a file while a board or an agent is writing it.
 
 ## Basics
 

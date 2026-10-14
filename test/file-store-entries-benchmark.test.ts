@@ -216,7 +216,7 @@ function buildRealisticCard(index: number): TaskfoldCard {
 
   const automation: TaskfoldAutomation = {
     tenant: "wisdomisp",
-    boardId: "procloud",
+    boardId: "demo",
     skills: ["typescript", "vitest", "file-io"],
     summary: "由 orchestrator 自动创建，跟踪一次登录超时修复任务。",
     createdCardIds: [`CARD-${index + 1}`],
@@ -377,7 +377,7 @@ describe("冒烟：entries() 基本正确性与耗时量级（常跑）", () => 
     expect(first?.value.card.metadata?.links).toHaveLength(2);
     expect(first?.value.card.sourceReferences).toHaveLength(2);
 
-    // 现网最大项目 ProCloud 是 81 张卡；50 张卡应远快于这个量级判据。
+    // 现网最大项目约 81 张卡；50 张卡应远快于这个量级判据。
     // 判据本身很宽松——目的是防回归，不是精确测速（精确数字见完整基准/会话报告）。
     expect(elapsedMs).toBeLessThan(3000);
   });

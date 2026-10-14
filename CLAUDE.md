@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Taskfold 是 npm workspaces monorepo：看板数据以 Markdown 文件存在各项目仓库的 `.taskfold/` 里，OpenClaw 插件、VS Code 扩展、独立 CLI 三个入口读写同一份文件。本机环境事实（Node ≥ 24.16 的硬要求、Gateway 重载、Control UI / Playwright / VS Code 验证的坑、`.taskfold/` 手改边界）见 [AGENTS.md](AGENTS.md)，这里不重复。
+Taskfold 是 npm workspaces monorepo：看板数据以 Markdown 文件存在各项目仓库的 `.taskfold/` 里，OpenClaw 插件、VS Code 扩展、独立 CLI 三个入口读写同一份文件。本机环境事实（Node ≥ 24.16 的硬要求、Gateway 重载、Control UI / Playwright / VS Code 验证的坑、本机路径与脚本）见 `AGENTS.local.md`（未纳入版本控制，仅本机存在）；磁盘格式与手改边界见 `docs/format.md`。
 
 ## 命令
 

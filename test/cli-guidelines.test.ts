@@ -53,11 +53,11 @@ describe("标记块与 instructions 的版本跟 CLI 对齐", () => {
     expect(stdout.text().trim()).toBe(pkg.version);
   });
 
-  it("标记块很短，写明不要直接编辑 .taskfold/ 下的 md、按需跑 taskfold instructions", () => {
+  it("标记块很短，写明写操作走 CLI、人工手改的边界、按需跑 taskfold instructions", () => {
     const block = renderGuidelinesBlock();
     expect(block.split("\n").length).toBeLessThanOrEqual(15);
-    expect(block).toContain("Never create, edit, move or delete files under `.taskfold/` directly");
-    expect(block).toContain("`.md` card files");
+    expect(block).toContain("AI agents must use it; humans may hand-edit the Markdown");
+    expect(block).toContain("`TASKFOLD` marker blocks intact");
     expect(block).toContain("taskfold instructions");
     expect(block.endsWith("<!-- TASKFOLD GUIDELINES END -->")).toBe(true);
   });

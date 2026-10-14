@@ -1,8 +1,15 @@
 # Taskfold
 
-Taskfold is an OpenClaw plugin for planning and running work across projects.
-It combines project milestones, a lightweight document reader, delivery facts,
-and OpenClaw-managed worktree execution in one board.
+Taskfold is a file-based kanban board for your repository. Every card is a
+Markdown file under `.taskfold/`, so the board lives beside the code and in the
+same Git history — AI agents and humans work on the same files. Agents write
+through a locking CLI; humans use the board UI, the VS Code extension, the CLI,
+or the files themselves.
+
+OpenClaw is the first host: it adds card execution in managed Git worktrees,
+subagent dispatch, and a native Control UI panel. The VS Code extension and the
+standalone CLI cover boards without OpenClaw. This repository is managed by its
+own board — browse `.taskfold/` for a live dataset.
 
 English is the primary project language. The Control UI supports English and
 Simplified Chinese.
@@ -58,7 +65,7 @@ connected client's cursor.
 ## Requirements
 
 - OpenClaw `>=2026.7.1 <2027.0.0`
-- Node.js `>=22`
+- Node.js `>=24.16.0` (minimum enforced by the OpenClaw host)
 - The Control UI **Custom plugin UI** Labs setting enabled (see
   [Control UI Security](#control-ui-security))
 
@@ -161,7 +168,9 @@ applying it with `--apply --backup-dir /path/outside/project/backups`; the scrip
 backs up milestones, cards, and configuration and verifies that associations and
 content remain unchanged. Reads alone do not migrate legacy milestones.
 
-The design is in `.taskfold/documents/需求/16-文件存储改造.md` and `.taskfold/documents/需求/18-多宿主架构.md` (Chinese).
+The on-disk format is specified in [docs/format.md](docs/format.md); the design
+notes behind it are in `.taskfold/documents/需求/16-文件存储改造.md` and
+`.taskfold/documents/需求/18-多宿主架构.md` (Chinese).
 
 ### Migrating Existing SQLite Data
 

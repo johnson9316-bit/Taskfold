@@ -1,7 +1,7 @@
 {
   "name": "@johnson9316-bit/taskfold",
   "version": "0.2.0",
-  "description": "Project, milestone, documentation, and execution boards for OpenClaw.",
+  "description": "File-based kanban boards: cards as Markdown in your repository, for AI agents and humans (OpenClaw, VS Code, CLI).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,10 +18,13 @@
     "node": ">=24.16.0"
   },
   "keywords": [
-    "openclaw",
-    "plugin",
     "kanban",
+    "markdown",
+    "file-based",
     "project-management",
+    "ai-agents",
+    "openclaw",
+    "vscode",
     "milestones",
     "worktree"
   ],

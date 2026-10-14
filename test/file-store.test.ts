@@ -467,14 +467,14 @@ describe("resolveTaskfoldDataDir: worktree 必须取 sourcePath 而非 path", ()
     const dir = resolveTaskfoldDataDir({
       kind: "worktree",
       path: "/tmp/some-temporary-worktree",
-      sourcePath: "/home/john/src/personal/Taskfold",
+      sourcePath: "/repo/main",
     });
-    expect(dir).toBe(path.join("/home/john/src/personal/Taskfold", ".taskfold"));
+    expect(dir).toBe(path.join("/repo/main", ".taskfold"));
   });
 
   it("dir 类型取 path", () => {
-    const dir = resolveTaskfoldDataDir({ kind: "dir", path: "/home/john/src/lz/procloud" });
-    expect(dir).toBe(path.join("/home/john/src/lz/procloud", ".taskfold"));
+    const dir = resolveTaskfoldDataDir({ kind: "dir", path: "/repo/other" });
+    expect(dir).toBe(path.join("/repo/other", ".taskfold"));
   });
 });
 
